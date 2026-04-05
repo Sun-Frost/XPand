@@ -1,0 +1,1109 @@
+import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import CompanyPageLayout from "../../components/company/companyPageLayout";
+import { useCompanyJobs, useJobApplicants } from "../../hooks/company/useCompany";
+import type {
+  ApplicationResponse,
+  ApplicationStatus,
+  CompanyUserFullProfileResponse,
+  CompanyViewUserProfileResponse,
+  EducationResponse,
+  WorkExperienceResponse,
+  ProjectResponse,
+  CertificationResponse,
+} from "../../hooks/company/useCompany";
+import { get } from "../../api/axios";
+
+// ---------------------------------------------------------------------------
+// Local hook state shape for rich applicant profile
+// ---------------------------------------------------------------------------
+interface ApplicantRichProfile {
+  profile: CompanyViewUserProfileResponse | null;
+  workExperience: WorkExperienceResponse[];
+  education: EducationResponse[];
+  certifications: CertificationResponse[];
+  projects: ProjectResponse[];
+  isLoading: boolean;
+  error: string | null;
+}
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const fmtDate = (d: string): string => {
+  const date = new Date(d.length === 10 ? `${d}T00:00:00` : d);
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+};
+
+const fmtMonthYear = (d: string): string => {
+  const date = new Date(d.length === 10 ? `${d}T00:00:00` : d);
+  return date.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+};
+
+const fmtYear = (d: string): string => {
+  const date = new Date(d.length === 10 ? `${d}T00:00:00` : d);
+  return date.getFullYear().toString();
+};
+
+const getInitials = (name: string) =>
+  name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+
+// ---------------------------------------------------------------------------
+// Status config — PENDING | SHORTLISTED | REJECTED | WITHDRAWN
+// ---------------------------------------------------------------------------
+
+const STATUS_CONFIG: Record<ApplicationStatus, {
+  label: string; color: string; bg: string; border: string; dot: string;
+}> = {
+  PENDING:     { label: "Pending",     color: "#94A3B8", bg: "rgba(148,163,184,.1)",  border: "rgba(148,163,184,.25)", dot: "#94A3B8" },
+  SHORTLISTED: { label: "Shortlisted", color: "#22D3EE", bg: "rgba(34,211,238,.1)",   border: "rgba(34,211,238,.28)",  dot: "#22D3EE" },
+  REJECTED:    { label: "Rejected",    color: "#F87171", bg: "rgba(248,113,113,.1)",   border: "rgba(248,113,113,.28)", dot: "#F87171" },
+  WITHDRAWN:   { label: "Withdrawn",   color: "#64748B", bg: "rgba(100,116,139,.08)", border: "rgba(100,116,139,.2)",  dot: "#64748B" },
+};
+
+const NEXT_STATUSES: Record<ApplicationStatus, ApplicationStatus[]> = {
+  PENDING:     ["SHORTLISTED", "REJECTED"],
+  SHORTLISTED: ["REJECTED"],
+  REJECTED:    ["SHORTLISTED"],
+  WITHDRAWN:   [],
+};
+
+const STATUS_WEIGHT: Record<ApplicationStatus, number> = {
+  PENDING: 0, SHORTLISTED: 1, REJECTED: 2, WITHDRAWN: 3,
+};
+
+function xpLevel(xp: number): { level: number; title: string; color: string } {
+  if (xp >= 10000) return { level: 5, title: "Elite",        color: "#F59E0B" };
+  if (xp >= 5000)  return { level: 4, title: "Expert",       color: "#A78BFA" };
+  if (xp >= 2000)  return { level: 3, title: "Advanced",     color: "#22D3EE" };
+  if (xp >= 500)   return { level: 2, title: "Intermediate", color: "#34D399" };
+  return             { level: 1, title: "Beginner",    color: "#94A3B8" };
+}
+
+// ---------------------------------------------------------------------------
+// StatusBadge
+// ---------------------------------------------------------------------------
+
+const StatusBadge: React.FC<{ status: ApplicationStatus; size?: "sm" | "md" }> = ({ status, size = "md" }) => {
+  const cfg = STATUS_CONFIG[status];
+  return (
+    <span
+      className={`ja-status-badge ja-status-badge--${size}`}
+      style={{ color: cfg.color, background: cfg.bg, borderColor: cfg.border }}
+    >
+      <span className="ja-status-badge__dot" style={{ background: cfg.dot }} />
+      {cfg.label}
+    </span>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Hook: fetch applicant rich profile
+// ---------------------------------------------------------------------------
+function useApplicantProfile(userId: number | null): ApplicantRichProfile {
+  const [state, setState] = useState<ApplicantRichProfile>({
+    profile: null,
+    workExperience: [],
+    education: [],
+    certifications: [],
+    projects: [],
+    isLoading: false,
+    error: null,
+  });
+
+  useEffect(() => {
+    if (!userId) return;
+
+    setState((p) => ({ ...p, isLoading: true, error: null }));
+
+    get<CompanyUserFullProfileResponse>(`/company/user/${userId}`)
+      .then((res) => {
+        setState({
+          profile: res.profile,
+          workExperience: res.workExperiences,
+          education: res.educations,
+          certifications: res.certifications,
+          projects: res.projects,
+          isLoading: false,
+          error: null,
+        });
+      })
+      .catch((err) => {
+        setState((p) => ({
+          ...p,
+          isLoading: false,
+          error: err.message || "Failed to load profile",
+        }));
+      });
+
+  }, [userId]);
+
+  return state;
+}
+
+// ---------------------------------------------------------------------------
+// CV Modal — centered full-viewport modal
+// ---------------------------------------------------------------------------
+
+const CVModal: React.FC<{
+  app: ApplicationResponse;
+  onClose: () => void;
+  onStatusChange: (id: number, status: ApplicationStatus) => Promise<void>;
+  isUpdating: boolean;
+  isPriority: boolean;
+  allPriorityDone: boolean;
+  pendingPriorityCount: number;
+}> = ({ app, onClose, onStatusChange, isUpdating, isPriority, allPriorityDone, pendingPriorityCount }) => {
+  const rich = useApplicantProfile(app.userId);
+  const [actionLoading, setActionLoading] = useState<ApplicationStatus | null>(null);
+  const p = rich.profile;
+  const initials = getInitials(app.userFullName);
+  const level = p ? xpLevel(p.xpBalance) : null;
+  const nextStatuses = NEXT_STATUSES[app.status] ?? [];
+
+  // A regular applicant's actions are locked until all priority apps are reviewed
+  const isLocked = !isPriority && !allPriorityDone;
+
+  const handleAction = async (status: ApplicationStatus) => {
+    if (isLocked) return;
+    setActionLoading(status);
+    try {
+      await onStatusChange(app.id, status);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <div className="cv-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="cv-modal">
+
+        {/* TOP BAR */}
+        <div className="cv-modal__topbar">
+          <div className="cv-modal__topbar-left">
+            <button className="cv-close-btn" onClick={onClose} aria-label="Close">✕</button>
+            <span className="cv-modal__topbar-label">
+              Applicant CV
+              {isPriority && <span className="cv-modal__topbar-priority">⭐ Priority #{app.prioritySlotRank}</span>}
+            </span>
+          </div>
+          <div className="cv-modal__topbar-actions">
+            <StatusBadge status={app.status} size="md" />
+            {/* Locked state — regular applicant while priority pending */}
+            {isLocked && nextStatuses.length > 0 && app.status !== "WITHDRAWN" && (
+              <div className="cv-locked-notice">
+                🔒 Review {pendingPriorityCount} priority applicant{pendingPriorityCount !== 1 ? "s" : ""} first
+              </div>
+            )}
+            {/* Actions — only shown when unlocked */}
+            {!isLocked && nextStatuses.length > 0 && app.status !== "WITHDRAWN" && (
+              <div className="cv-action-group">
+                {nextStatuses.map((s) => {
+                  const busy = isUpdating || actionLoading === s;
+                  const isShortlist = s === "SHORTLISTED";
+                  const isReject = s === "REJECTED";
+                  return (
+                    <button
+                      key={s}
+                      className={`cv-action-btn ${isShortlist ? "cv-action-btn--shortlist" : isReject ? "cv-action-btn--reject" : "cv-action-btn--ghost"}`}
+                      onClick={() => handleAction(s)}
+                      disabled={isUpdating}
+                    >
+                      {busy
+                        ? <span className="cv-spinner" />
+                        : <><span>{isShortlist ? "✓" : "✕"}</span> {STATUS_CONFIG[s].label}</>
+                      }
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* BODY */}
+        <div className="cv-modal__body">
+
+          {/* SIDEBAR */}
+          <aside className="cv-sidebar">
+            <div className="cv-sidebar__identity">
+              <div className="cv-sidebar__avatar">
+                {p?.profilePicture
+                  ? <img src={p.profilePicture} alt={app.userFullName} className="cv-sidebar__avatar-img" />
+                  : <span className="cv-sidebar__avatar-initials">{initials}</span>
+                }
+              </div>
+              <h2 className="cv-sidebar__name">{app.userFullName}</h2>
+              {p?.professionalTitle && <p className="cv-sidebar__title">{p.professionalTitle}</p>}
+              {level && p && (
+                <div className="cv-sidebar__level">
+                  <span className="cv-sidebar__level-badge" style={{ color: level.color, borderColor: level.color, background: `${level.color}18` }}>
+                    Lv.{level.level} {level.title}
+                  </span>
+                  <span className="cv-sidebar__xp">{p.xpBalance.toLocaleString()} XP</span>
+                </div>
+              )}
+            </div>
+
+            {/* Contact */}
+            <div className="cv-sidebar__section">
+              <h3 className="cv-sidebar__section-title">Contact</h3>
+              <ul className="cv-sidebar__contact-list">
+                {p?.email && (
+                  <li className="cv-sidebar__contact-item">
+                    <span className="cv-sidebar__contact-icon">✉</span>
+                    <a href={`mailto:${p.email}`} className="cv-sidebar__contact-val cv-sidebar__contact-val--link">{p.email}</a>
+                  </li>
+                )}
+                {p?.phoneNumber && (
+                  <li className="cv-sidebar__contact-item">
+                    <span className="cv-sidebar__contact-icon">📞</span>
+                    <span className="cv-sidebar__contact-val">{p.phoneNumber}</span>
+                  </li>
+                )}
+                {(p?.city || p?.country) && (
+                  <li className="cv-sidebar__contact-item">
+                    <span className="cv-sidebar__contact-icon">📍</span>
+                    <span className="cv-sidebar__contact-val">{[p.city, p.country].filter(Boolean).join(", ")}</span>
+                  </li>
+                )}
+              </ul>
+            </div>
+
+            {/* Links */}
+            {(p?.linkedinUrl || p?.githubUrl || p?.portfolioUrl) && (
+              <div className="cv-sidebar__section">
+                <h3 className="cv-sidebar__section-title">Links</h3>
+                <div className="cv-sidebar__links">
+                  {p?.linkedinUrl && (
+                    <a href={p.linkedinUrl} target="_blank" rel="noopener noreferrer" className="cv-sidebar__link cv-sidebar__link--linkedin">
+                      <span className="cv-sidebar__link-icon">in</span>LinkedIn<span className="cv-sidebar__link-arrow">↗</span>
+                    </a>
+                  )}
+                  {p?.githubUrl && (
+                    <a href={p.githubUrl} target="_blank" rel="noopener noreferrer" className="cv-sidebar__link">
+                      <span className="cv-sidebar__link-icon">⌥</span>GitHub<span className="cv-sidebar__link-arrow">↗</span>
+                    </a>
+                  )}
+                  {p?.portfolioUrl && (
+                    <a href={p.portfolioUrl} target="_blank" rel="noopener noreferrer" className="cv-sidebar__link">
+                      <span className="cv-sidebar__link-icon">🌐</span>Portfolio<span className="cv-sidebar__link-arrow">↗</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Application info */}
+            <div className="cv-sidebar__section cv-sidebar__app-card">
+              <h3 className="cv-sidebar__section-title">Application</h3>
+              <div className="cv-sidebar__app-rows">
+                <div className="cv-sidebar__app-row">
+                  <span className="cv-sidebar__app-lbl">Position</span>
+                  <span className="cv-sidebar__app-val">{app.jobTitle}</span>
+                </div>
+                <div className="cv-sidebar__app-row">
+                  <span className="cv-sidebar__app-lbl">Applied</span>
+                  <span className="cv-sidebar__app-val">{fmtDate(app.appliedAt)}</span>
+                </div>
+                {app.prioritySlotRank && (
+                  <div className="cv-sidebar__app-row">
+                    <span className="cv-sidebar__app-lbl">Slot</span>
+                    <span className="cv-sidebar__priority">⭐ Priority #{app.prioritySlotRank}</span>
+                  </div>
+                )}
+                <div className="cv-sidebar__app-row">
+                  <span className="cv-sidebar__app-lbl">Status</span>
+                  <StatusBadge status={app.status} size="sm" />
+                </div>
+              </div>
+            </div>
+
+            {p?.createdAt && (
+              <p className="cv-sidebar__member-since">Member since {fmtMonthYear(p.createdAt)}</p>
+            )}
+          </aside>
+
+          {/* MAIN CONTENT */}
+          <main className="cv-main">
+
+            {rich.isLoading && (
+              <div className="cv-loading">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="cv-loading__section">
+                    <div className="cv-skel" style={{ height: 13, width: "28%", marginBottom: 16 }} />
+                    <div className="cv-skel" style={{ height: 16, width: "65%" }} />
+                    <div className="cv-skel" style={{ height: 12, width: "45%", marginTop: 8 }} />
+                    <div className="cv-skel" style={{ height: 12, width: "80%", marginTop: 8 }} />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!rich.isLoading && !p && (
+              <div className="cv-empty">
+                <div className="cv-empty__icon">👤</div>
+                <p className="cv-empty__title">Profile not available</p>
+                <p className="cv-empty__sub">This applicant hasn't completed their profile yet.</p>
+              </div>
+            )}
+
+            {!rich.isLoading && p && (
+              <>
+                {/* About */}
+                {p.aboutMe && (
+                  <section className="cv-section">
+                    <h3 className="cv-section__title"><span className="cv-section__line" />About</h3>
+                    <p className="cv-about">{p.aboutMe}</p>
+                  </section>
+                )}
+
+                {/* Work Experience */}
+                {rich.workExperience.length > 0 && (
+                  <section className="cv-section">
+                    <h3 className="cv-section__title"><span className="cv-section__line" />Work Experience</h3>
+                    <div className="cv-timeline">
+                      {rich.workExperience.map((w, i) => (
+                        <div key={w.id} className="cv-timeline__item">
+                          <div className="cv-timeline__marker">
+                            <div className="cv-timeline__dot" />
+                            {i < rich.workExperience.length - 1 && <div className="cv-timeline__line" />}
+                          </div>
+                          <div className="cv-timeline__content">
+                            <div className="cv-timeline__header">
+                              <div>
+                                <div className="cv-timeline__role">{w.jobTitle}</div>
+                                <div className="cv-timeline__org">
+                                  {w.companyName}
+                                  {w.location && <span className="cv-timeline__loc"> · {w.location}</span>}
+                                </div>
+                              </div>
+                              <span className="cv-timeline__period">
+                                {fmtMonthYear(w.startDate)} — {w.endDate ? fmtMonthYear(w.endDate) : "Present"}
+                              </span>
+                            </div>
+                            {w.description && <p className="cv-desc">{w.description}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {/* Education */}
+                {rich.education.length > 0 && (
+                  <section className="cv-section">
+                    <h3 className="cv-section__title"><span className="cv-section__line" />Education</h3>
+                    <div className="cv-edu-list">
+                      {rich.education.map((e) => (
+                        <div key={e.id} className="cv-edu-item">
+                          <div className="cv-edu-item__years">
+                            <span>{fmtYear(e.startDate)}</span>
+                            <span className="cv-edu-item__sep">—</span>
+                            <span>{e.endDate ? fmtYear(e.endDate) : "Now"}</span>
+                          </div>
+                          <div className="cv-edu-item__body">
+                            <div className="cv-edu-item__degree">{e.degree}</div>
+                            <div className="cv-edu-item__field">{e.fieldOfStudy}</div>
+                            <div className="cv-edu-item__inst">🎓 {e.institutionName}</div>
+                            {e.description && <p className="cv-desc" style={{ marginTop: 6 }}>{e.description}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {/* Projects */}
+                {rich.projects.length > 0 && (
+                  <section className="cv-section">
+                    <h3 className="cv-section__title"><span className="cv-section__line" />Projects</h3>
+                    <div className="cv-project-grid">
+                      {rich.projects.map((proj) => (
+                        <div key={proj.id} className="cv-project-card">
+                          <div className="cv-project-card__header">
+                            <span className="cv-project-card__name">{proj.title}</span>
+                            <div className="cv-project-card__links">
+                              {proj.projectUrl && (
+                                <a href={proj.projectUrl} target="_blank" rel="noopener noreferrer" className="cv-ext-link">🌐 Live</a>
+                              )}
+                              {proj.githubUrl && (
+                                <a href={proj.githubUrl} target="_blank" rel="noopener noreferrer" className="cv-ext-link">⌥ Code</a>
+                              )}
+                            </div>
+                          </div>
+                          {proj.description && <p className="cv-project-card__desc">{proj.description}</p>}
+                          {proj.technologiesUsed && (
+                            <div className="cv-project-card__tech">
+                              {proj.technologiesUsed.split(",").map((t) => t.trim()).filter(Boolean).map((t) => (
+                                <span key={t} className="cv-tech-chip">{t}</span>
+                              ))}
+                            </div>
+                          )}
+                          {(proj.startDate || proj.endDate) && (
+                            <div className="cv-project-card__period">
+                              {proj.startDate ? fmtMonthYear(proj.startDate) : ""}
+                              {proj.endDate ? ` — ${fmtMonthYear(proj.endDate)}` : proj.startDate ? " — Present" : ""}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {/* Certifications */}
+                {rich.certifications.length > 0 && (
+                  <section className="cv-section">
+                    <h3 className="cv-section__title"><span className="cv-section__line" />Certifications</h3>
+                    <div className="cv-cert-list">
+                      {rich.certifications.map((c) => (
+                        <div key={c.id} className="cv-cert-item">
+                          <span className="cv-cert-item__icon">📜</span>
+                          <div className="cv-cert-item__body">
+                            <div className="cv-cert-item__name">{c.name}</div>
+                            <div className="cv-cert-item__org">{c.issuingOrganization}</div>
+                            <div className="cv-cert-item__date">
+                              Issued {fmtMonthYear(c.issueDate)}
+                              {c.expirationDate && ` · Expires ${fmtMonthYear(c.expirationDate)}`}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </>
+            )}
+          </main>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Applicant Row Card
+// ---------------------------------------------------------------------------
+
+const ApplicantCard: React.FC<{
+  app: ApplicationResponse;
+  onStatusChange: (id: number, status: ApplicationStatus) => Promise<void>;
+  isUpdating: boolean;
+  isLocked: boolean;    // true for regular apps when priority not all done
+  onViewCV: () => void;
+}> = ({ app, onStatusChange, isUpdating, isLocked, onViewCV }) => {
+  const initials = getInitials(app.userFullName);
+  const nextStatuses = NEXT_STATUSES[app.status] ?? [];
+  const canAct = nextStatuses.length > 0 && app.status !== "WITHDRAWN" && !isLocked;
+
+  return (
+    <div className={`ja-row ${app.status === "WITHDRAWN" ? "ja-row--withdrawn" : ""} ${app.prioritySlotRank ? "ja-row--priority" : ""} ${isLocked ? "ja-row--locked" : ""}`}>
+      {app.prioritySlotRank && (
+        <div className="ja-row__priority-strip">
+          <span>⭐</span>
+          <span>Priority #{app.prioritySlotRank}</span>
+          <span className="ja-row__priority-strip__reviewed">
+            {app.status !== "PENDING" ? "✓ Reviewed" : "Pending review"}
+          </span>
+        </div>
+      )}
+      <div className="ja-row__inner">
+        <button className="ja-row__avatar" onClick={onViewCV} title="View CV">{initials}</button>
+        <div className="ja-row__info">
+          <button className="ja-row__name" onClick={onViewCV}>{app.userFullName}</button>
+          <span className="ja-row__date">Applied {fmtDate(app.appliedAt)}</span>
+        </div>
+        <StatusBadge status={app.status} size="md" />
+        <div className="ja-row__actions">
+          {/* Inline quick-action buttons on the row */}
+          {canAct && nextStatuses.map((s) => {
+            const isShortlist = s === "SHORTLISTED";
+            const isReject    = s === "REJECTED";
+            return (
+              <button
+                key={s}
+                className={`ja-row__quick-btn ${isShortlist ? "ja-row__quick-btn--shortlist" : isReject ? "ja-row__quick-btn--reject" : ""}`}
+                onClick={() => onStatusChange(app.id, s)}
+                disabled={isUpdating}
+                title={STATUS_CONFIG[s].label}
+              >
+                {isUpdating
+                  ? <span className="ja-spinner" />
+                  : isShortlist ? "✓" : "✕"
+                }
+              </button>
+            );
+          })}
+          <button className="ja-row__cv-btn" onClick={onViewCV}>View CV →</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// JobApplicantsPage
+// ---------------------------------------------------------------------------
+
+const JobApplicantsPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { jobId } = useParams<{ jobId: string }>();
+  const jobIdNum = jobId ? Number(jobId) : null;
+
+  const { jobs } = useCompanyJobs();
+  const { applications, isLoading, error, updateStatus } = useJobApplicants(jobIdNum);
+  const job = jobs.find((j) => j.id === jobIdNum);
+
+  const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<ApplicationStatus | "ALL">("ALL");
+  const [cvApp, setCvApp] = useState<ApplicationResponse | null>(null);
+
+  const { priorityApps, regularApps } = useMemo(() => {
+    const sorted = [...applications].sort((a, b) => {
+      if (a.prioritySlotRank && !b.prioritySlotRank) return -1;
+      if (!a.prioritySlotRank && b.prioritySlotRank) return 1;
+      if (a.prioritySlotRank && b.prioritySlotRank) return a.prioritySlotRank - b.prioritySlotRank;
+      return (STATUS_WEIGHT[a.status] ?? 9) - (STATUS_WEIGHT[b.status] ?? 9);
+    });
+    return {
+      priorityApps: sorted.filter((a) => a.prioritySlotRank !== null),
+      regularApps:  sorted.filter((a) => a.prioritySlotRank === null),
+    };
+  }, [applications]);
+
+  const allPriorityDone = useMemo(() =>
+    priorityApps.every((a) => a.status !== "PENDING"), [priorityApps]);
+
+  const pendingPriorityCount = useMemo(() =>
+    priorityApps.filter((a) => a.status === "PENDING").length, [priorityApps]);
+
+  const filtered = useMemo(() => {
+    const all = [...priorityApps, ...regularApps];
+    return filterStatus === "ALL" ? all : all.filter((a) => a.status === filterStatus);
+  }, [priorityApps, regularApps, filterStatus]);
+
+  const statusCounts = useMemo(() => {
+    const c: Partial<Record<ApplicationStatus | "ALL", number>> = { ALL: applications.length };
+    for (const a of applications) c[a.status] = (c[a.status] ?? 0) + 1;
+    return c;
+  }, [applications]);
+
+  const handleStatusChange = useCallback(async (id: number, status: ApplicationStatus) => {
+    setUpdateError(null);
+    setUpdatingId(id);
+    try {
+      await updateStatus(id, status);
+      setCvApp((prev) => prev?.id === id ? { ...prev, status } : prev);
+    } catch (err: unknown) {
+      setUpdateError((err as Error).message ?? "Failed to update status.");
+    } finally {
+      setUpdatingId(null);
+    }
+  }, [updateStatus]);
+
+  if (isLoading) {
+    return (
+      <CompanyPageLayout pageTitle="Applicants">
+        <div className="ja-skeleton-wrap">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="ja-skeleton-row">
+              <div className="cv-skel ja-skeleton-avatar" />
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+                <div className="cv-skel" style={{ height: 16, width: "45%" }} />
+                <div className="cv-skel" style={{ height: 11, width: "22%" }} />
+              </div>
+              <div className="cv-skel" style={{ height: 28, width: 96, borderRadius: 20 }} />
+              <div className="cv-skel" style={{ height: 36, width: 128, borderRadius: 10 }} />
+            </div>
+          ))}
+        </div>
+      </CompanyPageLayout>
+    );
+  }
+
+  return (
+    <CompanyPageLayout pageTitle="Job Applicants">
+
+      {/* Page header */}
+      <div className="ja-page-header">
+        <div className="ja-page-header__left">
+          <button className="ja-back-btn" onClick={() => navigate("/company/jobs")}>← Back</button>
+          <div>
+            <h1 className="ja-page-title">{job?.title ?? "Job Applicants"}</h1>
+            <div className="ja-page-header__meta">
+              {job?.location && <span>📍 {job.location}</span>}
+              <span>👥 {applications.length} applicant{applications.length !== 1 ? "s" : ""}</span>
+              {priorityApps.length > 0 && <span className="ja-page-header__priority">⭐ {priorityApps.length} priority</span>}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Summary stat pills */}
+      {applications.length > 0 && (
+        <div className="ja-stats">
+          <button
+            className={`ja-stat-pill ${filterStatus === "ALL" ? "ja-stat-pill--active" : ""}`}
+            onClick={() => setFilterStatus("ALL")}
+          >
+            <span className="ja-stat-pill__num">{applications.length}</span>
+            <span className="ja-stat-pill__lbl">Total</span>
+          </button>
+          {(["PENDING", "SHORTLISTED", "REJECTED", "WITHDRAWN"] as ApplicationStatus[]).map((s) => {
+            const count = statusCounts[s] ?? 0;
+            if (count === 0) return null;
+            const cfg = STATUS_CONFIG[s];
+            const active = filterStatus === s;
+            return (
+              <button
+                key={s}
+                className={`ja-stat-pill ${active ? "ja-stat-pill--active" : ""}`}
+                style={active ? { borderColor: cfg.border, background: cfg.bg, color: cfg.color } : {}}
+                onClick={() => setFilterStatus(active ? "ALL" : s)}
+              >
+                <span className="ja-stat-pill__dot" style={{ background: cfg.dot }} />
+                <span className="ja-stat-pill__num" style={active ? { color: cfg.color } : {}}>{count}</span>
+                <span className="ja-stat-pill__lbl">{cfg.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Errors */}
+      {(error || updateError) && (
+        <div className="ja-error-banner">⚠ {error || updateError}</div>
+      )}
+
+      {/* Priority notice */}
+      {priorityApps.length > 0 && !allPriorityDone && (
+        <div className="ja-priority-notice">
+          <span>📌</span>
+          <div>
+            <strong>Platform Rule:</strong> Review all priority applicants before processing regular applications.
+            <span className="ja-priority-notice__count"> {pendingPriorityCount} of {priorityApps.length} priority applicant{priorityApps.length !== 1 ? "s" : ""} still pending.</span>
+          </div>
+        </div>
+      )}
+      {priorityApps.length > 0 && allPriorityDone && (
+        <div className="ja-priority-done-notice">
+          <span>✅</span>
+          <span>All priority applicants reviewed — regular applications are now unlocked.</span>
+        </div>
+      )}
+
+      {/* Empty */}
+      {applications.length === 0 && (
+        <div className="ja-empty">
+          <div className="ja-empty__icon">📭</div>
+          <h3 className="ja-empty__title">No applicants yet</h3>
+          <p className="ja-empty__sub">Applications will appear here once candidates apply.</p>
+        </div>
+      )}
+
+      {/* Filter tabs */}
+      {applications.length > 0 && (
+        <div className="ja-filter-tabs">
+          {(["ALL", "PENDING", "SHORTLISTED", "REJECTED", "WITHDRAWN"] as const).map((s) => {
+            const count = s === "ALL" ? applications.length : (statusCounts[s] ?? 0);
+            if (s !== "ALL" && count === 0) return null;
+            const active = filterStatus === s;
+            const cfg = s !== "ALL" ? STATUS_CONFIG[s] : null;
+            return (
+              <button
+                key={s}
+                className={`ja-filter-tab ${active ? "ja-filter-tab--active" : ""}`}
+                style={active && cfg ? { color: cfg.color, borderBottomColor: cfg.color } : {}}
+                onClick={() => setFilterStatus(s)}
+              >
+                {s === "ALL" ? "All" : cfg!.label}
+                <span className="ja-filter-tab__count">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Priority group */}
+      {filterStatus === "ALL" && priorityApps.length > 0 && (
+        <div className="ja-group">
+          <div className="ja-group__label">
+            <span>⭐</span> Priority Applications
+            <span className="ja-group__count">{priorityApps.length}</span>
+            {allPriorityDone
+              ? <span className="ja-group__done-badge">All reviewed ✓</span>
+              : <span className="ja-group__pending-badge">{pendingPriorityCount} pending</span>
+            }
+          </div>
+          <div className="ja-list">
+            {priorityApps.map((app) => (
+              <ApplicantCard key={app.id} app={app}
+                onStatusChange={handleStatusChange}
+                isUpdating={updatingId === app.id}
+                isLocked={false}
+                onViewCV={() => setCvApp(app)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Regular group */}
+      {filterStatus === "ALL" && regularApps.length > 0 && (
+        <div className="ja-group">
+          <div className="ja-group__label">
+            <span>👥</span> Regular Applications
+            <span className="ja-group__count">{regularApps.length}</span>
+            {priorityApps.length > 0 && !allPriorityDone && (
+              <span className="ja-group__locked-note">🔒 Review priority first</span>
+            )}
+          </div>
+          <div className={`ja-list ${priorityApps.length > 0 && !allPriorityDone ? "ja-list--locked" : ""}`}>
+            {regularApps.map((app) => (
+              <ApplicantCard key={app.id} app={app}
+                onStatusChange={handleStatusChange}
+                isUpdating={updatingId === app.id}
+                isLocked={priorityApps.length > 0 && !allPriorityDone}
+                onViewCV={() => setCvApp(app)}
+              />
+            ))}
+            {priorityApps.length > 0 && !allPriorityDone && (
+              <div className="ja-list__lock-cover">
+                <div className="ja-lock-cover__inner">
+                  <span className="ja-lock-cover__icon">🔒</span>
+                  <p className="ja-lock-cover__title">
+                    {pendingPriorityCount} priority applicant{pendingPriorityCount !== 1 ? "s" : ""} still pending review
+                  </p>
+                  <p className="ja-lock-cover__sub">
+                    Platform rules require all priority applicants to be reviewed before regular applications are processed.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Filtered view */}
+      {filterStatus !== "ALL" && (
+        <div className="ja-list">
+          {filtered.length === 0 ? (
+            <div className="ja-empty" style={{ padding: "48px 24px" }}>
+              <div className="ja-empty__icon">🔍</div>
+              <h3 className="ja-empty__title">No {STATUS_CONFIG[filterStatus as ApplicationStatus]?.label ?? filterStatus} applications</h3>
+            </div>
+          ) : filtered.map((app) => (
+            <ApplicantCard key={app.id} app={app}
+              onStatusChange={handleStatusChange}
+              isUpdating={updatingId === app.id}
+              isLocked={!app.prioritySlotRank && priorityApps.length > 0 && !allPriorityDone}
+              onViewCV={() => setCvApp(app)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* CV Modal */}
+      {cvApp && (
+        <CVModal
+          app={cvApp}
+          onClose={() => setCvApp(null)}
+          onStatusChange={handleStatusChange}
+          isUpdating={updatingId === cvApp.id}
+          isPriority={!!cvApp.prioritySlotRank}
+          allPriorityDone={allPriorityDone}
+          pendingPriorityCount={pendingPriorityCount}
+        />
+      )}
+
+      <style>{styles}</style>
+    </CompanyPageLayout>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
+
+const styles = `
+  /* ─── Page header ─── */
+  .ja-page-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:24px; flex-wrap:wrap; }
+  .ja-page-header__left { display:flex; align-items:flex-start; gap:16px; }
+  .ja-back-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:var(--radius-lg,10px); border:1px solid var(--color-border-default); background:var(--color-bg-surface); font-size:var(--text-sm,13px); color:var(--color-text-secondary); cursor:pointer; white-space:nowrap; transition:all 130ms; font-family:var(--font-body); }
+  .ja-back-btn:hover { border-color:var(--color-border-strong); color:var(--color-text-primary); }
+  .ja-page-title { font-family:var(--font-display); font-size:var(--text-2xl,22px); font-weight:var(--weight-bold); color:var(--color-text-primary); margin:0 0 4px; }
+  .ja-page-header__meta { display:flex; gap:16px; flex-wrap:wrap; font-family:var(--font-mono); font-size:11px; color:var(--color-text-muted); }
+  .ja-page-header__priority { color:#F59E0B; }
+
+  /* ─── Stat pills ─── */
+  .ja-stats { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px; }
+  .ja-stat-pill { display:flex; align-items:center; gap:7px; padding:8px 16px; border-radius:999px; border:1px solid var(--color-border-subtle); background:var(--color-bg-surface); cursor:pointer; transition:all 140ms; font-family:var(--font-body); color:var(--color-text-secondary); }
+  .ja-stat-pill:hover { border-color:var(--color-border-strong); }
+  .ja-stat-pill--active { border-color:var(--color-border-strong); background:var(--color-bg-hover); color:var(--color-text-primary); }
+  .ja-stat-pill__dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .ja-stat-pill__num { font-family:var(--font-display); font-size:15px; font-weight:var(--weight-bold); color:var(--color-text-primary); line-height:1; }
+  .ja-stat-pill__lbl { font-size:12px; }
+
+  /* ─── Errors / notices ─── */
+  .ja-error-banner { display:flex; align-items:center; gap:10px; padding:12px 16px; border-radius:var(--radius-lg,10px); background:rgba(248,113,113,.08); border:1px solid rgba(248,113,113,.25); color:#F87171; font-size:var(--text-sm,13px); margin-bottom:16px; }
+  .ja-priority-notice { display:flex; align-items:flex-start; gap:10px; padding:14px 16px; border-radius:var(--radius-lg,10px); background:rgba(245,158,11,.07); border:1px solid rgba(245,158,11,.22); font-size:var(--text-sm,13px); color:var(--color-text-secondary); margin-bottom:20px; }
+  .ja-priority-notice strong { color:#F59E0B; }
+  .ja-priority-notice__count { color:#F59E0B; font-weight:600; }
+  .ja-priority-done-notice { display:flex; align-items:center; gap:10px; padding:12px 16px; border-radius:var(--radius-lg,10px); background:rgba(52,211,153,.07); border:1px solid rgba(52,211,153,.22); font-size:var(--text-sm,13px); color:var(--color-text-secondary); margin-bottom:20px; }
+
+  /* ─── Filter tabs ─── */
+  .ja-filter-tabs { display:flex; gap:0; border-bottom:1px solid var(--color-border-subtle); margin-bottom:24px; overflow-x:auto; }
+  .ja-filter-tab { display:flex; align-items:center; gap:6px; padding:10px 18px; border:none; border-bottom:2px solid transparent; background:transparent; font-family:var(--font-body); font-size:var(--text-sm,13px); color:var(--color-text-muted); cursor:pointer; white-space:nowrap; transition:all 130ms; margin-bottom:-1px; }
+  .ja-filter-tab:hover { color:var(--color-text-primary); }
+  .ja-filter-tab--active { color:var(--color-text-primary); border-bottom-color:var(--color-primary-400,#A78BFA); font-weight:var(--weight-semibold); }
+  .ja-filter-tab__count { font-family:var(--font-mono); font-size:10px; padding:1px 6px; background:var(--color-bg-overlay); border-radius:999px; color:var(--color-text-muted); }
+
+  /* ─── Groups ─── */
+  .ja-group { margin-bottom:28px; }
+  .ja-group__label { display:flex; align-items:center; gap:8px; font-family:var(--font-display); font-size:var(--text-sm,13px); font-weight:var(--weight-semibold); color:var(--color-text-secondary); margin-bottom:12px; }
+  .ja-group__count { font-family:var(--font-mono); font-size:11px; padding:1px 8px; background:var(--color-bg-overlay); border-radius:999px; color:var(--color-text-muted); }
+  .ja-group__locked-note { font-family:var(--font-mono); font-size:10px; color:var(--color-text-muted); margin-left:4px; }
+  .ja-group__done-badge { font-family:var(--font-mono); font-size:10px; padding:1px 8px; background:rgba(52,211,153,.1); border:1px solid rgba(52,211,153,.25); border-radius:999px; color:#34D399; margin-left:4px; }
+  .ja-group__pending-badge { font-family:var(--font-mono); font-size:10px; padding:1px 8px; background:rgba(245,158,11,.1); border:1px solid rgba(245,158,11,.25); border-radius:999px; color:#F59E0B; margin-left:4px; }
+
+  /* ─── List ─── */
+  .ja-list { display:flex; flex-direction:column; gap:8px; position:relative; }
+  .ja-list--locked { user-select:none; }
+
+  /* Upgraded lock cover */
+  .ja-list__lock-cover { position:absolute; inset:0; z-index:10; background:rgba(10,12,20,.82); backdrop-filter:blur(4px); border-radius:var(--radius-xl,14px); display:flex; align-items:center; justify-content:center; border:1px dashed rgba(245,158,11,.3); }
+  .ja-lock-cover__inner { display:flex; flex-direction:column; align-items:center; gap:10px; padding:32px 24px; text-align:center; max-width:360px; }
+  .ja-lock-cover__icon { font-size:2rem; }
+  .ja-lock-cover__title { font-family:var(--font-display); font-size:15px; font-weight:600; color:#F59E0B; margin:0; }
+  .ja-lock-cover__sub { font-size:12px; color:var(--color-text-muted); margin:0; line-height:1.6; }
+
+  /* ─── Applicant row card ─── */
+  .ja-row { background:var(--color-bg-surface); border:1px solid var(--color-border-subtle); border-radius:var(--radius-xl,14px); overflow:hidden; transition:all 150ms; }
+  .ja-row:hover { border-color:var(--color-border-strong); box-shadow:0 2px 14px rgba(0,0,0,.16); }
+  .ja-row--withdrawn { opacity:.55; }
+  .ja-row--priority { border-color:rgba(245,158,11,.28); }
+  .ja-row--priority::before { content:""; display:block; height:2px; background:linear-gradient(90deg,#D97706,#FCD34D); }
+  .ja-row--locked { opacity:.7; }
+  .ja-row__priority-strip { display:flex; align-items:center; gap:6px; padding:5px 16px; background:rgba(245,158,11,.05); font-family:var(--font-mono); font-size:10px; color:#F59E0B; border-bottom:1px solid rgba(245,158,11,.14); }
+  .ja-row__priority-strip__reviewed { margin-left:auto; color:var(--color-text-muted); }
+  .ja-row__inner { display:flex; align-items:center; gap:14px; padding:14px 16px; }
+  .ja-row__avatar { width:42px; height:42px; border-radius:50%; flex-shrink:0; background:var(--color-bg-overlay); border:1px solid var(--color-border-default); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-size:14px; font-weight:var(--weight-bold); color:var(--color-text-secondary); cursor:pointer; transition:all 130ms; }
+  .ja-row__avatar:hover { border-color:var(--color-primary-500,#7C3AED); color:var(--color-primary-400,#A78BFA); }
+  .ja-row__info { flex:1; min-width:0; }
+  .ja-row__name { display:block; font-family:var(--font-display); font-size:var(--text-base,15px); font-weight:var(--weight-semibold); color:var(--color-text-primary); background:none; border:none; padding:0; cursor:pointer; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:color 130ms; }
+  .ja-row__name:hover { color:var(--color-primary-400,#A78BFA); }
+  .ja-row__date { font-family:var(--font-mono); font-size:11px; color:var(--color-text-muted); display:block; margin-top:2px; }
+  .ja-row__actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .ja-row__cv-btn { padding:7px 14px; border-radius:var(--radius-lg,10px); border:1px solid var(--color-border-default); background:var(--color-bg-base); font-size:var(--text-sm,13px); color:var(--color-text-secondary); cursor:pointer; font-family:var(--font-body); transition:all 130ms; white-space:nowrap; }
+  .ja-row__cv-btn:hover { border-color:var(--color-primary-400,#A78BFA); color:var(--color-primary-400,#A78BFA); }
+
+  /* Quick-action buttons on the row */
+  .ja-row__quick-btn { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:1px solid var(--color-border-default); background:var(--color-bg-base); font-size:13px; font-weight:700; cursor:pointer; transition:all 130ms; flex-shrink:0; }
+  .ja-row__quick-btn:disabled { opacity:.5; cursor:not-allowed; }
+  .ja-row__quick-btn--shortlist { border-color:rgba(52,211,153,.35); color:#34D399; }
+  .ja-row__quick-btn--shortlist:hover:not(:disabled) { background:#059669; border-color:#059669; color:#fff; }
+  .ja-row__quick-btn--reject { border-color:rgba(248,113,113,.35); color:#F87171; }
+  .ja-row__quick-btn--reject:hover:not(:disabled) { background:rgba(248,113,113,.15); }
+
+  /* Update dropdown */
+  .ja-drop-wrap { position:relative; }
+  .ja-row__update-btn { display:flex; align-items:center; gap:6px; padding:7px 14px; border-radius:var(--radius-lg,10px); border:1px solid var(--color-border-default); background:var(--color-bg-elevated); font-size:var(--text-sm,13px); font-family:var(--font-body); color:var(--color-text-primary); cursor:pointer; transition:all 130ms; font-weight:var(--weight-medium); white-space:nowrap; min-width:100px; justify-content:center; }
+  .ja-row__update-btn:hover:not(:disabled) { border-color:var(--color-primary-400,#A78BFA); background:rgba(167,139,250,.08); }
+  .ja-row__update-btn:disabled { opacity:.55; cursor:not-allowed; }
+  .ja-chevron { font-size:9px; }
+  .ja-dropdown { position:absolute; right:0; top:calc(100% + 6px); z-index:200; background:var(--color-bg-elevated); border:1px solid var(--color-border-default); border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,.4); min-width:200px; overflow:hidden; animation:ja-drop-in 130ms cubic-bezier(.34,1.56,.64,1); }
+  @keyframes ja-drop-in { from { opacity:0; transform:translateY(-6px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
+  .ja-dropdown__label { padding:10px 16px 8px; font-family:var(--font-mono); font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:.06em; border-bottom:1px solid var(--color-border-subtle); }
+  .ja-dropdown__item { display:flex; align-items:center; gap:10px; width:100%; padding:12px 16px; background:transparent; border:none; cursor:pointer; text-align:left; font-family:var(--font-body); font-size:var(--text-sm,13px); color:var(--color-text-secondary); transition:background 100ms; }
+  .ja-dropdown__item:hover { background:var(--color-bg-hover); color:var(--color-text-primary); }
+  .ja-dropdown__dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .ja-dropdown__item-name { flex:1; font-weight:var(--weight-medium); }
+  .ja-dropdown__arrow { font-size:11px; color:var(--color-text-muted); }
+
+  /* Status badge */
+  .ja-status-badge { display:inline-flex; align-items:center; gap:6px; border-radius:999px; border:1px solid; font-weight:var(--weight-medium); font-family:var(--font-mono); white-space:nowrap; }
+  .ja-status-badge--md { padding:4px 12px; font-size:12px; }
+  .ja-status-badge--sm { padding:3px 9px; font-size:11px; }
+  .ja-status-badge__dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+
+  /* Spinner */
+  .ja-spinner { width:14px; height:14px; border:2px solid rgba(255,255,255,.2); border-top-color:currentColor; border-radius:50%; animation:ja-spin .6s linear infinite; display:inline-block; }
+  @keyframes ja-spin { to { transform:rotate(360deg); } }
+
+  /* Skeleton */
+  .ja-skeleton-wrap { display:flex; flex-direction:column; gap:8px; }
+  .ja-skeleton-row { display:flex; align-items:center; gap:14px; padding:16px; background:var(--color-bg-surface); border:1px solid var(--color-border-subtle); border-radius:14px; }
+  .ja-skeleton-avatar { width:42px; height:42px; border-radius:50%; flex-shrink:0; }
+  .cv-skel { background:var(--color-bg-overlay); border-radius:var(--radius-md,8px); animation:cv-shimmer 1.4s ease-in-out infinite; }
+  @keyframes cv-shimmer { 0%,100%{opacity:.35;} 50%{opacity:.7;} }
+
+  /* Empty */
+  .ja-empty { text-align:center; padding:60px 24px; }
+  .ja-empty__icon { font-size:3rem; margin-bottom:14px; }
+  .ja-empty__title { font-family:var(--font-display); font-size:var(--text-lg,17px); font-weight:var(--weight-semibold); color:var(--color-text-primary); margin:0 0 6px; }
+  .ja-empty__sub { font-size:var(--text-sm,13px); color:var(--color-text-muted); margin:0; }
+
+  /* ═════════════════════════════════════════════════════════
+     CV MODAL
+  ═════════════════════════════════════════════════════════ */
+  .cv-overlay { position:fixed; top:var(--navbar-height, 60px); left:0; right:0; bottom:var(--bottom-deck-height, 64px); z-index:300; background:rgba(4,6,14,.85); backdrop-filter:blur(10px); display:flex; align-items:center; justify-content:center; padding:16px; animation:cv-fade 160ms ease; }
+  @keyframes cv-fade { from{opacity:0;} to{opacity:1;} }
+
+  .cv-modal { width:100%; max-width:1020px; max-height:100%; background:var(--color-bg-elevated); border:1px solid var(--color-border-default); border-radius:20px; box-shadow:0 40px 100px rgba(0,0,0,.6); display:flex; flex-direction:column; overflow:hidden; animation:cv-in 200ms cubic-bezier(.34,1.2,.64,1); }
+  @keyframes cv-in { from{opacity:0;transform:scale(.95) translateY(14px);} to{opacity:1;transform:scale(1) translateY(0);} }
+
+  /* Top bar */
+  .cv-modal__topbar { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 20px; border-bottom:1px solid var(--color-border-subtle); background:var(--color-bg-base); flex-shrink:0; flex-wrap:wrap; }
+  .cv-modal__topbar-left { display:flex; align-items:center; gap:12px; }
+  .cv-close-btn { width:32px; height:32px; border-radius:50%; border:1px solid var(--color-border-default); background:var(--color-bg-surface); color:var(--color-text-muted); font-size:13px; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all 130ms; flex-shrink:0; }
+  .cv-close-btn:hover { border-color:var(--color-border-strong); color:var(--color-text-primary); }
+  .cv-modal__topbar-label { font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--color-text-muted); display:flex; align-items:center; gap:8px; }
+  .cv-modal__topbar-priority { font-family:var(--font-mono); font-size:10px; padding:2px 8px; background:rgba(245,158,11,.12); border:1px solid rgba(245,158,11,.3); border-radius:999px; color:#F59E0B; }
+  .cv-modal__topbar-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .cv-action-group { display:flex; align-items:center; gap:8px; }
+  .cv-locked-notice { display:flex; align-items:center; gap:8px; padding:7px 14px; border-radius:var(--radius-lg,10px); background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.25); font-size:12px; color:#F59E0B; font-family:var(--font-mono); white-space:nowrap; }
+
+  .cv-action-btn { display:flex; align-items:center; gap:6px; padding:8px 18px; border-radius:var(--radius-lg,10px); border:1px solid; font-size:var(--text-sm,13px); font-family:var(--font-body); font-weight:var(--weight-semibold); cursor:pointer; transition:all 130ms; white-space:nowrap; }
+  .cv-action-btn:disabled { opacity:.6; cursor:not-allowed; }
+  .cv-spinner { width:14px; height:14px; border:2px solid rgba(255,255,255,.25); border-top-color:currentColor; border-radius:50%; animation:ja-spin .6s linear infinite; display:inline-block; }
+  .cv-action-btn--shortlist { background:#059669; border-color:#059669; color:#fff; }
+  .cv-action-btn--shortlist:hover:not(:disabled) { background:#047857; border-color:#047857; }
+  .cv-action-btn--reject { background:rgba(248,113,113,.1); border-color:rgba(248,113,113,.32); color:#F87171; }
+  .cv-action-btn--reject:hover:not(:disabled) { background:rgba(248,113,113,.18); }
+  .cv-action-btn--ghost { background:var(--color-bg-surface); border-color:var(--color-border-default); color:var(--color-text-secondary); }
+
+  /* Body: sidebar + main */
+  .cv-modal__body { display:flex; flex:1; overflow:hidden; }
+
+  /* Sidebar */
+  .cv-sidebar { width:256px; flex-shrink:0; background:var(--color-bg-base); border-right:1px solid var(--color-border-subtle); overflow-y:auto; padding:24px 20px; display:flex; flex-direction:column; gap:22px; }
+  .cv-sidebar::-webkit-scrollbar { width:3px; }
+  .cv-sidebar::-webkit-scrollbar-thumb { background:var(--color-border-strong); border-radius:2px; }
+
+  .cv-sidebar__identity { display:flex; flex-direction:column; align-items:center; text-align:center; gap:10px; }
+  .cv-sidebar__avatar { width:80px; height:80px; border-radius:50%; background:var(--color-bg-overlay); border:2px solid var(--color-border-default); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0; }
+  .cv-sidebar__avatar-img { width:100%; height:100%; object-fit:cover; }
+  .cv-sidebar__avatar-initials { font-family:var(--font-display); font-size:26px; font-weight:var(--weight-bold); color:var(--color-text-secondary); }
+  .cv-sidebar__name { font-family:var(--font-display); font-size:17px; font-weight:var(--weight-bold); color:var(--color-text-primary); margin:0; line-height:1.3; }
+  .cv-sidebar__title { font-size:12px; color:var(--color-text-secondary); margin:0; line-height:1.4; }
+  .cv-sidebar__level { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .cv-sidebar__level-badge { display:inline-flex; align-items:center; padding:3px 12px; border-radius:999px; border:1px solid; font-family:var(--font-mono); font-size:11px; font-weight:var(--weight-bold); }
+  .cv-sidebar__xp { font-family:var(--font-mono); font-size:10px; color:var(--color-text-muted); }
+
+  .cv-sidebar__section { display:flex; flex-direction:column; gap:10px; }
+  .cv-sidebar__app-card { background:var(--color-bg-surface); border:1px solid var(--color-border-subtle); border-radius:12px; padding:14px; }
+  .cv-sidebar__section-title { font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:.07em; color:var(--color-text-muted); margin:0; }
+
+  .cv-sidebar__contact-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
+  .cv-sidebar__contact-item { display:flex; align-items:flex-start; gap:8px; }
+  .cv-sidebar__contact-icon { font-size:13px; flex-shrink:0; margin-top:1px; }
+  .cv-sidebar__contact-val { font-size:12px; color:var(--color-text-secondary); word-break:break-all; }
+  .cv-sidebar__contact-val--link { color:var(--color-primary-400,#A78BFA); text-decoration:none; }
+  .cv-sidebar__contact-val--link:hover { text-decoration:underline; }
+
+  .cv-sidebar__links { display:flex; flex-direction:column; gap:6px; }
+  .cv-sidebar__link { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:10px; border:1px solid var(--color-border-subtle); background:var(--color-bg-surface); font-size:12px; color:var(--color-text-secondary); text-decoration:none; transition:all 130ms; }
+  .cv-sidebar__link:hover { border-color:var(--color-border-strong); color:var(--color-text-primary); }
+  .cv-sidebar__link--linkedin { border-color:rgba(10,102,194,.25); color:#0a66c2; }
+  .cv-sidebar__link-icon { font-size:12px; width:18px; text-align:center; flex-shrink:0; }
+  .cv-sidebar__link-arrow { margin-left:auto; color:var(--color-text-muted); font-size:11px; }
+
+  .cv-sidebar__app-rows { display:flex; flex-direction:column; gap:10px; }
+  .cv-sidebar__app-row { display:flex; flex-direction:column; gap:2px; }
+  .cv-sidebar__app-lbl { font-family:var(--font-mono); font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:.05em; }
+  .cv-sidebar__app-val { font-size:12px; color:var(--color-text-primary); font-weight:var(--weight-medium); }
+  .cv-sidebar__priority { font-family:var(--font-mono); font-size:11px; color:#F59E0B; font-weight:var(--weight-bold); }
+  .cv-sidebar__member-since { font-family:var(--font-mono); font-size:10px; color:var(--color-text-muted); text-align:center; margin:0; padding-top:10px; border-top:1px solid var(--color-border-subtle); }
+
+  /* Main CV content */
+  .cv-main { flex:1; overflow-y:auto; padding:36px 40px; display:flex; flex-direction:column; gap:40px; }
+  .cv-main::-webkit-scrollbar { width:4px; }
+  .cv-main::-webkit-scrollbar-thumb { background:var(--color-border-strong); border-radius:2px; }
+
+  /* Loading */
+  .cv-loading { display:flex; flex-direction:column; gap:8px; }
+  .cv-loading__section { padding:20px 0; border-bottom:1px solid var(--color-border-subtle); display:flex; flex-direction:column; gap:8px; }
+
+  /* Empty */
+  .cv-empty { text-align:center; padding:64px 0; }
+  .cv-empty__icon { font-size:3rem; margin-bottom:14px; }
+  .cv-empty__title { font-family:var(--font-display); font-size:var(--text-lg,17px); font-weight:var(--weight-semibold); color:var(--color-text-primary); margin:0 0 6px; }
+  .cv-empty__sub { font-size:var(--text-sm,13px); color:var(--color-text-muted); margin:0; }
+
+  /* Sections */
+  .cv-section { display:flex; flex-direction:column; gap:20px; }
+  .cv-section__title { display:flex; align-items:center; gap:12px; font-family:var(--font-display); font-size:11px; font-weight:var(--weight-bold); color:var(--color-text-muted); text-transform:uppercase; letter-spacing:.1em; margin:0; }
+  .cv-section__line { display:inline-block; width:24px; height:2px; background:var(--color-primary-400,#A78BFA); border-radius:1px; flex-shrink:0; }
+  .cv-about { font-size:14px; color:var(--color-text-secondary); line-height:1.75; margin:0; }
+  .cv-desc { font-size:13px; color:var(--color-text-muted); line-height:1.65; margin:0; }
+
+  /* Timeline */
+  .cv-timeline { display:flex; flex-direction:column; }
+  .cv-timeline__item { display:flex; gap:16px; padding-bottom:28px; }
+  .cv-timeline__item:last-child { padding-bottom:0; }
+  .cv-timeline__marker { display:flex; flex-direction:column; align-items:center; flex-shrink:0; padding-top:5px; }
+  .cv-timeline__dot { width:12px; height:12px; border-radius:50%; background:var(--color-primary-400,#A78BFA); border:2px solid var(--color-bg-elevated); z-index:1; flex-shrink:0; }
+  .cv-timeline__line { flex:1; width:2px; background:var(--color-border-subtle); margin-top:4px; min-height:20px; }
+  .cv-timeline__content { flex:1; }
+  .cv-timeline__header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:8px; }
+  .cv-timeline__role { font-size:15px; font-weight:var(--weight-semibold); color:var(--color-text-primary); }
+  .cv-timeline__org { font-size:13px; color:var(--color-text-secondary); margin-top:3px; }
+  .cv-timeline__loc { color:var(--color-text-muted); font-size:12px; }
+  .cv-timeline__period { font-family:var(--font-mono); font-size:11px; color:var(--color-text-muted); white-space:nowrap; flex-shrink:0; padding-top:3px; }
+
+  /* Education */
+  .cv-edu-list { display:flex; flex-direction:column; gap:14px; }
+  .cv-edu-item { display:flex; gap:20px; padding:16px; background:var(--color-bg-surface); border:1px solid var(--color-border-subtle); border-radius:12px; }
+  .cv-edu-item__years { display:flex; flex-direction:column; align-items:center; gap:2px; flex-shrink:0; font-family:var(--font-mono); font-size:12px; color:var(--color-text-muted); min-width:44px; padding-top:2px; }
+  .cv-edu-item__sep { font-size:9px; }
+  .cv-edu-item__body { flex:1; }
+  .cv-edu-item__degree { font-size:14px; font-weight:var(--weight-semibold); color:var(--color-text-primary); }
+  .cv-edu-item__field { font-size:13px; color:var(--color-text-secondary); margin-top:2px; }
+  .cv-edu-item__inst { font-family:var(--font-mono); font-size:11px; color:var(--color-text-muted); margin-top:5px; }
+
+  /* Projects */
+  .cv-project-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:14px; }
+  .cv-project-card { padding:16px; border-radius:12px; background:var(--color-bg-surface); border:1px solid var(--color-border-subtle); transition:border-color 130ms; }
+  .cv-project-card:hover { border-color:var(--color-border-strong); }
+  .cv-project-card__header { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:10px; }
+  .cv-project-card__name { font-size:14px; font-weight:var(--weight-semibold); color:var(--color-text-primary); }
+  .cv-project-card__links { display:flex; gap:5px; flex-shrink:0; }
+  .cv-ext-link { padding:3px 9px; border-radius:999px; font-family:var(--font-mono); font-size:10px; border:1px solid var(--color-border-default); background:var(--color-bg-base); color:var(--color-text-muted); text-decoration:none; transition:all 120ms; }
+  .cv-ext-link:hover { border-color:var(--color-primary-400,#A78BFA); color:var(--color-primary-400,#A78BFA); }
+  .cv-project-card__desc { font-size:12px; color:var(--color-text-muted); line-height:1.6; margin:0 0 10px; }
+  .cv-project-card__tech { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:8px; }
+  .cv-tech-chip { padding:2px 8px; border-radius:999px; font-family:var(--font-mono); font-size:10px; background:var(--color-bg-overlay); border:1px solid var(--color-border-subtle); color:var(--color-text-muted); }
+  .cv-project-card__period { font-family:var(--font-mono); font-size:10px; color:var(--color-text-muted); }
+
+  /* Certifications */
+  .cv-cert-list { display:flex; flex-direction:column; gap:12px; }
+  .cv-cert-item { display:flex; gap:14px; align-items:flex-start; padding:14px; background:var(--color-bg-surface); border:1px solid var(--color-border-subtle); border-radius:12px; }
+  .cv-cert-item__icon { font-size:1.2rem; flex-shrink:0; padding-top:1px; }
+  .cv-cert-item__body { flex:1; }
+  .cv-cert-item__name { font-size:14px; font-weight:var(--weight-semibold); color:var(--color-text-primary); }
+  .cv-cert-item__org  { font-size:13px; color:var(--color-text-secondary); margin-top:2px; }
+  .cv-cert-item__date { font-family:var(--font-mono); font-size:10px; color:var(--color-text-muted); margin-top:4px; }
+
+  /* ─── Responsive ─── */
+  @media (max-width:760px) {
+    .cv-overlay { padding:0; align-items:flex-end; }
+    .cv-modal { max-height:100%; border-radius:20px 20px 0 0; max-width:100%; }
+    .cv-modal__body { flex-direction:column; }
+    .cv-sidebar { width:100%; border-right:none; border-bottom:1px solid var(--color-border-subtle); padding:20px; }
+    .cv-sidebar__identity { flex-direction:row; text-align:left; align-items:center; }
+    .cv-main { padding:20px 18px; gap:28px; }
+    .cv-project-grid { grid-template-columns:1fr; }
+    .ja-row__inner { flex-wrap:wrap; gap:10px; }
+    .ja-row__actions { width:100%; justify-content:flex-end; }
+  }
+`;
+
+export default JobApplicantsPage;

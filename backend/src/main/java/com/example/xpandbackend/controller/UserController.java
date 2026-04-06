@@ -8,7 +8,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-
+import com.example.xpandbackend.dto.response.DashboardResponse;
+import com.example.xpandbackend.service.DashboardService;
 import java.util.List;
 
 @RestController
@@ -17,6 +18,7 @@ import java.util.List;
 public class UserController {
 
     private final UserService userService;
+    private final DashboardService dashboardService;
 
     @GetMapping("/profile")
     public ResponseEntity<UserProfileResponse> getProfile(@AuthenticationPrincipal AuthenticatedUser principal) {
@@ -131,5 +133,9 @@ public class UserController {
                                               @PathVariable Integer id) {
         userService.deleteProject(principal.getId(), id);
         return ResponseEntity.noContent().build();
+    }
+    @GetMapping("/dashboard")
+    public ResponseEntity<DashboardResponse> getDashboard(@AuthenticationPrincipal AuthenticatedUser principal) {
+        return ResponseEntity.ok(dashboardService.getDashboard(principal.getId()));
     }
 }

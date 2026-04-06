@@ -1,6 +1,8 @@
 package com.example.xpandbackend.dto.response;
+
 import lombok.Data;
 import java.time.LocalDateTime;
+
 @Data
 public class UserProfileResponse {
     private Integer id;
@@ -17,5 +19,6 @@ public class UserProfileResponse {
     private String professionalTitle;
     private String aboutMe;
     private Integer xpBalance;
+    private Integer loginStreakDays;
     private LocalDateTime createdAt;
 }

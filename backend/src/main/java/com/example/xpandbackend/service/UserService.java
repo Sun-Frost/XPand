@@ -263,10 +263,10 @@ public class UserService {
         r.setProfessionalTitle(user.getProfessionalTitle());
         r.setAboutMe(user.getAboutMe());
         r.setXpBalance(user.getXpBalance());
+        r.setLoginStreakDays(user.getLoginStreakDays() != null ? user.getLoginStreakDays() : 0);
         r.setCreatedAt(user.getCreatedAt());
         return r;
     }
-
     private EducationResponse mapToEducationResponse(Education e) {
         EducationResponse r = new EducationResponse();
         r.setId(e.getId());

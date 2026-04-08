@@ -234,3 +234,56 @@
     transition: none !important;
   }
 }
+/* ============================================================
+   BottomDock collapse additions
+   Append these rules to your existing BottomDock.css
+   ============================================================ */
+
+/* Wrapper replaces the fixed positioning that was on .bdock */
+.bdock-wrapper {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: var(--z-dock, 100);
+  /* translateY is driven by Framer Motion — no CSS transition needed here */
+}
+
+/* Remove position:fixed from .bdock — the wrapper now owns it */
+.bdock {
+  position: static;
+  bottom: unset;
+  left: unset;
+  width: 100%;
+}
+
+/* ── Collapse handle pill ──────────────────────────────────── */
+.bdock-collapse-handle {
+  width: 52px;
+  height: 22px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  /* sits flush on top of the dock bar */
+  margin-bottom: -1px;
+  transition: background var(--duration-base), color var(--duration-base);
+}
+
+.bdock-collapse-handle:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.bdock-collapse-handle:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}

@@ -1,19 +1,18 @@
 /* ============================================================
    BottomDock.tsx
-   Self-contained bottom navigation bar.
+   Self-contained bottom navigation bar with collapse handle.
 
    KEY RULES
    ─────────────────────────────────────────────────────────
    • Zero props required — no activePath, no onNavigate passed
      from outside. The dock reads its own location and navigates
      itself via useLocation / useNavigate.
-   • Always renders ALL 6 items from NAV_ITEMS.
-   • position: fixed; bottom: 0; left: 0; width: 100%
+   • Always renders ALL items from NAV_ITEMS.
+   • Collapsible via a small pill handle above the dock.
    • macOS-style proximity magnification via Framer Motion.
-   • PageLayout just renders <BottomDock /> with nothing else.
    ============================================================ */
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   motion,
@@ -25,9 +24,9 @@ import { NAV_ITEMS, type NavItem } from "./navItems";
 import "../../../assets/css/BottomDock.css";
 
 /* ── Magnification constants ─────────────────────────────────── */
-const ITEM_BASE = 48;   // px — resting size
-const ITEM_MAG  = 68;   // px — max magnified size
-const MAG_RANGE = 100;  // px — proximity radius that triggers magnification
+const ITEM_BASE = 48;
+const ITEM_MAG  = 68;
+const MAG_RANGE = 100;
 
 /* ── DockItem ────────────────────────────────────────────────── */
 interface DockItemProps {
@@ -41,7 +40,6 @@ const DockItem = ({ item, active, mouseX, onClick }: DockItemProps) => {
   const btnRef = useRef<HTMLButtonElement>(null);
   const dist   = useMotionValue(MAG_RANGE + 1);
 
-  /* Recalculate distance between mouse and this button's centre */
   const updateDist = () => {
     const el = btnRef.current;
     if (!el) return;
@@ -49,15 +47,10 @@ const DockItem = ({ item, active, mouseX, onClick }: DockItemProps) => {
     dist.set(Math.abs(mouseX.get() - (left + width / 2)));
   };
 
-  /* Size spring — maps distance → button size */
   const rawSize   = useTransform(dist, [0, MAG_RANGE], [ITEM_MAG, ITEM_BASE]);
   const size      = useSpring(rawSize, { stiffness: 320, damping: 26, mass: 0.5 });
-
-  /* Label fades in as the button grows */
   const labelOp   = useTransform(size, [ITEM_BASE, ITEM_MAG], [0, 1]);
   const labelY    = useTransform(size, [ITEM_BASE, ITEM_MAG], [6, 0]);
-
-  /* Icon scales up slightly with the button */
   const iconScale = useTransform(size, [ITEM_BASE, ITEM_MAG], [1, 1.18]);
 
   return (
@@ -66,7 +59,6 @@ const DockItem = ({ item, active, mouseX, onClick }: DockItemProps) => {
       onMouseMove={updateDist}
       onMouseLeave={() => dist.set(MAG_RANGE + 1)}
     >
-      {/* Label — floats above, visible on hover */}
       <motion.span
         className="bdock-item-label"
         style={{ opacity: labelOp, y: labelY }}
@@ -75,7 +67,6 @@ const DockItem = ({ item, active, mouseX, onClick }: DockItemProps) => {
         {item.label}
       </motion.span>
 
-      {/* Icon button */}
       <motion.button
         ref={btnRef}
         className={`bdock-item${active ? " bdock-item--active" : ""}`}
@@ -89,14 +80,10 @@ const DockItem = ({ item, active, mouseX, onClick }: DockItemProps) => {
         aria-label={item.label}
         aria-current={active ? "page" : undefined}
       >
-        <motion.span
-          className="bdock-item-icon"
-          style={{ scale: iconScale }}
-        >
+        <motion.span className="bdock-item-icon" style={{ scale: iconScale }}>
           {item.icon}
         </motion.span>
 
-        {/* Active indicator dot — shared layoutId animates between pages */}
         {active && (
           <motion.span
             className="bdock-item-dot"
@@ -110,38 +97,55 @@ const DockItem = ({ item, active, mouseX, onClick }: DockItemProps) => {
 };
 
 /* ── BottomDock ───────────────────────────────────────────────── */
-/*
- * No props. Fully self-contained:
- *   useLocation()  → determines which item is active
- *   useNavigate()  → handles all clicks internally
- *
- * Usage in PageLayout:
- *   <BottomDock />
- */
 const BottomDock = () => {
   const navigate     = useNavigate();
   const { pathname } = useLocation();
   const mouseX       = useMotionValue(-9999);
+  const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <nav
-      className="bdock"
-      aria-label="Main navigation"
-      onMouseMove={(e) => mouseX.set(e.clientX)}
-      onMouseLeave={() => mouseX.set(-9999)}
+    <motion.div
+      className="bdock-wrapper"
+      animate={{ y: collapsed ? "var(--layout-bottom-height, 64px)" : "0px" }}
+      transition={{ type: "spring", stiffness: 320, damping: 30, mass: 0.8 }}
     >
-      <div className="bdock-inner">
-        {NAV_ITEMS.map((item) => (
-          <DockItem
-            key={item.id}
-            item={item}
-            active={pathname === item.path}
-            mouseX={mouseX}
-            onClick={() => navigate(item.path)}
-          />
-        ))}
-      </div>
-    </nav>
+      {/* Collapse handle */}
+      <button
+        className="bdock-collapse-handle"
+        onClick={() => setCollapsed((v) => !v)}
+        aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+      >
+        <motion.svg
+          width="16" height="16" viewBox="0 0 16 16"
+          fill="none" stroke="currentColor"
+          strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+          animate={{ rotate: collapsed ? 180 : 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 24 }}
+        >
+          <path d="M4 6l4 4 4-4" />
+        </motion.svg>
+      </button>
+
+      {/* Dock bar */}
+      <nav
+        className="bdock"
+        aria-label="Main navigation"
+        onMouseMove={(e) => mouseX.set(e.clientX)}
+        onMouseLeave={() => mouseX.set(-9999)}
+      >
+        <div className="bdock-inner">
+          {NAV_ITEMS.map((item) => (
+            <DockItem
+              key={item.id}
+              item={item}
+              active={pathname === item.path}
+              mouseX={mouseX}
+              onClick={() => navigate(item.path)}
+            />
+          ))}
+        </div>
+      </nav>
+    </motion.div>
   );
 };
 

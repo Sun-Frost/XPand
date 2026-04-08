@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { AI_TIMEOUT_MS, get, post } from "../../api/axios";
 import type { SentimentLabel, SentimentResult } from "./useSentiment";
 
@@ -69,7 +69,13 @@ export interface StoreItemWithMeta extends StoreItemResponse {
 // Interview phase
 // ---------------------------------------------------------------------------
 
-export type InterviewPhase = "idle" | "starting" | "answering" | "submitting" | "completed";
+export type InterviewPhase =
+  | "idle"
+  | "starting"       // waiting for first question from backend
+  | "answering"      // candidate is typing their answer
+  | "fetching_next"  // submitted answer, waiting for next question from Gemini
+  | "submitting"     // all questions answered, generating final report
+  | "completed";
 
 // ---------------------------------------------------------------------------
 // Adaptive AI types
@@ -77,22 +83,43 @@ export type InterviewPhase = "idle" | "starting" | "answering" | "submitting" | 
 
 export type InterviewerMode = "friendly" | "strict";
 
+/** Tone values returned by the backend */
+export type InterviewTone = "good_cop" | "bad_cop" | "neutral";
+
+/** "personal" questions are anchored to candidate profile; "technical" to skills/job */
+export type QuestionType = "technical" | "personal";
+
 export interface AnswerRecord {
   questionIndex: number;
   question: string;
+  questionType: QuestionType;
   answer: string;
   sentiment: SentimentResult;
-  mode: InterviewerMode;
-  feedbackText: string;
+  tone: InterviewTone;
+  mode: InterviewerMode;       // derived from tone for UI
+  feedbackText: string;        // per-answer feedback from Claude (frontend)
+  feedbackOnPrevious: string;  // Gemini's comment on this answer (in next question response)
   answerQuality: "weak" | "moderate" | "strong";
 }
 
 export interface QuestionFeedback {
   questionIndex: number;
-  feedbackText: string;
+  feedbackText: string;        // Claude AI per-answer feedback
+  feedbackOnPrevious: string;  // Gemini's transition comment
   isLoading: boolean;
   mode: InterviewerMode;
+  tone: InterviewTone;
   sentiment: SentimentLabel;
+  questionType: QuestionType;
+}
+
+/** Shape of a question in the live session */
+export interface LiveQuestion {
+  text: string;
+  type: QuestionType;
+  tone: InterviewTone;
+  /** Gemini's comment on the previous answer — shown above the question card */
+  feedbackOnPrevious: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -107,7 +134,7 @@ const ITEM_META: Record<ItemType, Omit<StoreItemWithMeta, keyof StoreItemRespons
   },
   MOCK_INTERVIEW: {
     category: "INTERVIEW", icon: "🎙️", tagline: "Practice until perfect.",
-    features: ["Questions tailored to job requirements", "Adaptive AI — adjusts to your confidence", "Sentiment-aware feedback in real time", "Overall performance summary at the end"],
+    features: ["Questions tailored to job requirements & personal history", "Adaptive AI — adjusts to your confidence in real time", "Mix of technical and personal questions", "Sentiment-driven tone: Good Cop or Bad Cop", "Full performance summary at the end"],
     badge: "NEW",
   },
   PRIORITY_SLOT: {
@@ -244,16 +271,13 @@ export function useReadinessReport(purchaseId: number | null): UseReadinessRepor
 // Adaptive AI helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Determine interviewer mode from sentiment + answer quality.
- *
- * Nervous/Angry   → always friendly (support & de-escalate)
- * Confident       → always strict (push limits)
- * Happy + strong  → strict (they can handle pressure)
- * Happy + weak/mod→ friendly (keep momentum)
- * Neutral + strong→ strict
- * Neutral + weak  → friendly
- */
+/** Maps backend tone to the UI's InterviewerMode for styling */
+export function toneToMode(tone: InterviewTone): InterviewerMode {
+  return tone === "good_cop" ? "friendly" : tone === "bad_cop" ? "strict" : "friendly";
+}
+
+/** Client-side mode determination — used as an optimistic estimate while the
+    backend response is in-flight (avoids a blank mode badge). */
 export function determineMode(sentiment: SentimentLabel, quality: "weak" | "moderate" | "strong"): InterviewerMode {
   if (sentiment === "nervous" || sentiment === "angry") return "friendly";
   if (sentiment === "confident") return "strict";
@@ -269,48 +293,106 @@ export function estimateAnswerQuality(answer: string): "weak" | "moderate" | "st
   return "strong";
 }
 
+// ---------------------------------------------------------------------------
+// Backend: fetch next question
+// ---------------------------------------------------------------------------
+
+interface QARound {
+  question: string;
+  questionType: string;
+  answer: string;
+  answerQuality: string;
+  sentiment: string;
+}
+
+interface NextQuestionApiResponse {
+  question: string;
+  questionType: QuestionType;
+  tone: InterviewTone;
+  feedbackOnPrevious: string | null;
+  isLastQuestion: boolean;
+}
+
+async function fetchNextQuestion(
+  purchaseId: number,
+  answeredIndex: number,
+  totalQuestions: number,
+  sentiment: SentimentResult,
+  history: QARound[]
+): Promise<NextQuestionApiResponse> {
+  return post<NextQuestionApiResponse>(
+    "/user/ai/interview/next-question",
+    {
+      purchaseId,
+      answeredIndex,
+      totalQuestions,
+      sentimentLabel: sentiment.label,
+      sentimentConfidence: sentiment.confidence,
+      history,
+    },
+    { timeout: AI_TIMEOUT_MS }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Frontend: per-answer feedback via Claude
+// ---------------------------------------------------------------------------
+
 async function fetchAdaptiveFeedback(
   question: string,
+  questionType: QuestionType,
   answer: string,
   qNum: number,
   total: number,
   sentiment: SentimentResult,
+  tone: InterviewTone,
   history: AnswerRecord[]
-): Promise<{ feedbackText: string; answerQuality: "weak" | "moderate" | "strong"; mode: InterviewerMode }> {
+): Promise<{ feedbackText: string; answerQuality: "weak" | "moderate" | "strong" }> {
   const estQuality = estimateAnswerQuality(answer);
-  const mode = determineMode(sentiment.label, estQuality);
 
-  const modeBlock = mode === "friendly"
-    ? `INTERVIEWER MODE: FRIENDLY (Good Cop)
+  const toneBlock =
+    tone === "good_cop"
+      ? `INTERVIEWER MODE: FRIENDLY (Good Cop)
 - Be warm, encouraging, and supportive
-- Acknowledge strengths first
-- If answer was weak: "That's a good start. Let's build on that…"
-- Offer gentle hints for improvement
+- Acknowledge strengths first before pointing out gaps
 - End with a short word of encouragement`
-    : `INTERVIEWER MODE: STRICT (Bad Cop)
+      : tone === "bad_cop"
+      ? `INTERVIEWER MODE: STRICT (Bad Cop)
 - Be direct and challenging — skip warm-up
-- Push deeper immediately: challenge assumptions, probe edge cases
-- If answer was strong: "Good, but what happens under X condition?"
-- Point out gaps or missing nuance clearly
-- Maintain pressure — this candidate can handle it`;
+- Push deeper: challenge assumptions, probe edge cases or missing nuance
+- Maintain pressure — this candidate can handle it`
+      : `INTERVIEWER MODE: NEUTRAL
+- Be professional and balanced
+- State strengths and gaps factually without emotional coloring`;
 
-  const histCtx = history.length > 0
-    ? `Previous answer qualities: ${history.map((r) => r.answerQuality).join(", ")}.`
-    : "This is the first answer.";
+  const questionContext =
+    questionType === "personal"
+      ? "This was a PERSONAL/BEHAVIOURAL question about the candidate's background or experience."
+      : "This was a TECHNICAL question about skills or domain knowledge.";
 
-  const prompt = `You are an adaptive AI interviewer.
+  const histCtx =
+    history.length > 0
+      ? `Previous answer qualities: ${history.map((r) => r.answerQuality).join(", ")}.`
+      : "This is the first answer.";
 
+  const prompt = `You are an adaptive AI interviewer giving per-answer feedback.
+
+${questionContext}
 Candidate appears: ${sentiment.label} (${Math.round(sentiment.confidence * 100)}% confidence).
 ${histCtx}
 
-${modeBlock}
+${toneBlock}
 
 ---
 Question ${qNum} of ${total}: "${question}"
 Candidate's Answer: "${answer}"
 ---
 
-Give feedback in 3–5 sentences. Be specific to this answer. Do not repeat the question.
+Give feedback in 3–5 sentences. Be specific to this answer and the question type.
+For personal questions: comment on clarity, self-awareness, and use of concrete examples.
+For technical questions: comment on accuracy, depth, and any missing edge cases.
+Do not repeat the question.
+
 After your feedback, on a new line write exactly one of:
 QUALITY: weak
 QUALITY: moderate
@@ -329,34 +411,49 @@ QUALITY: strong`;
   if (!res.ok) throw new Error("AI request failed.");
 
   const data = await res.json();
-  const raw = (data.content as Array<{ type: string; text?: string }>)
-    ?.filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n").trim() ?? "";
+  const raw =
+    (data.content as Array<{ type: string; text?: string }>)
+      ?.filter((b) => b.type === "text")
+      .map((b) => b.text ?? "")
+      .join("\n")
+      .trim() ?? "";
 
   const qMatch = raw.match(/\nQUALITY:\s*(weak|moderate|strong)\s*$/i);
   const answerQuality = (qMatch?.[1]?.toLowerCase() ?? estQuality) as "weak" | "moderate" | "strong";
   const feedbackText = raw.replace(/\nQUALITY:\s*(weak|moderate|strong)\s*$/i, "").trim();
 
-  return { feedbackText, answerQuality, mode };
+  return { feedbackText, answerQuality };
 }
 
+// ---------------------------------------------------------------------------
+// Session summary via Claude
+// ---------------------------------------------------------------------------
+
 async function fetchSessionSummary(records: AnswerRecord[]): Promise<string> {
-  const recap = records.map((r, i) =>
-    `Q${i + 1}: "${r.question}"\nAnswer: "${r.answer}"\nSentiment: ${r.sentiment.label} | Quality: ${r.answerQuality} | AI mode: ${r.mode}`
-  ).join("\n\n");
+  const recap = records
+    .map(
+      (r, i) =>
+        `Q${i + 1} [${r.questionType}]: "${r.question}"\n` +
+        `Answer: "${r.answer}"\n` +
+        `Sentiment: ${r.sentiment.label} | Quality: ${r.answerQuality} | Tone: ${r.tone}`
+    )
+    .join("\n\n");
 
   const prompt = `You are an AI interview coach writing a comprehensive post-session report.
 
-Session data:
+Session data (mix of technical and personal questions):
 ${recap}
 
 Write a structured performance summary with these sections:
 1. **Overall Performance** — general impression
-2. **Strongest Answer** — which question they handled best and why
-3. **Needs Most Work** — weakest area with specific advice
-4. **Sentiment Journey** — how confidence/nervousness evolved and affected answers
-5. **Top 3 Action Items** — concrete things to improve before the real interview
+2. **Technical Questions** — how well they handled skill/domain questions
+3. **Personal Questions** — communication style, self-awareness, use of specific examples
+4. **Strongest Answer** — which question they handled best and why
+5. **Needs Most Work** — weakest area with specific advice
+6. **Sentiment Journey** — how confidence/nervousness evolved and affected answers
+7. **Top 3 Action Items** — concrete things to improve before the real interview
 
-Be honest, constructive, and motivating. 250–350 words.`;
+Be honest, constructive, and motivating. 300–400 words.`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -370,43 +467,52 @@ Be honest, constructive, and motivating. 250–350 words.`;
 
   if (!res.ok) throw new Error("Summary request failed.");
   const data = await res.json();
-  return (data.content as Array<{ type: string; text?: string }>)
-    ?.filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n").trim() ?? "Summary unavailable.";
-}
-
-function parseQuestions(text: string): string[] {
-  const questions: string[] = [];
-  for (const raw of text.split("\n")) {
-    const line = raw.trim();
-    const m = line.match(/^(?:Q(?:uestion)?\s*)?(\d+)[.:]\s*(.+)$/i);
-    if (m) questions.push(m[2].replace(/\*\*/g, "").trim());
-  }
-  if (questions.length === 0)
-    return text.split(/\n{2,}/).map((c) => c.trim()).filter(Boolean).slice(0, 10);
-  return questions;
+  return (
+    (data.content as Array<{ type: string; text?: string }>)
+      ?.filter((b) => b.type === "text")
+      .map((b) => b.text ?? "")
+      .join("\n")
+      .trim() ?? "Summary unavailable."
+  );
 }
 
 // ---------------------------------------------------------------------------
-// useMockInterview — Adaptive AI with Sentiment
+// useMockInterview — one-question-at-a-time, sentiment-driven
 // ---------------------------------------------------------------------------
+
+const TOTAL_QUESTIONS = 5;
 
 export interface UseMockInterviewReturn {
   interview: MockInterviewResponse | null;
   phase: InterviewPhase;
-  questions: string[];
+
+  /** Current live question, or null while loading */
+  currentQuestion: LiveQuestion | null;
+  /** 0-based index */
   currentQuestionIndex: number;
+  /** Total questions this session */
+  totalQuestions: number;
+
   perAnswers: string[];
   perFeedback: QuestionFeedback[];
   answerRecords: AnswerRecord[];
   sessionSummary: string | null;
+
+  /** True while the per-answer Claude feedback is being fetched */
   isFetchingFeedback: boolean;
+  /** True while the next Gemini question is being fetched */
+  isFetchingNextQuestion: boolean;
+
   currentMode: InterviewerMode;
-  goToNextQuestion: () => void;
-  answers: string;
-  isLoading: boolean;
+
   error: string | null;
+  isLoading: boolean;
+
+  answers: string;
+
   setCurrentAnswer: (v: string) => void;
   submitCurrentAnswer: (sentiment: SentimentResult) => Promise<void>;
+  goToNextQuestion: () => void;
   startInterview: () => Promise<void>;
   submitAnswers: () => Promise<void>;
   setAnswers: (v: string) => void;
@@ -418,15 +524,25 @@ export function useMockInterview(purchaseId: number | null): UseMockInterviewRet
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [questions, setQuestions] = useState<string[]>([]);
+  const [currentQuestion, setCurrentQuestion] = useState<LiveQuestion | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [totalQuestions] = useState(TOTAL_QUESTIONS);
+
   const [perAnswers, setPerAnswers] = useState<string[]>([]);
   const [perFeedback, setPerFeedback] = useState<QuestionFeedback[]>([]);
   const [answerRecords, setAnswerRecords] = useState<AnswerRecord[]>([]);
   const [sessionSummary, setSessionSummary] = useState<string | null>(null);
+
   const [isFetchingFeedback, setIsFetchingFeedback] = useState(false);
+  const [isFetchingNextQuestion, setIsFetchingNextQuestion] = useState(false);
   const [currentMode, setCurrentMode] = useState<InterviewerMode>("friendly");
   const [answers, setAnswers] = useState("");
+
+  // Keep a ref to answerRecords so async callbacks always see the latest value
+  const answerRecordsRef = useRef<AnswerRecord[]>([]);
+  answerRecordsRef.current = answerRecords;
+
+  // ── Load existing session on mount ──────────────────────────────────────
 
   useEffect(() => {
     if (!purchaseId) return;
@@ -436,12 +552,24 @@ export function useMockInterview(purchaseId: number | null): UseMockInterviewRet
       .then((res) => {
         setInterview(res);
         if (res.aiFeedbackText) {
+          // Already completed
           setPhase("completed");
           setAnswers(res.userAnswersText ?? "");
         } else if (res.questionsText) {
-          const parsed = parseQuestions(res.questionsText);
-          setQuestions(parsed);
-          setPerAnswers(new Array(parsed.length).fill(""));
+          // Mid-session: parse the first question from questionsText JSON
+          try {
+            const parsed = JSON.parse(res.questionsText);
+            setCurrentQuestion({
+              text: parsed.question ?? res.questionsText,
+              type: (parsed.questionType ?? "technical") as QuestionType,
+              tone: (parsed.tone ?? "neutral") as InterviewTone,
+              feedbackOnPrevious: parsed.feedbackOnPrevious ?? null,
+            });
+          } catch {
+            // Fallback: treat the raw text as the first question
+            setCurrentQuestion({ text: res.questionsText, type: "technical", tone: "neutral", feedbackOnPrevious: null });
+          }
+          setPerAnswers(new Array(TOTAL_QUESTIONS).fill(""));
           setPhase("answering");
         } else {
           setPhase("idle");
@@ -451,16 +579,41 @@ export function useMockInterview(purchaseId: number | null): UseMockInterviewRet
       .finally(() => setIsLoading(false));
   }, [purchaseId]);
 
+  // ── Start interview ──────────────────────────────────────────────────────
+
   const startInterview = useCallback(async () => {
     if (!purchaseId) return;
     setPhase("starting");
     setError(null);
     try {
-      const res = await post<MockInterviewResponse>(`/user/ai/interview/start/${purchaseId}`, {}, { timeout: AI_TIMEOUT_MS });
+      const res = await post<MockInterviewResponse>(
+        `/user/ai/interview/start/${purchaseId}`,
+        {},
+        { timeout: AI_TIMEOUT_MS }
+      );
       setInterview(res);
-      const parsed = parseQuestions(res.questionsText ?? "");
-      setQuestions(parsed);
-      setPerAnswers(new Array(parsed.length).fill(""));
+
+      // The backend stores the first question as JSON in questionsText
+      let firstQuestion: LiveQuestion;
+      try {
+        const parsed = JSON.parse(res.questionsText ?? "{}");
+        firstQuestion = {
+          text: parsed.question ?? "Tell me about yourself.",
+          type: (parsed.questionType ?? "personal") as QuestionType,
+          tone: (parsed.tone ?? "neutral") as InterviewTone,
+          feedbackOnPrevious: null,
+        };
+      } catch {
+        firstQuestion = {
+          text: res.questionsText ?? "Tell me about yourself.",
+          type: "personal",
+          tone: "neutral",
+          feedbackOnPrevious: null,
+        };
+      }
+
+      setCurrentQuestion(firstQuestion);
+      setPerAnswers(new Array(TOTAL_QUESTIONS).fill(""));
       setPerFeedback([]);
       setAnswerRecords([]);
       setCurrentQuestionIndex(0);
@@ -472,79 +625,273 @@ export function useMockInterview(purchaseId: number | null): UseMockInterviewRet
     }
   }, [purchaseId]);
 
+  // ── Set current answer ───────────────────────────────────────────────────
+
   const setCurrentAnswer = useCallback((v: string) => {
-    setPerAnswers((prev) => { const next = [...prev]; next[currentQuestionIndex] = v; return next; });
+    setPerAnswers((prev) => {
+      const next = [...prev];
+      next[currentQuestionIndex] = v;
+      return next;
+    });
   }, [currentQuestionIndex]);
 
+  // ── Submit current answer ────────────────────────────────────────────────
+  // Two things happen in parallel:
+  //   1. Claude gives per-answer feedback (fast, ~2s)
+  //   2. Gemini fetches the next question (slower, ~10-15s)
+  // We show the Claude feedback immediately; when the next question arrives
+  // we reveal the "Next Question →" button.
+
   const submitCurrentAnswer = useCallback(async (sentiment: SentimentResult) => {
+    if (!purchaseId) return;
     const currentAnswer = perAnswers[currentQuestionIndex]?.trim();
     if (!currentAnswer || isFetchingFeedback) return;
+    if (!currentQuestion) return;
 
     setIsFetchingFeedback(true);
     setError(null);
 
-    const estMode = determineMode(sentiment.label, estimateAnswerQuality(currentAnswer));
+    const estQuality = estimateAnswerQuality(currentAnswer);
+    const estMode = determineMode(sentiment.label, estQuality);
     setCurrentMode(estMode);
 
+    // Optimistic loading state for feedback panel
     setPerFeedback((prev) => {
       const next = [...prev];
-      next[currentQuestionIndex] = { questionIndex: currentQuestionIndex, feedbackText: "", isLoading: true, mode: estMode, sentiment: sentiment.label };
+      next[currentQuestionIndex] = {
+        questionIndex: currentQuestionIndex,
+        feedbackText: "",
+        feedbackOnPrevious: "",
+        isLoading: true,
+        mode: estMode,
+        tone: sentiment.label === "nervous" ? "good_cop" : sentiment.label === "confident" ? "bad_cop" : "neutral",
+        sentiment: sentiment.label,
+        questionType: currentQuestion.type,
+      };
       return next;
     });
 
-    try {
-      const result = await fetchAdaptiveFeedback(
-        questions[currentQuestionIndex], currentAnswer,
-        currentQuestionIndex + 1, questions.length, sentiment, answerRecords
-      );
+    // Build history for the backend request
+    const currentHistory: QARound[] = answerRecordsRef.current.map((r) => ({
+      question: r.question,
+      questionType: r.questionType,
+      answer: r.answer,
+      answerQuality: r.answerQuality,
+      sentiment: r.sentiment.label,
+    }));
 
+    const isLastQuestion = currentQuestionIndex === totalQuestions - 1;
+
+    try {
+      // Fire both in parallel
+      const [feedbackResult, nextQuestionResult] = await Promise.allSettled([
+        fetchAdaptiveFeedback(
+          currentQuestion.text,
+          currentQuestion.type,
+          currentAnswer,
+          currentQuestionIndex + 1,
+          totalQuestions,
+          sentiment,
+          currentQuestion.tone,
+          answerRecordsRef.current
+        ),
+        // Don't fetch next question if this is the last one
+        isLastQuestion
+          ? Promise.resolve(null)
+          : fetchNextQuestion(
+              purchaseId,
+              currentQuestionIndex,
+              totalQuestions,
+              sentiment,
+              [
+                ...currentHistory,
+                {
+                  question: currentQuestion.text,
+                  questionType: currentQuestion.type,
+                  answer: currentAnswer,
+                  answerQuality: estQuality,
+                  sentiment: sentiment.label,
+                },
+              ]
+            ),
+      ]);
+
+      // Process Claude feedback
+      let feedbackText = "Could not load feedback. Your answer has been saved.";
+      let answerQuality: "weak" | "moderate" | "strong" = estQuality;
+      let resolvedTone: InterviewTone = currentQuestion.tone;
+
+      if (feedbackResult.status === "fulfilled") {
+        feedbackText  = feedbackResult.value.feedbackText;
+        answerQuality = feedbackResult.value.answerQuality;
+      }
+
+      // Process next question from Gemini
+      let nextQuestion: LiveQuestion | null = null;
+      if (!isLastQuestion && nextQuestionResult.status === "fulfilled" && nextQuestionResult.value) {
+        const nq = nextQuestionResult.value;
+        resolvedTone = nq.tone;
+        nextQuestion = {
+          text: nq.question,
+          type: nq.questionType,
+          tone: nq.tone,
+          feedbackOnPrevious: nq.feedbackOnPrevious ?? null,
+        };
+      } else if (!isLastQuestion && nextQuestionResult.status === "rejected") {
+        // Non-fatal: user can still navigate, we just won't have a pre-fetched question
+        console.error("Failed to pre-fetch next question:", (nextQuestionResult as PromiseRejectedResult).reason);
+      }
+
+      const resolvedMode = toneToMode(resolvedTone);
+
+      // Commit the answer record
       const record: AnswerRecord = {
         questionIndex: currentQuestionIndex,
-        question: questions[currentQuestionIndex],
+        question: currentQuestion.text,
+        questionType: currentQuestion.type,
         answer: currentAnswer,
         sentiment,
-        mode: result.mode,
-        feedbackText: result.feedbackText,
-        answerQuality: result.answerQuality,
+        tone: resolvedTone,
+        mode: resolvedMode,
+        feedbackText,
+        feedbackOnPrevious: nextQuestion?.feedbackOnPrevious ?? "",
+        answerQuality,
       };
 
-      setAnswerRecords((prev) => { const next = [...prev]; next[currentQuestionIndex] = record; return next; });
-      setPerFeedback((prev) => {
+      setAnswerRecords((prev) => {
         const next = [...prev];
-        next[currentQuestionIndex] = { questionIndex: currentQuestionIndex, feedbackText: result.feedbackText, isLoading: false, mode: result.mode, sentiment: sentiment.label };
+        next[currentQuestionIndex] = record;
         return next;
       });
-      setCurrentMode(result.mode);
+
+      setPerFeedback((prev) => {
+        const next = [...prev];
+        next[currentQuestionIndex] = {
+          questionIndex: currentQuestionIndex,
+          feedbackText,
+          feedbackOnPrevious: nextQuestion?.feedbackOnPrevious ?? "",
+          isLoading: false,
+          mode: resolvedMode,
+          tone: resolvedTone,
+          sentiment: sentiment.label,
+          questionType: currentQuestion.type,
+        };
+        return next;
+      });
+
+      setCurrentMode(resolvedMode);
+
+      // Store the pre-fetched next question so goToNextQuestion is instant
+      if (nextQuestion) {
+        // We store it temporarily in a ref-like pattern by encoding it into
+        // perFeedback's nextQuestion field — but the cleanest approach is to
+        // keep a separate "queued next question" state.
+        setQueuedNextQuestion(nextQuestion);
+      }
+
     } catch {
       setPerFeedback((prev) => {
         const next = [...prev];
-        next[currentQuestionIndex] = { questionIndex: currentQuestionIndex, feedbackText: "Could not load feedback. Your answer has been saved.", isLoading: false, mode: estMode, sentiment: sentiment.label };
+        next[currentQuestionIndex] = {
+          questionIndex: currentQuestionIndex,
+          feedbackText: "Could not load feedback. Your answer has been saved.",
+          feedbackOnPrevious: "",
+          isLoading: false,
+          mode: estMode,
+          tone: "neutral",
+          sentiment: sentiment.label,
+          questionType: currentQuestion.type,
+        };
         return next;
       });
     } finally {
       setIsFetchingFeedback(false);
     }
-  }, [perAnswers, currentQuestionIndex, questions, isFetchingFeedback, answerRecords]);
+  }, [purchaseId, perAnswers, currentQuestionIndex, currentQuestion, totalQuestions, isFetchingFeedback]);
 
-  const goToNextQuestion = useCallback(() => {
-    setCurrentQuestionIndex((prev) => Math.min(prev + 1, questions.length - 1));
-    setCurrentMode("friendly");
-  }, [questions.length]);
+  // Queued next question — set by submitCurrentAnswer when Gemini responds
+  const [queuedNextQuestion, setQueuedNextQuestion] = useState<LiveQuestion | null>(null);
+
+  // ── Move to next question ────────────────────────────────────────────────
+
+  const goToNextQuestion = useCallback(async () => {
+    if (!purchaseId) return;
+
+    const nextIndex = currentQuestionIndex + 1;
+    if (nextIndex >= totalQuestions) return;
+
+    // If we already have the next question pre-fetched, switch immediately
+    if (queuedNextQuestion) {
+      setCurrentQuestion(queuedNextQuestion);
+      setQueuedNextQuestion(null);
+      setCurrentQuestionIndex(nextIndex);
+      setCurrentMode("friendly");
+      return;
+    }
+
+    // Otherwise fetch it now (fallback — shouldn't normally happen)
+    setIsFetchingNextQuestion(true);
+    setError(null);
+
+    const lastRecord = answerRecordsRef.current[currentQuestionIndex];
+    const sentiment: SentimentResult = lastRecord?.sentiment ?? { label: "neutral", confidence: 0.5 };
+
+    const historyForBackend: QARound[] = answerRecordsRef.current.slice(0, nextIndex).map((r) => ({
+      question: r.question,
+      questionType: r.questionType,
+      answer: r.answer,
+      answerQuality: r.answerQuality,
+      sentiment: r.sentiment.label,
+    }));
+
+    try {
+      const nq = await fetchNextQuestion(purchaseId, currentQuestionIndex, totalQuestions, sentiment, historyForBackend);
+      setCurrentQuestion({
+        text: nq.question,
+        type: nq.questionType,
+        tone: nq.tone,
+        feedbackOnPrevious: nq.feedbackOnPrevious ?? null,
+      });
+      setCurrentQuestionIndex(nextIndex);
+      setCurrentMode(toneToMode(nq.tone));
+    } catch {
+      setError("Could not fetch next question. Please try again.");
+    } finally {
+      setIsFetchingNextQuestion(false);
+    }
+  }, [purchaseId, currentQuestionIndex, totalQuestions, queuedNextQuestion]);
+
+  // ── Final submission ─────────────────────────────────────────────────────
 
   const submitAnswers = useCallback(async () => {
     if (!purchaseId) return;
-    const combinedAnswers = perAnswers.map((ans, i) => `Q${i + 1}: ${ans.trim()}`).join("\n\n");
+    const combinedAnswers = perAnswers
+      .map((ans, i) => `Q${i + 1}: ${ans.trim()}`)
+      .join("\n\n");
     setAnswers(combinedAnswers);
     setPhase("submitting");
     setError(null);
 
-    const summaryPromise = answerRecords.length > 0
-      ? fetchSessionSummary(answerRecords).then(setSessionSummary).catch(() => null)
-      : Promise.resolve();
+    const sentimentHistory = answerRecordsRef.current.map((r) => ({
+      question: r.question,
+      questionType: r.questionType,
+      sentiment: r.sentiment.label,
+      answerQuality: r.answerQuality,
+      tone: r.tone,
+    }));
+
+    const summaryPromise =
+      answerRecordsRef.current.length > 0
+        ? fetchSessionSummary(answerRecordsRef.current).then(setSessionSummary).catch(() => null)
+        : Promise.resolve();
 
     try {
       const [res] = await Promise.all([
-        post<MockInterviewResponse>("/user/ai/interview/submit", { purchaseId, userAnswersText: combinedAnswers }, { timeout: AI_TIMEOUT_MS }),
+        post<MockInterviewResponse>(
+          "/user/ai/interview/submit",
+          { purchaseId, userAnswersText: combinedAnswers, sentimentHistory },
+          { timeout: AI_TIMEOUT_MS }
+        ),
         summaryPromise,
       ]);
       setInterview(res);
@@ -553,13 +900,15 @@ export function useMockInterview(purchaseId: number | null): UseMockInterviewRet
       setError((err as Error).message ?? "Failed to submit answers.");
       setPhase("answering");
     }
-  }, [purchaseId, perAnswers, answerRecords]);
+  }, [purchaseId, perAnswers]);
 
   return {
     interview, phase,
-    questions, currentQuestionIndex, perAnswers, perFeedback,
-    answerRecords, sessionSummary, isFetchingFeedback, currentMode, goToNextQuestion,
-    answers, isLoading, error,
-    setCurrentAnswer, submitCurrentAnswer, startInterview, submitAnswers, setAnswers,
+    currentQuestion, currentQuestionIndex, totalQuestions,
+    perAnswers, perFeedback, answerRecords, sessionSummary,
+    isFetchingFeedback, isFetchingNextQuestion, currentMode,
+    error, isLoading, answers,
+    setCurrentAnswer, submitCurrentAnswer, goToNextQuestion,
+    startInterview, submitAnswers, setAnswers,
   };
 }

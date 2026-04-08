@@ -3,7 +3,14 @@ import { useParams, useNavigate } from "react-router-dom";
 import PageLayout from "../../components/user/PageLayout";
 import { useMockInterview } from "../../hooks/user/useStore";
 import { useSentiment } from "../../hooks/user/useSentiment";
-import type { QuestionFeedback, InterviewerMode, AnswerRecord } from "../../hooks/user/useStore";
+import type {
+  QuestionFeedback,
+  InterviewerMode,
+  InterviewTone,
+  QuestionType,
+  AnswerRecord,
+  LiveQuestion,
+} from "../../hooks/user/useStore";
 import type { SentimentLabel, SentimentResult } from "../../hooks/user/useSentiment";
 
 // ---------------------------------------------------------------------------
@@ -74,6 +81,17 @@ const MODE_CONFIG: Record<InterviewerMode, { label: string; color: string; bg: s
   strict:   { label: "Bad Cop",   icon: "⚡", color: "#F87171", bg: "#2B0D0D", border: "#F8717133", desc: "Challenging & direct" },
 };
 
+const TONE_CONFIG: Record<InterviewTone, { label: string; color: string; bg: string; border: string; icon: string }> = {
+  good_cop: { label: "Good Cop",  icon: "🤝", color: "#34D399", bg: "#0D2B1F", border: "#34D39933" },
+  bad_cop:  { label: "Bad Cop",   icon: "⚡", color: "#F87171", bg: "#2B0D0D", border: "#F8717133" },
+  neutral:  { label: "Neutral",   icon: "🎯", color: "#94A3B8", bg: "#1A2030", border: "#94A3B833" },
+};
+
+const QTYPE_CONFIG: Record<QuestionType, { label: string; color: string; bg: string; border: string; icon: string }> = {
+  technical: { label: "Technical", icon: "⚙️", color: "#60A5FA", bg: "#1E3A5F18", border: "#60A5FA33" },
+  personal:  { label: "Personal",  icon: "🙋", color: "#C084FC", bg: "#4A178018", border: "#C084FC33" },
+};
+
 // ---------------------------------------------------------------------------
 // Camera / Sentiment Widget
 // ---------------------------------------------------------------------------
@@ -88,33 +106,12 @@ const SentimentWidget: React.FC<{
 }> = ({ videoRef, permission, isAnalysing, lastSentiment, cameraError, onRequestPermission }) => {
   const sc = lastSentiment ? SENTIMENT_CONFIG[lastSentiment.label] : null;
   const isGranted = permission === "granted";
-
-  // Auto-request camera when this widget first mounts (interview has started,
-  // the <video> element is in the DOM, so the ref will be ready).
-  // This avoids requiring a manual button click in the happy path.
-  const hasAutoRequested = useRef(false);
-  useEffect(() => {
-    if (!hasAutoRequested.current && permission === "pending") {
-      hasAutoRequested.current = true;
-      // Small delay to guarantee the video element is fully mounted
-      const t = setTimeout(() => onRequestPermission(), 100);
-      return () => clearTimeout(t);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // "denied" from a transient error (busy camera, abort) can be retried —
-  // cameraError tells us whether it's retryable
   const isRetryable = permission === "pending" || (permission === "denied" && cameraError !== null &&
     !cameraError.includes("was denied") && !cameraError.includes("No camera"));
-
-  const isHardDenied = permission === "denied" && (
-    !cameraError || cameraError.includes("was denied")
-  );
+  const isHardDenied = permission === "denied" && (!cameraError || cameraError.includes("was denied"));
 
   return (
     <div className="mi-sentiment-widget">
-      {/* The <video> element is ALWAYS in the DOM (hidden when not in use)
-          so videoRef.current is never null when requestPermission runs. */}
       <div className="mi-camera-box">
         <video
           ref={videoRef}
@@ -124,11 +121,9 @@ const SentimentWidget: React.FC<{
           playsInline
           style={{ display: isGranted ? "block" : "none" }}
         />
-
         {isGranted && isAnalysing && (
           <div className="mi-camera-scanning"><div className="mi-camera-scanline" /></div>
         )}
-
         {!isGranted && (
           <div className="mi-camera-placeholder">
             <span className="mi-camera-placeholder__icon">
@@ -136,16 +131,14 @@ const SentimentWidget: React.FC<{
             </span>
             <p className="mi-camera-placeholder__text">
               {cameraError ?? (permission === "pending"
-                ? "Requesting camera access…"
+                ? "Click to enable camera for sentiment tracking."
                 : "Camera unavailable")}
             </p>
-            {/* Show retry button for transient errors or pending state */}
             {(permission === "pending" || isRetryable) && (
               <button className="mi-camera-btn" onClick={onRequestPermission}>
                 {permission === "pending" ? "Enable Camera" : "Try Again"}
               </button>
             )}
-            {/* Hard denied — direct user to browser settings */}
             {isHardDenied && (
               <p className="mi-camera-settings-hint">
                 Go to your browser's site settings and allow camera access, then refresh.
@@ -155,7 +148,6 @@ const SentimentWidget: React.FC<{
         )}
       </div>
 
-      {/* Sentiment badge */}
       {isGranted && sc && (
         <div className="mi-sentiment-badge" style={{ background: sc.bg, borderColor: sc.border }}>
           <span className="mi-sentiment-badge__emoji">{sc.emoji}</span>
@@ -202,55 +194,80 @@ const IdleScreen: React.FC<{
   onStart: () => void;
   isStarting: boolean;
   error: string | null;
-}> = ({ onStart, isStarting, error }) => (
-  <div className="mi-idle">
-    <div className="mi-idle__card">
-      <div className="mi-idle__glow" />
-      <div className="mi-idle__icon">🎙️</div>
-      <div className="mi-idle__tag">AI MOCK INTERVIEW</div>
-      <h2 className="mi-idle__title">Ready to Practice?</h2>
-      <p className="mi-idle__desc">
-        Gemini AI generates personalised questions for your role. Our adaptive AI reads your
-        confidence in real time — and adjusts its coaching style to match.
-      </p>
-      <ul className="mi-idle__tips">
-        {[
-          "Questions tailored to job requirements",
-          "One question at a time — stay focused",
-          "Camera detects your sentiment (optional)",
-          "AI switches between supportive & challenging mode",
-          "Full performance summary at the end",
-        ].map((t, i) => (
-          <li key={i} className="mi-idle__tip"><span className="mi-idle__tip-dot" />{t}</li>
-        ))}
-      </ul>
-      <div className="mi-idle__mode-preview">
-        <div className="mi-idle__mode-item" style={{ background: "#0D2B1F", borderColor: "#34D39933" }}>
-          <span>🤝</span>
-          <div>
-            <div style={{ color: "#34D399", fontWeight: 700, fontSize: 12 }}>GOOD COP</div>
-            <div style={{ color: "#94A3B8", fontSize: 11 }}>Nervous or weak answer</div>
+  onRequestCameraPermission: () => void;
+}> = ({ onStart, isStarting, error, onRequestCameraPermission }) => {
+  const handleStart = useCallback(async () => {
+    await onRequestCameraPermission();
+    onStart();
+  }, [onStart, onRequestCameraPermission]);
+
+  return (
+    <div className="mi-idle">
+      <div className="mi-idle__card">
+        <div className="mi-idle__glow" />
+        <div className="mi-idle__icon">🎙️</div>
+        <div className="mi-idle__tag">AI MOCK INTERVIEW</div>
+        <h2 className="mi-idle__title">Ready to Practice?</h2>
+        <p className="mi-idle__desc">
+          Gemini AI asks one question at a time — mixing technical questions with personal questions
+          grounded in your actual profile. It reads your confidence and adjusts its tone every round.
+        </p>
+        <ul className="mi-idle__tips">
+          {[
+            "Mix of Technical ⚙️ and Personal 🙋 questions",
+            "Each question adapts to your previous answer",
+            "Camera detects your sentiment in real time (optional)",
+            "AI switches between Good Cop 🤝 and Bad Cop ⚡ tone",
+            "Full performance summary at the end",
+          ].map((t, i) => (
+            <li key={i} className="mi-idle__tip"><span className="mi-idle__tip-dot" />{t}</li>
+          ))}
+        </ul>
+        <div className="mi-idle__mode-preview">
+          <div className="mi-idle__mode-item" style={{ background: "#0D2B1F", borderColor: "#34D39933" }}>
+            <span>🤝</span>
+            <div>
+              <div style={{ color: "#34D399", fontWeight: 700, fontSize: 12 }}>GOOD COP</div>
+              <div style={{ color: "#94A3B8", fontSize: 11 }}>Nervous / weak answer</div>
+            </div>
+          </div>
+          <div className="mi-idle__mode-arrow">↔</div>
+          <div className="mi-idle__mode-item" style={{ background: "#2B0D0D", borderColor: "#F8717133" }}>
+            <span>⚡</span>
+            <div>
+              <div style={{ color: "#F87171", fontWeight: 700, fontSize: 12 }}>BAD COP</div>
+              <div style={{ color: "#94A3B8", fontSize: 11 }}>Confident / strong answer</div>
+            </div>
           </div>
         </div>
-        <div className="mi-idle__mode-arrow">↔</div>
-        <div className="mi-idle__mode-item" style={{ background: "#2B0D0D", borderColor: "#F8717133" }}>
-          <span>⚡</span>
-          <div>
-            <div style={{ color: "#F87171", fontWeight: 700, fontSize: 12 }}>BAD COP</div>
-            <div style={{ color: "#94A3B8", fontSize: 11 }}>Confident or strong answer</div>
-          </div>
-        </div>
+        {error && <div className="mi-error-box"><span>⚠</span> {error}</div>}
+        <button className="mi-start-btn" onClick={handleStart} disabled={isStarting}>
+          {isStarting
+            ? <span className="mi-start-btn__inner"><span className="mi-spinner" />Gemini is preparing your first question…</span>
+            : "Start Interview →"}
+        </button>
+        {isStarting && <p className="mi-idle__hint">This usually takes 10–15 seconds</p>}
       </div>
-      {error && <div className="mi-error-box"><span>⚠</span> {error}</div>}
-      <button className="mi-start-btn" onClick={onStart} disabled={isStarting}>
-        {isStarting
-          ? <span className="mi-start-btn__inner"><span className="mi-spinner" />Gemini is preparing your questions…</span>
-          : "Start Interview →"}
-      </button>
-      {isStarting && <p className="mi-idle__hint">This usually takes 10–15 seconds</p>}
     </div>
-  </div>
-);
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Transition comment — shown above the next question card
+// ---------------------------------------------------------------------------
+
+const TransitionComment: React.FC<{
+  text: string;
+  tone: InterviewTone;
+}> = ({ text, tone }) => {
+  const tc = TONE_CONFIG[tone];
+  return (
+    <div className="mi-transition-comment" style={{ borderColor: tc.border, background: tc.bg }}>
+      <span className="mi-transition-comment__icon">{tc.icon}</span>
+      <p className="mi-transition-comment__text" style={{ color: tc.color }}>{text}</p>
+    </div>
+  );
+};
 
 // ---------------------------------------------------------------------------
 // Per-question Feedback Panel
@@ -280,6 +297,13 @@ const FeedbackPanel: React.FC<{ feedback: QuestionFeedback }> = ({ feedback }) =
         <span className="mi-sentiment-chip" style={{ background: sc.bg, borderColor: sc.border, color: sc.color }}>
           {sc.emoji} {sc.label}
         </span>
+        <span className="mi-qtype-chip" style={{
+          background: QTYPE_CONFIG[feedback.questionType].bg,
+          borderColor: QTYPE_CONFIG[feedback.questionType].border,
+          color: QTYPE_CONFIG[feedback.questionType].color,
+        }}>
+          {QTYPE_CONFIG[feedback.questionType].icon} {QTYPE_CONFIG[feedback.questionType].label}
+        </span>
       </div>
       <p className="mi-feedback-panel__text">{feedback.feedbackText}</p>
     </div>
@@ -287,15 +311,17 @@ const FeedbackPanel: React.FC<{ feedback: QuestionFeedback }> = ({ feedback }) =
 };
 
 // ---------------------------------------------------------------------------
-// Step-by-step answering screen (main interview UI)
+// Step-by-step answering screen
 // ---------------------------------------------------------------------------
 
 const StepByStepScreen: React.FC<{
-  questions: string[];
+  currentQuestion: LiveQuestion;
   currentQuestionIndex: number;
+  totalQuestions: number;
   perAnswers: string[];
   perFeedback: QuestionFeedback[];
   isFetchingFeedback: boolean;
+  isFetchingNextQuestion: boolean;
   currentMode: InterviewerMode;
   onAnswerChange: (v: string) => void;
   onSubmitAnswer: (sentiment: SentimentResult) => void;
@@ -311,22 +337,25 @@ const StepByStepScreen: React.FC<{
   onRequestPermission: () => void;
   captureAndAnalyse: () => Promise<SentimentResult>;
 }> = ({
-  questions, currentQuestionIndex, perAnswers, perFeedback, isFetchingFeedback,
+  currentQuestion, currentQuestionIndex, totalQuestions,
+  perAnswers, perFeedback, isFetchingFeedback, isFetchingNextQuestion,
   currentMode, onAnswerChange, onSubmitAnswer, onNextQuestion, onFinishInterview, error,
   videoRef, permission, isAnalysing, lastSentiment, cameraError, onRequestPermission, captureAndAnalyse,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const feedbackRef = useRef<HTMLDivElement>(null);
-  const totalQuestions = questions.length;
+
   const currentAnswer = perAnswers[currentQuestionIndex] ?? "";
   const currentFeedback = perFeedback[currentQuestionIndex];
   const hasFeedback = currentFeedback && !currentFeedback.isLoading;
   const feedbackLoading = currentFeedback?.isLoading ?? false;
   const isLastQuestion = currentQuestionIndex === totalQuestions - 1;
-  const allAnswered = perAnswers.every((a) => a.trim().length > 0);
+  const allAnswered = perAnswers.slice(0, totalQuestions).every((a) => a.trim().length > 0);
   const progress = (currentQuestionIndex / totalQuestions) * 100;
 
-  // Auto-grow textarea
+  const qtype = QTYPE_CONFIG[currentQuestion.type];
+  const tone  = TONE_CONFIG[currentQuestion.tone];
+
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -334,7 +363,6 @@ const StepByStepScreen: React.FC<{
     el.style.height = `${el.scrollHeight}px`;
   }, [currentAnswer]);
 
-  // Scroll feedback into view
   useEffect(() => {
     if (hasFeedback && feedbackRef.current) {
       feedbackRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -342,7 +370,6 @@ const StepByStepScreen: React.FC<{
   }, [hasFeedback]);
 
   const handleSubmit = useCallback(async () => {
-    // Capture sentiment snapshot at the moment of submission
     const sentiment = await captureAndAnalyse();
     onSubmitAnswer(sentiment);
   }, [captureAndAnalyse, onSubmitAnswer]);
@@ -352,10 +379,10 @@ const StepByStepScreen: React.FC<{
   return (
     <div className="mi-stepbystep">
 
-      {/* Left column: question + answer */}
+      {/* Left column */}
       <div className="mi-stepbystep__main">
 
-        {/* Progress + mode indicator */}
+        {/* Progress + mode */}
         <div className="mi-progress-row">
           <div className="mi-progress-bar">
             <div className="mi-progress-bar__track">
@@ -366,14 +393,27 @@ const StepByStepScreen: React.FC<{
           <ModeBadge mode={currentMode} />
         </div>
 
+        {/* Gemini's comment on the previous answer (transition) */}
+        {currentQuestion.feedbackOnPrevious && (
+          <TransitionComment text={currentQuestion.feedbackOnPrevious} tone={currentQuestion.tone} />
+        )}
+
         {/* Question card */}
         <div className="mi-question-card">
           <div className="mi-section-header">
             <div className="mi-section-header__bar" style={{ background: "#A78BFA" }} />
             <span className="mi-section-header__title">QUESTION {currentQuestionIndex + 1}</span>
+            {/* Question type tag */}
+            <span className="mi-qtype-tag" style={{ background: qtype.bg, borderColor: qtype.border, color: qtype.color }}>
+              {qtype.icon} {qtype.label}
+            </span>
+            {/* Tone tag */}
+            <span className="mi-tone-tag" style={{ background: tone.bg, borderColor: tone.border, color: tone.color }}>
+              {tone.icon} {tone.label}
+            </span>
             <span className="mi-section-header__badge">Gemini AI</span>
           </div>
-          <p className="mi-question-card__text">{questions[currentQuestionIndex]}</p>
+          <p className="mi-question-card__text">{currentQuestion.text}</p>
         </div>
 
         {/* Answer card */}
@@ -420,8 +460,14 @@ const StepByStepScreen: React.FC<{
         {hasFeedback && (
           <div className="mi-nav-row">
             {!isLastQuestion ? (
-              <button className="mi-next-btn" onClick={onNextQuestion}>
-                Next Question →
+              <button
+                className="mi-next-btn"
+                onClick={onNextQuestion}
+                disabled={isFetchingNextQuestion}
+              >
+                {isFetchingNextQuestion
+                  ? <span className="mi-start-btn__inner"><span className="mi-spinner" />Gemini is thinking…</span>
+                  : "Next Question →"}
               </button>
             ) : (
               <div className="mi-finish-block">
@@ -450,7 +496,7 @@ const StepByStepScreen: React.FC<{
           onRequestPermission={onRequestPermission}
         />
 
-        {/* Sentiment history — compact dots */}
+        {/* Sentiment history dots */}
         {perFeedback.filter((f) => f && !f.isLoading).length > 0 && (
           <div className="mi-sentiment-history">
             <div className="mi-sidebar-section-label">SENTIMENT HISTORY</div>
@@ -458,9 +504,11 @@ const StepByStepScreen: React.FC<{
               {perFeedback.filter(Boolean).map((f, i) => {
                 if (!f || f.isLoading) return null;
                 const sc = SENTIMENT_CONFIG[f.sentiment];
+                const qc = QTYPE_CONFIG[f.questionType];
                 return (
-                  <div key={i} className="mi-sentiment-dot" title={`Q${i + 1}: ${sc.label}`}>
+                  <div key={i} className="mi-sentiment-dot" title={`Q${i + 1}: ${sc.label} · ${qc.label}`}>
                     <span className="mi-sentiment-dot__emoji">{sc.emoji}</span>
+                    <span className="mi-sentiment-dot__type">{qc.icon}</span>
                     <span className="mi-sentiment-dot__q">Q{i + 1}</span>
                   </div>
                 );
@@ -486,6 +534,21 @@ const StepByStepScreen: React.FC<{
               <div style={{ color: "#64748B", fontSize: 11 }}>Confident / strong answers</div>
             </div>
           </div>
+          <div className="mi-sidebar-section-label" style={{ marginTop: 8 }}>QUESTION TYPES</div>
+          <div className="mi-mode-legend__item">
+            <span>⚙️</span>
+            <div>
+              <div style={{ color: "#60A5FA", fontSize: 11, fontWeight: 700 }}>TECHNICAL</div>
+              <div style={{ color: "#64748B", fontSize: 11 }}>Skills & domain knowledge</div>
+            </div>
+          </div>
+          <div className="mi-mode-legend__item">
+            <span>🙋</span>
+            <div>
+              <div style={{ color: "#C084FC", fontSize: 11, fontWeight: 700 }}>PERSONAL</div>
+              <div style={{ color: "#64748B", fontSize: 11 }}>Your background & experience</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -493,7 +556,7 @@ const StepByStepScreen: React.FC<{
 };
 
 // ---------------------------------------------------------------------------
-// Completed Screen — with adaptive summary
+// Completed Screen
 // ---------------------------------------------------------------------------
 
 const CompletedScreen: React.FC<{
@@ -506,8 +569,7 @@ const CompletedScreen: React.FC<{
   onBuyAnother: () => void;
 }> = ({ questionsText, userAnswersText, aiFeedbackText, sessionSummary, answerRecords, createdAt, onBuyAnother }) => {
   const feedbackBlocks = useMemo(() => parseToBlocks(aiFeedbackText), [aiFeedbackText]);
-  const summaryBlocks = useMemo(() => sessionSummary ? parseToBlocks(sessionSummary) : [], [sessionSummary]);
-  const questionBlocks = useMemo(() => parseToBlocks(questionsText), [questionsText]);
+  const summaryBlocks  = useMemo(() => sessionSummary ? parseToBlocks(sessionSummary) : [], [sessionSummary]);
 
   return (
     <div className="mi-completed">
@@ -523,17 +585,19 @@ const CompletedScreen: React.FC<{
         <div className="mi-completed-banner__icon">✓</div>
       </div>
 
-      {/* Sentiment journey strip */}
+      {/* Sentiment + type journey strip */}
       {answerRecords.length > 0 && (
         <div className="mi-journey-strip">
-          <div className="mi-journey-strip__title">Your Sentiment Journey</div>
+          <div className="mi-journey-strip__title">Your Interview Journey</div>
           <div className="mi-journey-strip__items">
             {answerRecords.map((rec, i) => {
               const sc = SENTIMENT_CONFIG[rec.sentiment.label];
               const mc = MODE_CONFIG[rec.mode];
+              const qc = QTYPE_CONFIG[rec.questionType];
               return (
-                <div key={i} className="mi-journey-item">
+                <div key={i} className="mi-journey-item" title={`${qc.label} · ${sc.label} · ${rec.answerQuality}`}>
                   <span className="mi-journey-item__q">Q{i + 1}</span>
+                  <span className="mi-journey-item__type" style={{ color: qc.color }}>{qc.icon}</span>
                   <span className="mi-journey-item__emoji">{sc.emoji}</span>
                   <span className="mi-journey-item__mode-icon" style={{ color: mc.color }}>{mc.icon}</span>
                   <span className="mi-journey-item__quality" style={{
@@ -548,7 +612,7 @@ const CompletedScreen: React.FC<{
 
       <div className="mi-completed-layout">
         <div className="mi-completed-main">
-          {/* Adaptive summary (client-side) */}
+          {/* Adaptive summary (Claude) */}
           {summaryBlocks.length > 0 && (
             <div className="mi-summary-card">
               <div className="mi-section-header">
@@ -562,7 +626,7 @@ const CompletedScreen: React.FC<{
             </div>
           )}
 
-          {/* Gemini feedback */}
+          {/* Gemini final feedback */}
           <div className="mi-section-header" style={{ marginTop: summaryBlocks.length > 0 ? 8 : 0 }}>
             <div className="mi-section-header__bar" style={{ background: "#A78BFA" }} />
             <span className="mi-section-header__title">AI FEEDBACK</span>
@@ -575,22 +639,21 @@ const CompletedScreen: React.FC<{
 
         <aside className="mi-completed-sidebar">
           <div className="mi-sidebar-card">
-            <h3 className="mi-sidebar-card__title">📋 Interview Questions</h3>
-            <div className="mi-sidebar-card__prose">
-              {questionBlocks.filter(b => b.type === "numbered" || b.type === "paragraph").map((b, i) => (
-                <ProseBlock key={i} block={b} accent="#60A5FA" />
-              ))}
-            </div>
-          </div>
-
-          <div className="mi-sidebar-card">
-            <h3 className="mi-sidebar-card__title">✍️ Your Answers</h3>
+            <h3 className="mi-sidebar-card__title">🗺️ Answer Records</h3>
             <div className="mi-sidebar-card__answers">
-              {userAnswersText.split(/\n{2,}/).filter(Boolean).map((chunk, i) => (
-                <div key={i} className="mi-sidebar-card__answer-chunk">
-                  <p className="mi-sidebar-card__answer-text">{chunk.trim()}</p>
-                </div>
-              ))}
+              {answerRecords.map((rec, i) => {
+                const qc = QTYPE_CONFIG[rec.questionType];
+                return (
+                  <div key={i} className="mi-sidebar-card__answer-chunk">
+                    <div className="mi-sidebar-card__answer-meta">
+                      <span style={{ color: qc.color, fontSize: 10, fontWeight: 700 }}>{qc.icon} {qc.label}</span>
+                      <span className="mi-sidebar-card__answer-q">Q{i + 1}</span>
+                    </div>
+                    <p className="mi-sidebar-card__answer-question">{rec.question}</p>
+                    <p className="mi-sidebar-card__answer-text">{rec.answer}</p>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -613,10 +676,12 @@ const MockInterviewPage: React.FC = () => {
 
   const {
     interview, phase, isLoading, error,
-    questions, currentQuestionIndex, perAnswers, perFeedback,
+    currentQuestion, currentQuestionIndex, totalQuestions,
+    perAnswers, perFeedback,
     answerRecords, sessionSummary,
-    isFetchingFeedback, currentMode, goToNextQuestion,
-    setCurrentAnswer, submitCurrentAnswer, startInterview, submitAnswers,
+    isFetchingFeedback, isFetchingNextQuestion, currentMode,
+    goToNextQuestion, setCurrentAnswer,
+    submitCurrentAnswer, startInterview, submitAnswers,
   } = useMockInterview(pid);
 
   const {
@@ -638,24 +703,31 @@ const MockInterviewPage: React.FC = () => {
       <button className="mi-back-btn" onClick={() => navigate("/store")}>← Store</button>
 
       {phase === "idle" && (
-        <IdleScreen onStart={startInterview} isStarting={false} error={error} />
+        <IdleScreen
+          onStart={startInterview}
+          isStarting={false}
+          error={error}
+          onRequestCameraPermission={requestPermission}
+        />
       )}
 
       {phase === "starting" && (
         <div className="mi-loading">
           <div className="mi-loading__ring" style={{ borderTopColor: "#A78BFA" }} />
-          <p className="mi-loading__text">Gemini is crafting your questions…</p>
+          <p className="mi-loading__text">Gemini is crafting your first question…</p>
           <p className="mi-loading__sub">Usually takes 10–15 seconds</p>
         </div>
       )}
 
-      {phase === "answering" && questions.length > 0 && (
+      {phase === "answering" && currentQuestion && (
         <StepByStepScreen
-          questions={questions}
+          currentQuestion={currentQuestion}
           currentQuestionIndex={currentQuestionIndex}
+          totalQuestions={totalQuestions}
           perAnswers={perAnswers}
           perFeedback={perFeedback}
           isFetchingFeedback={isFetchingFeedback}
+          isFetchingNextQuestion={isFetchingNextQuestion}
           currentMode={currentMode}
           onAnswerChange={setCurrentAnswer}
           onSubmitAnswer={submitCurrentAnswer}
@@ -671,6 +743,8 @@ const MockInterviewPage: React.FC = () => {
           captureAndAnalyse={captureAndAnalyse}
         />
       )}
+
+      {/* fetching_next shows nothing extra — the "Next Question →" button shows a spinner */}
 
       {phase === "submitting" && (
         <div className="mi-loading">
@@ -712,7 +786,7 @@ const styles = `
   .mi-loading__text { font-family:var(--font-display); font-size:16px; color:var(--color-text-primary); }
   .mi-loading__sub { font-size:12px; color:var(--color-text-muted); }
   @keyframes mi-spin { to { transform:rotate(360deg); } }
-  .mi-section-header { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+  .mi-section-header { display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
   .mi-section-header__bar { width:3px; height:18px; border-radius:2px; background:#A78BFA; flex-shrink:0; }
   .mi-section-header__title { font-family:var(--font-mono); font-size:11px; font-weight:700; letter-spacing:.1em; color:var(--color-text-muted); text-transform:uppercase; }
   .mi-section-header__badge { font-family:var(--font-mono); font-size:10px; padding:2px 8px; border-radius:999px; background:#A78BFA12; border:1px solid #A78BFA33; color:#A78BFA; letter-spacing:.04em; }
@@ -728,6 +802,15 @@ const styles = `
   .mi-prose-bullet__dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; margin-top:7px; }
   .mi-prose-bullet__text { font-size:14px; color:var(--color-text-secondary); line-height:1.6; }
   .mi-prose-para { font-size:14px; color:var(--color-text-secondary); line-height:1.7; margin:4px 0; }
+
+  /* ── Question type & tone tags ────────────────── */
+  .mi-qtype-tag, .mi-tone-tag { font-family:var(--font-mono); font-size:10px; font-weight:700; letter-spacing:.06em; padding:2px 8px; border-radius:999px; border:1px solid; }
+  .mi-qtype-chip, .mi-sentiment-chip { font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid; font-family:var(--font-mono); }
+
+  /* ── Transition comment (Gemini's comment on previous answer) ── */
+  .mi-transition-comment { display:flex; align-items:flex-start; gap:10px; padding:12px 16px; border-radius:12px; border:1px solid; margin-bottom:4px; }
+  .mi-transition-comment__icon { font-size:1.1rem; flex-shrink:0; margin-top:1px; }
+  .mi-transition-comment__text { font-size:13px; line-height:1.65; font-style:italic; }
 
   /* ── Idle ─────────────────────────────────────── */
   .mi-idle { display:flex; align-items:center; justify-content:center; min-height:480px; }
@@ -791,17 +874,17 @@ const styles = `
   .mi-feedback-panel--loading { display:flex; align-items:center; gap:12px; padding:16px 20px; }
   .mi-feedback-panel__spinner { width:16px; height:16px; border:2px solid rgba(255,255,255,.15); border-radius:50%; animation:mi-spin .7s linear infinite; flex-shrink:0; }
   .mi-feedback-panel__loading-text { font-size:13px; font-family:var(--font-mono); }
-  .mi-feedback-panel__header { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+  .mi-feedback-panel__header { display:flex; align-items:center; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
   .mi-feedback-panel__mode-icon { font-size:14px; }
   .mi-feedback-panel__mode-label { font-family:var(--font-mono); font-size:11px; font-weight:700; letter-spacing:.08em; }
   .mi-feedback-panel__spacer { flex:1; }
-  .mi-sentiment-chip { font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid; font-family:var(--font-mono); }
   .mi-feedback-panel__text { font-size:14px; line-height:1.75; color:var(--color-text-secondary); white-space:pre-wrap; }
 
   /* Navigation */
   .mi-nav-row { display:flex; justify-content:flex-end; }
   .mi-next-btn { padding:12px 28px; background:linear-gradient(135deg,#1E3A5F,#2563EB); border:1px solid #60A5FA44; border-radius:10px; color:#fff; font-family:var(--font-mono); font-size:13px; font-weight:700; letter-spacing:.06em; cursor:pointer; transition:all .15s; }
-  .mi-next-btn:hover { box-shadow:0 0 20px #60A5FA22; border-color:#60A5FA88; }
+  .mi-next-btn:hover:not(:disabled) { box-shadow:0 0 20px #60A5FA22; border-color:#60A5FA88; }
+  .mi-next-btn:disabled { opacity:.6; cursor:not-allowed; }
   .mi-finish-block { width:100%; display:flex; flex-direction:column; gap:10px; }
   .mi-finish-block__hint { font-size:13px; color:var(--color-text-muted); text-align:center; }
   .mi-finish-btn { width:100%; padding:13px 24px; background:linear-gradient(135deg,#4A2880,#6D4FC4); border:1px solid #A78BFA44; border-radius:10px; color:#fff; font-family:var(--font-mono); font-size:13px; font-weight:700; letter-spacing:.06em; cursor:pointer; transition:all .15s; }
@@ -829,8 +912,9 @@ const styles = `
   .mi-sentiment-hint { font-size:11px; color:var(--color-text-muted); line-height:1.5; text-align:center; }
   .mi-sentiment-history { display:flex; flex-direction:column; gap:6px; }
   .mi-sentiment-dots { display:flex; flex-wrap:wrap; gap:6px; }
-  .mi-sentiment-dot { display:flex; flex-direction:column; align-items:center; gap:2px; background:var(--color-bg-surface); border:1px solid var(--color-border-default); border-radius:8px; padding:5px 8px; }
+  .mi-sentiment-dot { display:flex; flex-direction:column; align-items:center; gap:1px; background:var(--color-bg-surface); border:1px solid var(--color-border-default); border-radius:8px; padding:5px 8px; }
   .mi-sentiment-dot__emoji { font-size:1rem; }
+  .mi-sentiment-dot__type { font-size:.7rem; line-height:1; }
   .mi-sentiment-dot__q { font-family:var(--font-mono); font-size:9px; color:var(--color-text-muted); }
   .mi-mode-legend { display:flex; flex-direction:column; gap:8px; }
   .mi-mode-legend__item { display:flex; align-items:center; gap:8px; font-size:1rem; }
@@ -843,17 +927,15 @@ const styles = `
   .mi-completed-banner__title { font-family:var(--font-display); font-size:22px; font-weight:800; color:#fff; margin-bottom:4px; }
   .mi-completed-banner__date { font-size:13px; color:#A78BFA99; }
   .mi-completed-banner__icon { font-size:2rem; opacity:.6; }
-
-  /* Journey strip */
   .mi-journey-strip { background:var(--color-bg-elevated); border:1px solid var(--color-border-default); border-radius:12px; padding:16px 20px; }
   .mi-journey-strip__title { font-family:var(--font-mono); font-size:10px; font-weight:700; letter-spacing:.1em; color:var(--color-text-muted); text-transform:uppercase; margin-bottom:12px; }
   .mi-journey-strip__items { display:flex; gap:12px; flex-wrap:wrap; }
-  .mi-journey-item { display:flex; align-items:center; gap:6px; background:var(--color-bg-surface); border:1px solid var(--color-border-default); border-radius:8px; padding:8px 12px; }
+  .mi-journey-item { display:flex; align-items:center; gap:5px; background:var(--color-bg-surface); border:1px solid var(--color-border-default); border-radius:8px; padding:8px 12px; }
   .mi-journey-item__q { font-family:var(--font-mono); font-size:11px; color:var(--color-text-muted); font-weight:700; }
+  .mi-journey-item__type { font-size:.9rem; }
   .mi-journey-item__emoji { font-size:1rem; }
   .mi-journey-item__mode-icon { font-size:.9rem; }
   .mi-journey-item__quality { font-family:var(--font-mono); font-size:10px; font-weight:700; text-transform:uppercase; }
-
   .mi-completed-layout { display:grid; grid-template-columns:1fr 340px; gap:24px; align-items:start; }
   .mi-completed-main { display:flex; flex-direction:column; gap:16px; }
   .mi-summary-card { display:flex; flex-direction:column; gap:10px; }
@@ -861,10 +943,12 @@ const styles = `
   .mi-completed-sidebar { display:flex; flex-direction:column; gap:14px; }
   .mi-sidebar-card { background:var(--color-bg-elevated); border:1px solid var(--color-border-default); border-radius:12px; padding:18px; }
   .mi-sidebar-card__title { font-family:var(--font-display); font-size:13px; font-weight:700; color:var(--color-text-primary); margin-bottom:12px; }
-  .mi-sidebar-card__prose { display:flex; flex-direction:column; gap:2px; }
-  .mi-sidebar-card__answers { display:flex; flex-direction:column; gap:8px; max-height:260px; overflow-y:auto; }
+  .mi-sidebar-card__answers { display:flex; flex-direction:column; gap:8px; max-height:320px; overflow-y:auto; }
   .mi-sidebar-card__answer-chunk { background:var(--color-bg-surface); border-radius:8px; padding:10px; border-left:2px solid #A78BFA44; }
-  .mi-sidebar-card__answer-text { font-size:12px; color:var(--color-text-muted); line-height:1.6; }
+  .mi-sidebar-card__answer-meta { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+  .mi-sidebar-card__answer-q { font-family:var(--font-mono); font-size:10px; color:var(--color-text-muted); }
+  .mi-sidebar-card__answer-question { font-size:11px; color:var(--color-text-muted); line-height:1.5; margin-bottom:4px; font-style:italic; }
+  .mi-sidebar-card__answer-text { font-size:12px; color:var(--color-text-secondary); line-height:1.6; }
   .mi-buy-btn { width:100%; padding:12px; border-radius:10px; border:1px solid #A78BFA44; background:linear-gradient(135deg,#2D1B69,#1A1040); color:#A78BFA; font-family:var(--font-mono); font-size:13px; font-weight:700; letter-spacing:.05em; cursor:pointer; transition:all .13s; }
   .mi-buy-btn:hover { box-shadow:0 0 20px #A78BFA18; }
   .mi-skills-btn { width:100%; padding:10px; border-radius:10px; border:1px solid var(--color-border-default); background:transparent; font-size:13px; color:var(--color-text-secondary); cursor:pointer; transition:all .13s; }

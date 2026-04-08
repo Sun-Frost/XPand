@@ -90,11 +90,11 @@ async function loadFaceApi(): Promise<void> {
         const faceapi = window.faceapi;
         if (!faceapi) throw new Error("faceapi not on window after script load");
 
-        const MODEL_URL = "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights";
-        await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-          faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
-        ]);
+        const MODEL_URL = "https://justadudewhohacks.github.io/face-api.js/models";
+await Promise.all([
+  faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+  faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
+]);
 
         faceApiState = "ready";
         faceApiWaiters.forEach((w) => w.resolve());
@@ -283,62 +283,54 @@ export function useSentiment(): UseSentimentReturn {
     setCameraError(null);
   }, [setPermission]);
 
-  const captureAndAnalyse = useCallback(async (): Promise<SentimentResult> => {
-    const fallback: SentimentResult = { label: "neutral", confidence: 0.5 };
+ const captureAndAnalyse = useCallback(async (): Promise<SentimentResult> => {
+  const fallback: SentimentResult = { label: "neutral", confidence: 0.5 };
+  if (permissionRef.current !== "granted") return fallback;
 
-    // Read from ref — never stale even inside async callbacks
-    if (permissionRef.current !== "granted") return fallback;
+  const video = videoRef.current;
+  if (!video || video.readyState < 2) return fallback;
 
-    const video = videoRef.current;
-    if (!video || video.readyState < 2) return fallback; // HAVE_CURRENT_DATA
+  setIsAnalysing(true);
 
-    setIsAnalysing(true);
-
-    try {
-      // Load models if not yet loaded (may have failed quietly before)
-      if (faceApiState !== "ready") {
-        faceApiState = "idle"; // reset to allow retry
-      }
+  try {
+    // Wait for models to fully load
+    if (faceApiState !== "ready") {
       await loadFaceApi();
+    }
 
-      // @ts-expect-error global
-      const faceapi = window.faceapi;
-      if (!faceapi) throw new Error("faceapi not available");
+    // @ts-expect-error global
+    const faceapi = window.faceapi;
+    if (!faceapi) throw new Error("faceapi not available");
 
-      if (!canvasRef.current) {
-        canvasRef.current = document.createElement("canvas");
-      }
+    if (!canvasRef.current) canvasRef.current = document.createElement("canvas");
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth || 320;
+    canvas.height = video.videoHeight || 240;
 
-      const canvas = canvasRef.current;
-      canvas.width = video.videoWidth || 320;
-      canvas.height = video.videoHeight || 240;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return fallback;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return fallback;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const detection = await faceapi
+      .detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.4 }))
+      .withFaceExpressions();
 
-      const detection = await faceapi
-        .detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.4 }))
-        .withFaceExpressions();
-
-      if (!detection) {
-        // No face detected — neutral fallback, not an error
-        const result: SentimentResult = { label: "neutral", confidence: 0.3 };
-        setLastSentiment(result);
-        return result;
-      }
-
-      const result = expressionsToSentiment(detection.expressions as Record<string, number>);
+    if (!detection) {
+      const result: SentimentResult = { label: "neutral", confidence: 0.3 };
       setLastSentiment(result);
       return result;
-
-    } catch {
-      // face-api failure is always non-fatal — interview continues regardless
-      return fallback;
-    } finally {
-      setIsAnalysing(false);
     }
-  }, []); // No dependency on `permission` — uses permissionRef
+
+    const result = expressionsToSentiment(detection.expressions as Record<string, number>);
+    setLastSentiment(result);
+    return result;
+  } catch (err) {
+    console.error("Face API error:", err);
+    return fallback;
+  } finally {
+    setIsAnalysing(false);
+  }
+}, []); // No dependency on `permission` — uses permissionRef
 
   return {
     permission,

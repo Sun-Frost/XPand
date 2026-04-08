@@ -74,7 +74,7 @@ interface CompanyPageLayoutProps {
 }
 
 // ── Component ─────────────────────────────────────────────────
-const CompanyPageLayout = ({
+export const CompanyPageLayout = ({
   children,
   pageTitle,
   hideNav  = false,

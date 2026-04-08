@@ -11,7 +11,7 @@ const LoginPage: React.FC = () => {
   // Pass navigate callback — hook calls it after token is stored
   const { login, isLoading, error, clearError } = useLogin((role) => {
     if (role === "admin" || role === "ADMIN") {
-      navigate("/admin/dashboard", { replace: true });
+      navigate("/admin/overview", { replace: true });
     } else if (role === "company" || role === "COMPANY") {
       navigate("/company/dashboard", { replace: true });
     } else {
@@ -32,7 +32,7 @@ const LoginPage: React.FC = () => {
     const token = localStorage.getItem("access_token");
     const role  = localStorage.getItem("role");
     if (token && (role === "admin" || role === "ADMIN")) {
-      navigate("/admin/dashboard", { replace: true });
+      navigate("/admin/overview", { replace: true });
     } else if (token && (role === "company" || role === "COMPANY")) {
       navigate("/company/dashboard", { replace: true });
     } else if (token) {

@@ -55,17 +55,17 @@ const getInitials = (name: string) =>
 const STATUS_CONFIG: Record<ApplicationStatus, {
   label: string; color: string; bg: string; border: string; dot: string;
 }> = {
-  PENDING:     { label: "Pending",     color: "#94A3B8", bg: "rgba(148,163,184,.1)",  border: "rgba(148,163,184,.25)", dot: "#94A3B8" },
-  SHORTLISTED: { label: "Shortlisted", color: "#22D3EE", bg: "rgba(34,211,238,.1)",   border: "rgba(34,211,238,.28)",  dot: "#22D3EE" },
-  REJECTED:    { label: "Rejected",    color: "#F87171", bg: "rgba(248,113,113,.1)",   border: "rgba(248,113,113,.28)", dot: "#F87171" },
-  WITHDRAWN:   { label: "Withdrawn",   color: "#64748B", bg: "rgba(100,116,139,.08)", border: "rgba(100,116,139,.2)",  dot: "#64748B" },
+  PENDING: { label: "Pending", color: "#94A3B8", bg: "rgba(148,163,184,.1)", border: "rgba(148,163,184,.25)", dot: "#94A3B8" },
+  SHORTLISTED: { label: "Shortlisted", color: "#22D3EE", bg: "rgba(34,211,238,.1)", border: "rgba(34,211,238,.28)", dot: "#22D3EE" },
+  REJECTED: { label: "Rejected", color: "#F87171", bg: "rgba(248,113,113,.1)", border: "rgba(248,113,113,.28)", dot: "#F87171" },
+  WITHDRAWN: { label: "Withdrawn", color: "#64748B", bg: "rgba(100,116,139,.08)", border: "rgba(100,116,139,.2)", dot: "#64748B" },
 };
 
 const NEXT_STATUSES: Record<ApplicationStatus, ApplicationStatus[]> = {
-  PENDING:     ["SHORTLISTED", "REJECTED"],
+  PENDING: ["SHORTLISTED", "REJECTED"],
   SHORTLISTED: ["REJECTED"],
-  REJECTED:    ["SHORTLISTED"],
-  WITHDRAWN:   [],
+  REJECTED: ["SHORTLISTED"],
+  WITHDRAWN: [],
 };
 
 const STATUS_WEIGHT: Record<ApplicationStatus, number> = {
@@ -73,11 +73,11 @@ const STATUS_WEIGHT: Record<ApplicationStatus, number> = {
 };
 
 function xpLevel(xp: number): { level: number; title: string; color: string } {
-  if (xp >= 10000) return { level: 5, title: "Elite",        color: "#F59E0B" };
-  if (xp >= 5000)  return { level: 4, title: "Expert",       color: "#A78BFA" };
-  if (xp >= 2000)  return { level: 3, title: "Advanced",     color: "#22D3EE" };
-  if (xp >= 500)   return { level: 2, title: "Intermediate", color: "#34D399" };
-  return             { level: 1, title: "Beginner",    color: "#94A3B8" };
+  if (xp >= 10000) return { level: 5, title: "Elite", color: "#F59E0B" };
+  if (xp >= 5000) return { level: 4, title: "Expert", color: "#A78BFA" };
+  if (xp >= 2000) return { level: 3, title: "Advanced", color: "#22D3EE" };
+  if (xp >= 500) return { level: 2, title: "Intermediate", color: "#34D399" };
+  return { level: 1, title: "Beginner", color: "#94A3B8" };
 }
 
 // ---------------------------------------------------------------------------
@@ -525,7 +525,7 @@ const ApplicantCard: React.FC<{
           {/* Inline quick-action buttons on the row */}
           {canAct && nextStatuses.map((s) => {
             const isShortlist = s === "SHORTLISTED";
-            const isReject    = s === "REJECTED";
+            const isReject = s === "REJECTED";
             return (
               <button
                 key={s}
@@ -575,7 +575,7 @@ const JobApplicantsPage: React.FC = () => {
     });
     return {
       priorityApps: sorted.filter((a) => a.prioritySlotRank !== null),
-      regularApps:  sorted.filter((a) => a.prioritySlotRank === null),
+      regularApps: sorted.filter((a) => a.prioritySlotRank === null),
     };
   }, [applications]);
 

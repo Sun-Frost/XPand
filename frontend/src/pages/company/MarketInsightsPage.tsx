@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import CompanyPageLayout from "../../components/company/companyPageLayout";
 import { useMarketInsights } from "../../hooks/company/useCompany";
+import { exportMarketInsightsPdf } from "../../utils/pdfExport";
 import type { SkillDemand } from "../../hooks/company/useCompany";
 
 // ---------------------------------------------------------------------------
@@ -31,9 +32,7 @@ const DemandBar: React.FC<{ skill: SkillDemand; max: number; rank: number }> = (
           </div>
         </div>
         <div className="mi-bar-track">
-          {/* Major portion */}
           <div className="mi-bar-fill mi-bar-fill--major" style={{ width: `${width * (majorPct / 100)}%` }} />
-          {/* Minor portion */}
           <div className="mi-bar-fill mi-bar-fill--minor" style={{ width: `${width * ((100 - majorPct) / 100)}%`, marginLeft: `${width * (majorPct / 100)}%` }} />
         </div>
       </div>
@@ -42,7 +41,7 @@ const DemandBar: React.FC<{ skill: SkillDemand; max: number; rank: number }> = (
 };
 
 // ---------------------------------------------------------------------------
-// Donut-style breakdown
+// Breakdown item
 // ---------------------------------------------------------------------------
 
 const BreakdownItem: React.FC<{ label: string; count: number; total: number; color: string }> = ({
@@ -76,13 +75,25 @@ const LOC_COLORS = ["#A78BFA", "#34D399", "#F59E0B", "#60A5FA", "#F472B6", "#22D
 // Stat tile
 // ---------------------------------------------------------------------------
 
-const StatTile: React.FC<{ icon: string; value: string | number; label: string; color?: string }> = ({
-  icon, value, label, color = "var(--color-verified)"
+const StatTile: React.FC<{ icon: string; value: string | number; label: string; color?: string; sub?: string }> = ({
+  icon, value, label, color = "var(--color-verified)", sub
 }) => (
   <div className="mi-stat" style={{ "--mc": color } as React.CSSProperties}>
     <div className="mi-stat__icon">{icon}</div>
     <div className="mi-stat__value">{value}</div>
     <div className="mi-stat__label">{label}</div>
+    {sub && <div className="mi-stat__sub">{sub}</div>}
+  </div>
+);
+
+// ---------------------------------------------------------------------------
+// Mini metric row — used inside detail cards
+// ---------------------------------------------------------------------------
+
+const MetricRow: React.FC<{ label: string; value: string | number; color?: string }> = ({ label, value, color }) => (
+  <div className="mi-metric-row">
+    <span className="mi-metric-row__label">{label}</span>
+    <span className="mi-metric-row__value" style={color ? { color } : {}}>{value}</span>
   </div>
 );
 
@@ -93,6 +104,25 @@ const StatTile: React.FC<{ icon: string; value: string | number; label: string; 
 const MarketInsightsPage: React.FC = () => {
   const { insights, isLoading, error, refetch } = useMarketInsights();
   const [showAllSkills, setShowAllSkills] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportPdf = useCallback(async () => {
+    if (!insights) return;
+    setIsExporting(true);
+    try {
+      await exportMarketInsightsPdf({
+        totalActiveJobs: insights.totalActiveJobs,
+        skillDemand: insights.skillDemand,
+        topSkills: insights.topSkills,
+        jobTypeBreakdown: insights.jobTypeBreakdown,
+        locationBreakdown: insights.locationBreakdown,
+      });
+    } catch (e) {
+      console.error("PDF export failed:", e);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [insights]);
 
   if (isLoading) {
     return (
@@ -118,14 +148,33 @@ const MarketInsightsPage: React.FC = () => {
     );
   }
 
-  const visibleSkills = showAllSkills ? insights.skillDemand : insights.skillDemand.slice(0, 10);
-  const maxJobCount = insights.skillDemand[0]?.jobCount ?? 1;
-  const totalJobsForType = Object.values(insights.jobTypeBreakdown).reduce((a, b) => a + b, 0);
-  const topLocations = Object.entries(insights.locationBreakdown)
-    .sort((a, b) => b[1] - a[1]).slice(0, 8);
+  // ── Derived metrics ──────────────────────────────────────────────────────
 
-  const uniqueSkills = insights.skillDemand.length;
-  const uniqueCompanies = new Set<string>(); // We can't get company count directly from jobs endpoint, skip
+  const visibleSkills    = showAllSkills ? insights.skillDemand : insights.skillDemand.slice(0, 10);
+  const maxJobCount      = insights.skillDemand[0]?.jobCount ?? 1;
+  const totalJobsForType = Object.values(insights.jobTypeBreakdown).reduce((a, b) => a + b, 0);
+  const topLocations     = Object.entries(insights.locationBreakdown).sort((a, b) => b[1] - a[1]).slice(0, 8);
+
+  const uniqueSkills     = insights.skillDemand.length;
+  const majorSkillsCount = insights.skillDemand.filter((s) => s.majorCount > 0).length;
+  const minorOnlySkills  = uniqueSkills - majorSkillsCount;
+  const jobTypesCount    = Object.keys(insights.jobTypeBreakdown).length;
+  const locationsCount   = Object.keys(insights.locationBreakdown).length;
+
+  // Top job type
+  const topJobType = Object.entries(insights.jobTypeBreakdown).sort((a, b) => b[1] - a[1])[0];
+  const topLocation = topLocations[0];
+
+  // Avg jobs per skill
+  const avgJobsPerSkill = uniqueSkills > 0
+    ? (insights.skillDemand.reduce((sum, s) => sum + s.jobCount, 0) / uniqueSkills).toFixed(1)
+    : "—";
+
+  // Demand concentration: % of jobs covered by top 5 skills
+  const top5JobCount = insights.topSkills.slice(0, 5).reduce((sum, s) => sum + s.jobCount, 0);
+  const top5Concentration = insights.totalActiveJobs > 0
+    ? Math.round((top5JobCount / insights.totalActiveJobs) * 100)
+    : 0;
 
   return (
     <CompanyPageLayout pageTitle="Market Insights">
@@ -136,15 +185,83 @@ const MarketInsightsPage: React.FC = () => {
           <h1 className="mi-page-title">Market Insights</h1>
           <p className="mi-page-sub">Real-time data from active job postings on XPand.</p>
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={refetch}>↻ Refresh</button>
+        <div className="mi-header__actions">
+          <button className="btn btn-ghost btn-sm" onClick={refetch}>↻ Refresh</button>
+          {/* ── Export to PDF ── */}
+          <button
+            className="mi-export-btn"
+            onClick={handleExportPdf}
+            disabled={isExporting}
+            title="Download market insights as PDF"
+          >
+            {isExporting
+              ? <><span className="mi-export-btn__spinner" /> Exporting…</>
+              : <>⬇ Export PDF</>}
+          </button>
+        </div>
       </div>
 
-      {/* ── Stats overview ── */}
+      {/* ── Primary stats overview ── */}
       <div className="mi-stats">
-        <StatTile icon="💼" value={insights.totalActiveJobs} label="Active Jobs" color="var(--color-verified)" />
-        <StatTile icon="🎯" value={uniqueSkills} label="Skills in Demand" color="var(--color-premium,#8B5CF6)" />
-        <StatTile icon="⭐" value={insights.skillDemand.filter(s => s.majorCount > 0).length} label="Skills Sought as Major" color="var(--color-xp,#F59E0B)" />
-        <StatTile icon="📊" value={Object.keys(insights.jobTypeBreakdown).length} label="Job Types Posted" color="var(--color-info,#60A5FA)" />
+        <StatTile icon="💼" value={insights.totalActiveJobs} label="Active Jobs"
+          color="var(--color-verified)" sub={`${jobTypesCount} types`} />
+        <StatTile icon="🎯" value={uniqueSkills} label="Skills in Demand"
+          color="var(--color-premium,#8B5CF6)" sub={`avg ${avgJobsPerSkill} jobs/skill`} />
+        <StatTile icon="⭐" value={majorSkillsCount} label="Major Requirement"
+          color="var(--color-xp,#F59E0B)" sub={`${minorOnlySkills} minor-only`} />
+        <StatTile icon="📍" value={locationsCount} label="Hiring Locations"
+          color="var(--color-info,#60A5FA)" sub={topLocation ? topLocation[0] : undefined} />
+      </div>
+
+      {/* ── Extended stats row ── */}
+      <div className="mi-extended-stats">
+        {/* Demand concentration */}
+        <div className="mi-ext-card">
+          <div className="mi-ext-card__icon">🔥</div>
+          <div className="mi-ext-card__body">
+            <div className="mi-ext-card__value" style={{ color: "#F59E0B" }}>{top5Concentration}%</div>
+            <div className="mi-ext-card__label">Demand concentration</div>
+            <div className="mi-ext-card__sub">Top 5 skills cover {top5Concentration}% of all job requirements</div>
+          </div>
+        </div>
+
+        {/* Top job type */}
+        {topJobType && (
+          <div className="mi-ext-card">
+            <div className="mi-ext-card__icon">📋</div>
+            <div className="mi-ext-card__body">
+              <div className="mi-ext-card__value" style={{ color: JOB_TYPE_COLORS[topJobType[0]] ?? "#A78BFA" }}>
+                {topJobType[0].replace(/_/g, " ")}
+              </div>
+              <div className="mi-ext-card__label">Most posted type</div>
+              <div className="mi-ext-card__sub">{topJobType[1]} jobs · {pct(topJobType[1], totalJobsForType)}% of total</div>
+            </div>
+          </div>
+        )}
+
+        {/* Top location */}
+        {topLocation && (
+          <div className="mi-ext-card">
+            <div className="mi-ext-card__icon">📍</div>
+            <div className="mi-ext-card__body">
+              <div className="mi-ext-card__value" style={{ color: "#22D3EE" }}>{topLocation[0]}</div>
+              <div className="mi-ext-card__label">Top hiring location</div>
+              <div className="mi-ext-card__sub">{topLocation[1]} jobs · {pct(topLocation[1], insights.totalActiveJobs)}% of total</div>
+            </div>
+          </div>
+        )}
+
+        {/* Top skill */}
+        {insights.topSkills.length > 0 && (
+          <div className="mi-ext-card">
+            <div className="mi-ext-card__icon">🏆</div>
+            <div className="mi-ext-card__body">
+              <div className="mi-ext-card__value" style={{ color: "#A78BFA" }}>{insights.topSkills[0].skillName}</div>
+              <div className="mi-ext-card__label">#1 most in-demand skill</div>
+              <div className="mi-ext-card__sub">{insights.topSkills[0].jobCount} active job listings</div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Two-column layout ── */}
@@ -181,6 +298,24 @@ const MarketInsightsPage: React.FC = () => {
               )}
             </div>
           </div>
+
+          {/* Skill metrics deep-dive */}
+          {insights.skillDemand.length > 0 && (
+            <div className="mi-panel">
+              <div className="mi-panel__head">
+                <h2 className="mi-panel__title">📈 Skill Metrics</h2>
+                <span className="mi-panel__hint">Distribution analysis</span>
+              </div>
+              <div className="mi-panel__body">
+                <MetricRow label="Total unique skills" value={uniqueSkills} />
+                <MetricRow label="Skills required as major" value={majorSkillsCount} color="#F59E0B" />
+                <MetricRow label="Minor-only skills" value={minorOnlySkills} color="#A78BFA" />
+                <MetricRow label="Avg jobs per skill" value={avgJobsPerSkill} color="#22D3EE" />
+                <MetricRow label="Top 5 demand share" value={`${top5Concentration}%`} color="#34D399" />
+                <MetricRow label="Most wanted skill" value={insights.topSkills[0]?.skillName ?? "—"} color="#F472B6" />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* RIGHT: Breakdowns */}
@@ -207,6 +342,7 @@ const MarketInsightsPage: React.FC = () => {
             <div className="mi-panel">
               <div className="mi-panel__head">
                 <h2 className="mi-panel__title">📍 Top Locations</h2>
+                <span className="mi-panel__hint">{locationsCount} total</span>
               </div>
               <div className="mi-panel__body">
                 {topLocations.map(([loc, count], i) => (
@@ -220,7 +356,7 @@ const MarketInsightsPage: React.FC = () => {
             </div>
           )}
 
-          {/* Top 5 most demanded skills — card pills */}
+          {/* Hot Skills */}
           {insights.topSkills.length > 0 && (
             <div className="mi-panel">
               <div className="mi-panel__head">
@@ -243,6 +379,20 @@ const MarketInsightsPage: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Job type + location summary */}
+          <div className="mi-panel">
+            <div className="mi-panel__head">
+              <h2 className="mi-panel__title">📊 Market Summary</h2>
+            </div>
+            <div className="mi-panel__body">
+              <MetricRow label="Total active jobs" value={insights.totalActiveJobs} color="#34D399" />
+              <MetricRow label="Job type variety" value={`${jobTypesCount} types`} color="#A78BFA" />
+              <MetricRow label="Geographic spread" value={`${locationsCount} locations`} color="#22D3EE" />
+              {topJobType && <MetricRow label="Dominant contract type" value={topJobType[0].replace(/_/g, " ")} color={JOB_TYPE_COLORS[topJobType[0]] ?? "#64748B"} />}
+              {topLocation && <MetricRow label="Top hiring city/region" value={topLocation[0]} color="#60A5FA" />}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -257,19 +407,44 @@ const MarketInsightsPage: React.FC = () => {
 
 const styles = `
   .mi-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-8); flex-wrap: wrap; }
+  .mi-header__actions { display: flex; align-items: center; gap: var(--space-3); }
   .mi-page-title { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: var(--weight-bold); color: var(--color-text-primary); margin: 0; }
   .mi-page-sub { color: var(--color-text-muted); font-size: var(--text-sm); margin-top: 3px; }
+
+  /* ── Export PDF button ── */
+  .mi-export-btn { display:inline-flex; align-items:center; gap:7px; padding:8px 16px; border-radius:var(--radius-lg,10px); border:1px solid rgba(139,92,246,.35); background:rgba(139,92,246,.08); color:#A78BFA; font-family:var(--font-mono); font-size:12px; font-weight:700; letter-spacing:.05em; cursor:pointer; transition:all 130ms; white-space:nowrap; }
+  .mi-export-btn:hover:not(:disabled) { background:rgba(139,92,246,.14); border-color:rgba(139,92,246,.6); box-shadow:0 0 12px rgba(139,92,246,.18); }
+  .mi-export-btn:disabled { opacity:.5; cursor:not-allowed; }
+  .mi-export-btn__spinner { display:inline-block; width:12px; height:12px; border:2px solid rgba(167,139,250,.3); border-top-color:#A78BFA; border-radius:50%; animation:mi-spin .7s linear infinite; flex-shrink:0; }
+  @keyframes mi-spin { to { transform:rotate(360deg); } }
+
   /* Stats */
-  .mi-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); margin-bottom: var(--space-8); }
+  .mi-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); margin-bottom: var(--space-5); }
   .mi-stat { background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-xl); padding: var(--space-5); text-align: center; transition: all 160ms ease; }
   .mi-stat:hover { border-color: color-mix(in srgb, var(--mc) 30%, transparent); }
   .mi-stat__icon { font-size: 1.75rem; margin-bottom: var(--space-2); }
   .mi-stat__value { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: var(--weight-bold); color: var(--mc); line-height: 1; }
   .mi-stat__label { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--color-text-muted); margin-top: 4px; }
+  .mi-stat__sub { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-disabled); margin-top: 3px; }
+
+  /* Extended stats row */
+  .mi-extended-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); margin-bottom: var(--space-8); }
+  .mi-ext-card { background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-xl); padding: var(--space-4) var(--space-5); display: flex; align-items: flex-start; gap: var(--space-3); }
+  .mi-ext-card__icon { font-size: 1.3rem; flex-shrink: 0; margin-top: 2px; }
+  .mi-ext-card__body { flex: 1; min-width: 0; }
+  .mi-ext-card__value { font-family: var(--font-display); font-size: var(--text-base); font-weight: var(--weight-bold); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mi-ext-card__label { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--color-text-muted); margin-top: 3px; }
+  .mi-ext-card__sub { font-size: 11px; color: var(--color-text-disabled); margin-top: 4px; line-height: 1.4; }
+
+  /* Metric row */
+  .mi-metric-row { display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) 0; border-bottom: 1px solid var(--color-border-subtle); }
+  .mi-metric-row:last-child { border-bottom: none; }
+  .mi-metric-row__label { font-size: var(--text-sm); color: var(--color-text-secondary); }
+  .mi-metric-row__value { font-family: var(--font-mono); font-size: 12px; font-weight: var(--weight-bold); color: var(--color-text-primary); }
+
   /* Layout */
   .mi-body { display: grid; grid-template-columns: 1fr 360px; gap: var(--space-6); align-items: start; }
   .mi-col { display: flex; flex-direction: column; gap: var(--space-6); }
-  .mi-col--wide {}
   /* Panel */
   .mi-panel { background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-xl); overflow: hidden; }
   .mi-panel__head { display: flex; align-items: center; justify-content: space-between; padding: var(--space-4) var(--space-6); border-bottom: 1px solid var(--color-border-subtle); }
@@ -321,8 +496,9 @@ const styles = `
   /* Skeleton */
   .mi-skeleton-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: var(--space-4); }
   /* Responsive */
-  @media(max-width:1024px){ .mi-stats { grid-template-columns: repeat(2,1fr); } .mi-body { grid-template-columns: 1fr; } }
-  @media(max-width:640px){ .mi-stats { grid-template-columns: 1fr 1fr; } }
+  @media(max-width:1280px){ .mi-extended-stats { grid-template-columns: repeat(2, 1fr); } }
+  @media(max-width:1024px){ .mi-stats { grid-template-columns: repeat(2,1fr); } .mi-body { grid-template-columns: 1fr; } .mi-extended-stats { grid-template-columns: repeat(2, 1fr); } }
+  @media(max-width:640px){ .mi-stats { grid-template-columns: 1fr 1fr; } .mi-extended-stats { grid-template-columns: 1fr; } .mi-header { flex-direction:column; align-items:flex-start; } }
 `;
 
 export default MarketInsightsPage;

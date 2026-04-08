@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import PageLayout from "../../components/user/PageLayout";
 import {
@@ -6,6 +6,10 @@ import {
   useReadinessReport,
   useMockInterview,
 } from "../../hooks/user/useStore";
+import {
+  exportReadinessReportPdf,
+  exportMockInterviewPdf,
+} from "../../utils/pdfExport";
 import type { UserPurchaseResponse } from "../../hooks/user/useStore";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -198,21 +202,66 @@ const GenerateCard: React.FC<{
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Export PDF button — shared small inline button
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PdfBtn: React.FC<{ onClick: () => void; loading: boolean; accent?: string }> = ({
+  onClick, loading, accent = "#60A5FA"
+}) => (
+  <button
+    className="cv-pdf-btn"
+    style={{ borderColor: `${accent}44`, color: accent, background: `${accent}08` }}
+    onClick={onClick}
+    disabled={loading}
+    title="Download as PDF"
+  >
+    {loading
+      ? <><span className="cv-spinner-sm" style={{ borderTopColor: accent }} /> Exporting…</>
+      : <>⬇ Export PDF</>}
+  </button>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Report Viewer
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ReportViewer: React.FC<{ purchase: UserPurchaseResponse; onClose: () => void }> = ({ purchase, onClose }) => {
   const { report, isLoading, isGenerating, error, generate } = useReadinessReport(purchase.id);
+  const [isExporting, setIsExporting] = useState(false);
   const blocks = useMemo(() => (report?.reportContent ? parseBlocks(report.reportContent) : []), [report?.reportContent]);
   const score  = useMemo(() => (report?.reportContent ? extractScore(report.reportContent) : null), [report?.reportContent]);
+
+  const handleExportPdf = useCallback(async () => {
+    if (!report?.reportContent) return;
+    setIsExporting(true);
+    try {
+      await exportReadinessReportPdf({
+        reportContent: report.reportContent,
+        generatedAt: report.generatedAt,
+        score,
+        itemName: purchase.itemName ?? "Career Readiness Report",
+      });
+    } catch (e) {
+      console.error("PDF export failed:", e);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [report, score, purchase.itemName]);
 
   return (
     <ModalShell
       purchase={purchase}
       onClose={onClose}
-      headerRight={report && !isGenerating
-        ? <button className="cv-action-btn" onClick={generate}>↺ Regenerate</button>
-        : undefined
+      headerRight={
+        <>
+          {report && !isGenerating && (
+            <>
+              <button className="cv-action-btn" onClick={generate}>↺ Regenerate</button>
+              {/* ── PDF export button in modal header ── */}
+              <PdfBtn onClick={handleExportPdf} loading={isExporting} accent="#60A5FA" />
+            </>
+          )}
+        </>
       }
     >
       {isLoading ? (
@@ -236,9 +285,16 @@ const ReportViewer: React.FC<{ purchase: UserPurchaseResponse; onClose: () => vo
             </div>
             {score !== null && <ScoreDial score={score} />}
           </div>
+
           {/* Prose */}
           <div className="cv-prose">
             {blocks.map((b, i) => <PB key={i} b={b} accent="#60A5FA" />)}
+          </div>
+
+          {/* Bottom PDF export strip */}
+          <div className="cv-export-strip">
+            <span className="cv-export-strip__label">Save a copy of this report</span>
+            <PdfBtn onClick={handleExportPdf} loading={isExporting} accent="#60A5FA" />
           </div>
         </div>
       )}
@@ -252,6 +308,7 @@ const ReportViewer: React.FC<{ purchase: UserPurchaseResponse; onClose: () => vo
 
 const InterviewViewer: React.FC<{ purchase: UserPurchaseResponse; onClose: () => void }> = ({ purchase, onClose }) => {
   const { interview, phase, answers, isLoading, error, setAnswers, startInterview, submitAnswers } = useMockInterview(purchase.id);
+  const [isExporting, setIsExporting] = useState(false);
   const feedbackBlocks = useMemo(() => (interview?.aiFeedbackText ? parseBlocks(interview.aiFeedbackText) : []), [interview?.aiFeedbackText]);
   const questionBlocks = useMemo(() => (interview?.questionsText  ? parseBlocks(interview.questionsText)  : []), [interview?.questionsText]);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -261,8 +318,37 @@ const InterviewViewer: React.FC<{ purchase: UserPurchaseResponse; onClose: () =>
     el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`;
   }, [answers]);
 
+  const handleExportPdf = useCallback(async () => {
+    if (!interview?.aiFeedbackText) return;
+    setIsExporting(true);
+    try {
+      await exportMockInterviewPdf({
+        aiFeedbackText: interview.aiFeedbackText,
+        sessionSummary: null,
+        questionsText: interview.questionsText ?? "",
+        userAnswersText: interview.userAnswersText ?? "",
+        answerRecords: [],
+        createdAt: interview.createdAt,
+        itemName: purchase.itemName ?? "AI Mock Interview",
+      });
+    } catch (e) {
+      console.error("PDF export failed:", e);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [interview, purchase.itemName]);
+
   return (
-    <ModalShell purchase={purchase} wide onClose={onClose}>
+    <ModalShell
+      purchase={purchase}
+      wide
+      onClose={onClose}
+      headerRight={
+        phase === "completed" && interview?.aiFeedbackText
+          ? <PdfBtn onClick={handleExportPdf} loading={isExporting} accent="#A78BFA" />
+          : undefined
+      }
+    >
       {isLoading ? (
         <Spin color="#A78BFA" text="Loading session…" />
 
@@ -328,7 +414,11 @@ const InterviewViewer: React.FC<{ purchase: UserPurchaseResponse; onClose: () =>
               <h3 className="cv-completed-title">AI Feedback Ready</h3>
               {interview.createdAt && <p className="cv-completed-date">Completed {fmtDate(interview.createdAt)}</p>}
             </div>
-            <span style={{ fontSize:"2rem", color:"#34D399", filter:"drop-shadow(0 0 10px #34D39966)" }}>✓</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {/* ── PDF export in completed banner ── */}
+              <PdfBtn onClick={handleExportPdf} loading={isExporting} accent="#34D399" />
+              <span style={{ fontSize: "2rem", color: "#34D399", filter: "drop-shadow(0 0 10px #34D39966)" }}>✓</span>
+            </div>
           </div>
 
           <div className="cv-completed-layout">
@@ -341,6 +431,12 @@ const InterviewViewer: React.FC<{ purchase: UserPurchaseResponse; onClose: () =>
               </div>
               <div className="cv-prose cv-prose--card">
                 {feedbackBlocks.map((b, i) => <PB key={i} b={b} accent="#A78BFA" />)}
+              </div>
+
+              {/* Bottom export strip */}
+              <div className="cv-export-strip" style={{ marginTop: 16 }}>
+                <span className="cv-export-strip__label">Save your interview feedback</span>
+                <PdfBtn onClick={handleExportPdf} loading={isExporting} accent="#A78BFA" />
               </div>
             </div>
 
@@ -634,6 +730,15 @@ const styles = `
   .cv-close { width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:var(--radius-md); border:1px solid var(--color-border-default); background:var(--color-bg-overlay); color:var(--color-text-muted); cursor:pointer; font-size:14px; transition:all var(--duration-fast); flex-shrink:0; }
   .cv-close:hover { background:var(--color-bg-hover); color:var(--color-text-primary); }
 
+  /* ── PDF export button ───────────────────────── */
+  .cv-pdf-btn { display:inline-flex; align-items:center; gap:6px; padding:6px 13px; border-radius:var(--radius-lg); border:1px solid; font-family:var(--font-mono); font-size:11px; font-weight:700; letter-spacing:.04em; cursor:pointer; transition:all var(--duration-fast); white-space:nowrap; flex-shrink:0; }
+  .cv-pdf-btn:hover:not(:disabled) { filter:brightness(1.15); box-shadow:0 0 10px rgba(96,165,250,.15); }
+  .cv-pdf-btn:disabled { opacity:.5; cursor:not-allowed; }
+
+  /* ── Export strip (bottom of content) ────────── */
+  .cv-export-strip { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:var(--color-bg-elevated); border:1px solid var(--color-border-subtle); border-radius:var(--radius-lg); }
+  .cv-export-strip__label { font-size:12px; color:var(--color-text-muted); }
+
   .cv-body { flex:1; overflow-y:auto; padding:22px; }
   .cv-body::-webkit-scrollbar { width:4px; }
   .cv-body::-webkit-scrollbar-thumb { background:var(--color-border-strong); border-radius:2px; }
@@ -723,6 +828,8 @@ const styles = `
     .col-hero__title { font-size:var(--text-2xl); }
     .cv-body { padding:16px; }
     .cv-report-banner { flex-direction:column; gap:14px; }
+    .cv-completed-banner { flex-direction:column; gap:12px; align-items:flex-start; }
+    .cv-export-strip { flex-direction:column; gap:10px; align-items:flex-start; }
   }
 `;
 

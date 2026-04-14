@@ -85,7 +85,7 @@ const Navbar: React.FC<NavbarProps> = ({
             <SearchIcon />
             <input type="search" className="navbar__search-input"
               placeholder="Search skills, jobs, challenges…" aria-label="Search" />
-            <kbd className="navbar__search-kbd">⌘K</kbd>
+      
           </div>
         </div>
 
@@ -98,42 +98,7 @@ const Navbar: React.FC<NavbarProps> = ({
             </div>
           )}
 
-          {/* Notifications */}
-          <div className="navbar__dropdown-anchor" ref={notifRef}>
-            <button className="btn btn-ghost btn-icon navbar__icon-btn"
-              onClick={() => { setIsNotifOpen((v) => !v); setIsUserMenuOpen(false); }}
-              aria-label="Notifications" aria-expanded={isNotifOpen}>
-              <BellIcon />
-              {unreadCount > 0 && (
-                <span className="navbar__notif-dot">{unreadCount}</span>
-              )}
-            </button>
-            {isNotifOpen && (
-              <div className="navbar__dropdown navbar__notif-panel" role="menu">
-                <div className="navbar__dropdown-header">
-                  <span className="label">Notifications</span>
-                  <button className="navbar__dropdown-action">Mark all read</button>
-                </div>
-                <ul className="navbar__notif-list">
-                  {mockNotifs.map((n) => (
-                    <li key={n.id}
-                      className={`navbar__notif-item${n.unread ? " navbar__notif-item--unread" : ""}`}>
-                      <span className="navbar__notif-dot-inline" />
-                      <div className="navbar__notif-content">
-                        <p className="navbar__notif-text">{n.text}</p>
-                        <span className="navbar__notif-time">{n.time}</span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-                <div className="navbar__dropdown-footer">
-                  <button className="navbar__dropdown-action" onClick={() => go("/notifications")}>
-                    View all notifications →
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          
 
           {/* Theme toggle */}
           <button className="btn btn-ghost btn-icon navbar__icon-btn"

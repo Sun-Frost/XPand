@@ -1,397 +1,594 @@
-import React, { useEffect, useRef, useState } from "react";
+/* ============================================================
+   DashboardPage.tsx  — XPand
+   "Your career OS. Every number earned, not given."
+   ============================================================ */
+
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import PageLayout from "../../components/user/PageLayout";
-import { useDashboard, getSkillName } from "../../hooks/user/useDashboard";
-import type { ActiveChallenge, RecentActivity } from "../../hooks/user/useDashboard";
-import { BadgeLevel } from "../../types";
-import "../../assets/css/DashboardPage.css";
+import {
+  useDashboard,
+  type DashboardData,
+  type ActivityItem,
+  type MarketSkillItem,
+  type SkillBadgeSummary,
+} from "../../hooks/user/useDashboard";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// ── Variants ──────────────────────────────────────────────────────────────────
 
-const BADGE_META: Record<BadgeLevel, { label: string; emoji: string; cls: string }> = {
-  [BadgeLevel.BRONZE]: { label: "Bronze", emoji: "🥉", cls: "bronze" },
-  [BadgeLevel.SILVER]: { label: "Silver", emoji: "🥈", cls: "silver" },
-  [BadgeLevel.GOLD]: { label: "Gold", emoji: "🥇", cls: "gold" },
-};
-
-const SHORTCUT_ITEMS = [
-  { label: "My Profile", path: "/profile", emoji: "👤", desc: "Edit your info & links", color: "primary" },
-  { label: "My Skills", path: "/skills", emoji: "🎯", desc: "Verify & level up skills", color: "accent" },
-  { label: "Browse Jobs", path: "/jobs", emoji: "💼", desc: "Find skill-matched roles", color: "indigo" },
-  { label: "XP Store", path: "/store", emoji: "🛒", desc: "Spend XP on premium features", color: "xp" },
-];
-
-const getGreeting = (): string => {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
-  return "Good evening";
-};
-
-/* Framer Motion variants */
-const containerVariants = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.07 } },
-};
-
-const itemVariants = {
+const fadeUp = {
   hidden: { opacity: 0, y: 16 },
-  show: { opacity: 1, y: 0, transition: { type: "spring" as const, stiffness: 280, damping: 24 } },
+  show: { opacity: 1, y: 0, transition: { type: "spring" as const, stiffness: 300, damping: 28 } },
+};
+const stagger = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.06 } },
 };
 
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-const AnimatedNumber: React.FC<{ value: number; duration?: number }> = ({ value, duration = 1200 }) => {
-  const [display, setDisplay] = useState(0);
-  const rafRef = useRef<number | null>(null);
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+function getRankTitle(level: number): string {
+  if (level >= 20) return "Legend";
+  if (level >= 15) return "Master";
+  if (level >= 10) return "Expert";
+  if (level >= 7)  return "Advanced";
+  if (level >= 4)  return "Intermediate";
+  return "Novice";
+}
+
+function badgeTier(badge: string) {
+  if (badge === "GOLD")   return "gold";
+  if (badge === "SILVER") return "silver";
+  return "bronze";
+}
+
+function badgeEmoji(badge: string) {
+  if (badge === "GOLD")   return "🥇";
+  if (badge === "SILVER") return "🥈";
+  return "🥉";
+}
+
+function activityIcon(item: ActivityItem): string {
+  if (item.type === "XP_GAIN")  return "⚡";
+  if (item.type === "XP_SPEND") return "🛍️";
+  if (item.type === "BADGE")    return "🏅";
+  return "📋";
+}
+
+// ── Animated Counter ──────────────────────────────────────────────────────────
+
+const AnimCount: React.FC<{ value: number }> = ({ value }) => {
+  const [n, setN] = useState(0);
   useEffect(() => {
-    const start = performance.now();
-    const step = (now: number) => {
-      const progress = Math.min((now - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplay(Math.round(eased * value));
-      if (progress < 1) rafRef.current = requestAnimationFrame(step);
-    };
-    rafRef.current = requestAnimationFrame(step);
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [value, duration]);
-  return <>{display.toLocaleString()}</>;
+    let cur = 0;
+    const step = Math.ceil(value / 36);
+    const id = setInterval(() => {
+      cur += step;
+      if (cur >= value) { setN(value); clearInterval(id); }
+      else setN(cur);
+    }, 18);
+    return () => clearInterval(id);
+  }, [value]);
+  return <>{n.toLocaleString()}</>;
 };
 
-const StatCard: React.FC<{
-  value: number; label: string; sub?: string;
-  icon: string; variant: "primary" | "accent" | "gold" | "indigo";
-}> = ({ value, label, sub, icon, variant }) => (
+// ── XP Level Ring ─────────────────────────────────────────────────────────────
+
+const LevelRing: React.FC<{ level: number; xpFor: number; xpTo: number }> = ({ level, xpFor, xpTo }) => {
+  const pct    = (xpFor + xpTo) > 0 ? xpFor / (xpFor + xpTo) : 0;
+  const R      = 44;
+  const circ   = 2 * Math.PI * R;
+  const offset = circ * (1 - pct);
+
+  return (
+    <svg width="108" height="108" viewBox="0 0 108 108" style={{ flexShrink: 0 }}>
+      <defs>
+        <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%"   stopColor="var(--color-gold)" />
+          <stop offset="100%" stopColor="var(--color-gold-light)" />
+        </linearGradient>
+      </defs>
+      {/* Track */}
+      <circle cx="54" cy="54" r={R} fill="none" stroke="var(--color-bg-active)" strokeWidth="7" />
+      {/* Fill */}
+      <circle
+        cx="54" cy="54" r={R}
+        fill="none"
+        stroke="url(#ringGrad)"
+        strokeWidth="7"
+        strokeLinecap="round"
+        strokeDasharray={circ}
+        strokeDashoffset={offset}
+        transform="rotate(-90 54 54)"
+        style={{ transition: "stroke-dashoffset 1.1s cubic-bezier(0.22,1,0.36,1)" }}
+      />
+      <text x="54" y="50" textAnchor="middle"
+        style={{ fill: "var(--color-text-primary)", fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 800 }}>
+        {level}
+      </text>
+      <text x="54" y="66" textAnchor="middle"
+        style={{ fill: "var(--color-text-muted)", fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.08em" }}>
+        {getRankTitle(level).toUpperCase()}
+      </text>
+    </svg>
+  );
+};
+
+// ── Stat Tile ─────────────────────────────────────────────────────────────────
+// A tighter, more expressive stat than a plain stat-card.
+
+const StatTile: React.FC<{
+  icon: string; value: number; label: string;
+  accentVar: string; sub?: string; onClick?: () => void;
+}> = ({ icon, value, label, accentVar, sub, onClick }) => (
   <motion.div
-    className={`dash-stat-card dash-stat-card--${variant} card`}
-    variants={itemVariants}
-    whileHover={{ y: -3, transition: { type: "spring", stiffness: 400 } }}
+    variants={fadeUp}
+    onClick={onClick}
+    whileHover={onClick ? { y: -3, transition: { duration: 0.15 } } : undefined}
+    style={{
+      position: "relative", overflow: "hidden",
+      background: "var(--color-bg-surface)",
+      border: "1px solid var(--color-border-subtle)",
+      borderRadius: "var(--radius-xl)",
+      padding: "var(--space-5) var(--space-4) var(--space-4)",
+      display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3,
+      cursor: onClick ? "pointer" : "default",
+      transition: "border-color 0.2s, box-shadow 0.2s",
+    }}
+    className={onClick ? "card card-interactive" : "card"}
   >
-    <div className="dash-stat-card__icon-wrap">{icon}</div>
-    <div className="dash-stat-card__body">
-      <div className="dash-stat-card__value"><AnimatedNumber value={value} /></div>
-      <div className="dash-stat-card__label">{label}</div>
-      {sub && <div className="dash-stat-card__sub">{sub}</div>}
-    </div>
-    <div className="dash-stat-card__glow" aria-hidden="true" />
+    {/* corner glow blob */}
+    <div style={{
+      position: "absolute", bottom: -18, right: -18,
+      width: 60, height: 60, borderRadius: "50%",
+      background: `var(${accentVar})`, opacity: 0.10, pointerEvents: "none",
+    }} />
+    {/* top micro-bar */}
+    <div style={{
+      position: "absolute", top: 0, left: 0,
+      width: "40%", height: 2, borderRadius: "var(--radius-xl) 0 0 0",
+      background: `var(${accentVar}-400, var(${accentVar}))`,
+    }} />
+    <span style={{ fontSize: 18, lineHeight: 1, marginBottom: 4 }}>{icon}</span>
+    <span style={{
+      fontFamily: "var(--font-display)", fontSize: "var(--text-2xl)",
+      fontWeight: 800, color: "var(--color-text-primary)", lineHeight: 1,
+      letterSpacing: "var(--tracking-tight)",
+    }}>
+      <AnimCount value={value} />
+    </span>
+    <span className="label">{label}</span>
+    {sub && <span className="caption mono" style={{ fontSize: 10, marginTop: 1 }}>{sub}</span>}
   </motion.div>
 );
 
-const ChallengeRow: React.FC<{ challenge: ActiveChallenge }> = ({ challenge }) => {
-  const pct = Math.round((challenge.currentProgress / challenge.targetValue) * 100);
-  const urgent = challenge.daysLeft <= 2;
+// ── Panel ─────────────────────────────────────────────────────────────────────
+
+const Panel: React.FC<{
+  title: string; icon?: string;
+  accent?: "primary" | "gold" | "cyan" | "green";
+  sub?: string; link?: string; onLink?: () => void;
+  children: React.ReactNode;
+}> = ({ title, icon, accent = "primary", sub, link, onLink, children }) => (
+  <div className="card" style={{ display: "flex", flexDirection: "column" }}>
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      padding: "var(--space-4) var(--space-5) var(--space-3)",
+      borderBottom: "1px solid var(--color-border-subtle)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{
+          width: 3, height: 18, borderRadius: 2, flexShrink: 0,
+          background: `var(--color-${accent === "gold" ? "gold-light" : `${accent}-400`})`,
+        }} />
+        {icon && <span style={{ fontSize: 15 }}>{icon}</span>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          <span style={{ fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--color-text-primary)" }}>{title}</span>
+          {sub && <span className="caption" style={{ fontSize: 10 }}>{sub}</span>}
+        </div>
+      </div>
+      {link && onLink && (
+        <button className="panel-link" onClick={onLink}>{link} →</button>
+      )}
+    </div>
+    <div style={{ padding: "var(--space-3) var(--space-4)" }}>
+      {children}
+    </div>
+  </div>
+);
+
+// ── Market Bar ────────────────────────────────────────────────────────────────
+
+const MarketBar: React.FC<{ item: MarketSkillItem; max: number; navigate: (p: string) => void }> = ({ item, max, navigate }) => {
+  const pct = max > 0 ? (item.jobCount / max) * 100 : 0;
   return (
-    <motion.div className="dash-challenge-row" variants={itemVariants}>
-      <div className="dash-challenge-row__header">
-        <span className="dash-challenge-row__title">{challenge.title}</span>
-        <span className={`badge ${urgent ? "badge-danger" : "badge-muted"}`}>{challenge.daysLeft}d left</span>
-      </div>
-      <div className="dash-challenge-row__meta">
-        <span className="dash-challenge-row__progress-text">
-          {challenge.currentProgress} / {challenge.targetValue}
+    <motion.div
+      variants={fadeUp}
+      onClick={() => !item.userHasIt && navigate("/skills")}
+      style={{
+        padding: "9px 6px", borderRadius: "var(--radius-md)",
+        cursor: item.userHasIt ? "default" : "pointer",
+        transition: "background 0.15s",
+      }}
+      whileHover={!item.userHasIt ? { backgroundColor: "var(--color-bg-hover)" } : undefined}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ fontSize: "var(--text-sm)", fontWeight: 500, color: "var(--color-text-primary)" }}>
+          {item.skillName}
         </span>
-        <span className="xp-pill dash-challenge-row__xp">⚡ {challenge.xpReward} XP</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {item.userHasIt
+            ? <span className="mono" style={{ fontSize: 10, color: "var(--color-green-400)" }}>✓ You have it</span>
+            : <span className="mono" style={{ fontSize: 10, color: "var(--color-primary-400)", fontWeight: 600 }}>Skill gap ↗</span>
+          }
+          <span className="caption mono">{item.jobCount} jobs</span>
+        </div>
       </div>
-      <div className="progress-track mt-2">
+      <div className="progress-track" style={{ height: 5 }}>
         <div
-          className={`progress-fill progress-primary${pct >= 100 ? " animated" : ""}`}
+          className={`progress-bar ${item.userHasIt ? "progress-bar-green" : ""}`}
           style={{ width: `${pct}%` }}
-          role="progressbar"
-          aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}
         />
       </div>
     </motion.div>
   );
 };
 
-const ActivityItem: React.FC<{ item: RecentActivity }> = ({ item }) => (
-  <motion.div className="dash-activity-item" variants={itemVariants}>
-    <div className="dash-activity-item__icon">{item.icon}</div>
-    <div className="dash-activity-item__content">
-      <p className="dash-activity-item__message">{item.message}</p>
-      {item.detail && <span className="dash-activity-item__detail">{item.detail}</span>}
+// ── Skill Row ─────────────────────────────────────────────────────────────────
+
+const SkillRow: React.FC<{ skill: SkillBadgeSummary }> = ({ skill }) => (
+  <motion.div
+    variants={fadeUp}
+    style={{
+      display: "flex", alignItems: "center", gap: 10,
+      padding: "9px 6px", borderBottom: "1px solid var(--color-border-subtle)",
+    }}
+  >
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <span style={{ fontSize: "var(--text-sm)", fontWeight: 500, color: "var(--color-text-primary)", display: "block" }}>
+        {skill.skillName}
+      </span>
+      <span className="caption">{skill.category}</span>
     </div>
-    <span className="dash-activity-item__time">{item.timestamp}</span>
+    <span className={`skill-badge ${badgeTier(skill.badge)}`} style={{ fontSize: 10 }}>
+      <span className="skill-badge-icon" style={{ fontSize: 14 }}>{badgeEmoji(skill.badge)}</span>
+      {skill.badge}
+    </span>
   </motion.div>
 );
 
-const SkeletonCard: React.FC<{ height?: number }> = ({ height = 100 }) => (
-  <div className="skeleton" style={{ height, borderRadius: "var(--radius-xl)" }} />
+// ── Activity Row ──────────────────────────────────────────────────────────────
+
+const ActivityRow: React.FC<{ item: ActivityItem }> = ({ item }) => (
+  <motion.div
+    variants={fadeUp}
+    style={{
+      display: "flex", alignItems: "flex-start", gap: 10,
+      padding: "9px 6px", borderBottom: "1px solid var(--color-border-subtle)",
+    }}
+  >
+    <div className="badge badge-muted" style={{
+      width: 28, height: 28, borderRadius: "var(--radius-md)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: 13, flexShrink: 0,
+    }}>
+      {activityIcon(item)}
+    </div>
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <span style={{ fontSize: "var(--text-sm)", fontWeight: 500, color: "var(--color-text-secondary)", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {item.label}
+      </span>
+      <span className="caption mono" style={{ fontSize: 10 }}>{item.detail}</span>
+    </div>
+    <span className="caption mono" style={{ color: "var(--color-text-disabled)", flexShrink: 0, fontSize: 10 }}>
+      {timeAgo(item.timestamp)}
+    </span>
+  </motion.div>
 );
 
-// ---------------------------------------------------------------------------
-// DashboardPage
-// ---------------------------------------------------------------------------
+// ── Skeleton ──────────────────────────────────────────────────────────────────
+
+const SkeletonDash: React.FC = () => (
+  <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
+    <div className="skeleton" style={{ height: 168, borderRadius: "var(--radius-2xl)" }} />
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12 }}>
+      {[1,2,3,4,5].map(i => <div key={i} className="skeleton" style={{ height: 108, borderRadius: "var(--radius-xl)" }} />)}
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 16 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="skeleton" style={{ height: 260, borderRadius: "var(--radius-xl)" }} />
+        <div className="skeleton" style={{ height: 240, borderRadius: "var(--radius-xl)" }} />
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="skeleton" style={{ height: 200, borderRadius: "var(--radius-xl)" }} />
+        <div className="skeleton" style={{ height: 220, borderRadius: "var(--radius-xl)" }} />
+      </div>
+    </div>
+  </div>
+);
+
+// ── Live Dashboard ────────────────────────────────────────────────────────────
+
+const LiveDash: React.FC<{ data: DashboardData; navigate: (p: string) => void }> = ({ data, navigate }) => {
+  const hour     = new Date().getHours();
+  const greeting = hour < 12 ? "Morning" : hour < 18 ? "Afternoon" : "Evening";
+  const maxJobs  = data.topMarketSkills[0]?.jobCount ?? 1;
+  const xpPct    = Math.round((data.xpForCurrentLevel / Math.max(1, data.xpForCurrentLevel + data.xpToNextLevel)) * 100);
+
+  return (
+    <motion.div
+      style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}
+      variants={stagger} initial="hidden" animate="show"
+    >
+
+      {/* ══════════════════════════════════════════════════════
+          HERO — Identity card. This is who you are on XPand.
+          ══════════════════════════════════════════════════════ */}
+      <motion.div
+        variants={fadeUp}
+        className="card"
+        style={{
+          padding: "28px 32px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          gap: 24, flexWrap: "wrap", position: "relative", overflow: "hidden",
+          borderColor: "var(--color-border-default)",
+        }}
+      >
+        {/* Ambient light — primary top-left, cyan bottom-right */}
+        <div style={{
+          position: "absolute", inset: 0, pointerEvents: "none",
+          background: "radial-gradient(ellipse 55% 45% at -5% -5%, var(--color-primary-glow) 0%, transparent 65%), radial-gradient(ellipse 40% 40% at 105% 105%, var(--color-cyan-glow) 0%, transparent 65%)",
+        }} />
+        {/* Subtle top-edge accent */}
+        <div style={{
+          position: "absolute", top: 0, left: 0, right: 0, height: 2, pointerEvents: "none",
+          background: "var(--gradient-brand)",
+        }} />
+
+        {/* Avatar + identity */}
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-5)", flex: 1, minWidth: 0, position: "relative", zIndex: 1 }}>
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            <div style={{
+              width: 68, height: 68, borderRadius: "var(--radius-full)",
+              background: "var(--gradient-primary)",
+              border: "2px solid rgba(155,124,255,0.35)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 26, fontWeight: 800, color: "#fff",
+              fontFamily: "var(--font-display)",
+              overflow: "hidden",
+            }}>
+              {data.profilePicture
+                ? <img src={data.profilePicture} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : <span>{data.firstName?.[0]?.toUpperCase() ?? "?"}</span>
+              }
+            </div>
+            {/* Level badge */}
+            <div style={{
+              position: "absolute", bottom: -3, right: -6,
+              background: "var(--gradient-xp, var(--gradient-gold))",
+              color: "#0D0F17", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800,
+              padding: "2px 7px", borderRadius: "var(--radius-full)",
+              border: "1.5px solid var(--color-bg-surface)",
+              letterSpacing: "0.04em",
+            }}>
+              LV.{data.level}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+            <p className="caption" style={{ marginBottom: 2, letterSpacing: "0.04em" }}>
+              {greeting}, welcome back
+            </p>
+            <h1 style={{
+              fontFamily: "var(--font-display)", fontSize: "var(--text-2xl)", fontWeight: 800,
+              color: "var(--color-text-primary)", letterSpacing: "var(--tracking-tight)",
+              lineHeight: 1.1, margin: 0, marginBottom: 6,
+            }}>
+              {data.firstName}{" "}
+              <span style={{ color: "var(--color-primary-400)" }}>{data.lastName}</span>
+            </h1>
+            {data.professionalTitle && (
+              <p className="caption" style={{ marginBottom: 8 }}>{data.professionalTitle}</p>
+            )}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <span className="badge badge-gold">⚡ {data.xpBalance.toLocaleString()} XP</span>
+              <span className="badge badge-primary">{getRankTitle(data.level)}</span>
+              {data.country && <span className="badge badge-cyan">📍 {data.country}</span>}
+            </div>
+          </div>
+        </div>
+
+        {/* XP Ring + progress */}
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-2)",
+          position: "relative", zIndex: 1, flexShrink: 0,
+        }}>
+          <LevelRing level={data.level} xpFor={data.xpForCurrentLevel} xpTo={data.xpToNextLevel} />
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+            <span className="mono" style={{ fontSize: 10, color: "var(--color-gold-light)", letterSpacing: "0.04em" }}>
+              +{data.xpGainedThisWeek.toLocaleString()} XP this week
+            </span>
+            <div className="progress-track" style={{ width: 108, height: 4 }}>
+              <div className="progress-bar progress-bar-gold" style={{ width: `${xpPct}%` }} />
+            </div>
+            <span className="caption" style={{ fontSize: 10 }}>
+              {data.xpToNextLevel.toLocaleString()} XP to Level {data.level + 1}
+            </span>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* ══════════════════════════════════════════════════════
+          STAT TILES — 5 numbers that define your standing
+          ══════════════════════════════════════════════════════ */}
+      <motion.div
+        variants={stagger}
+        style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12 }}
+      >
+        <StatTile icon="🥇" value={data.goldBadges}        label="Gold Badges"     accentVar="--color-gold"          onClick={() => navigate("/skills")} />
+        <StatTile icon="🏅" value={data.totalBadges}       label="Total Badges"    accentVar="--color-primary"       sub={`${data.silverBadges}s · ${data.bronzeBadges}b`} />
+        <StatTile icon="🔬" value={data.verifiedSkills}    label="Verified Skills" accentVar="--color-cyan"          onClick={() => navigate("/skills")} />
+        <StatTile icon="💼" value={data.totalApplications} label="Applications"    accentVar="--color-green"         sub={`${data.acceptedApplications} accepted`} onClick={() => navigate("/applications")} />
+        <StatTile icon="⚔️" value={data.activeChallenges}  label="Active Quests"   accentVar="--color-primary"       sub={`${data.completedChallenges} done`} onClick={() => navigate("/challenges")} />
+      </motion.div>
+
+      {/* ══════════════════════════════════════════════════════
+          BODY — Two-column content grid
+          ══════════════════════════════════════════════════════ */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 16 }}>
+
+        {/* ── LEFT COLUMN ──────────────────────────────────── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* Market Intelligence */}
+          <motion.div variants={fadeUp}>
+            <Panel
+              title="Market Intelligence" icon="📡" accent="primary"
+              sub="Skills employers are hiring for right now"
+            >
+              {data.topMarketSkills.length === 0 ? (
+                <p className="caption" style={{ padding: "8px 6px" }}>No active job signals yet.</p>
+              ) : (
+                <motion.div variants={stagger}>
+                  {data.topMarketSkills.map(item => (
+                    <MarketBar key={item.skillName} item={item} max={maxJobs} navigate={navigate} />
+                  ))}
+                </motion.div>
+              )}
+              {data.recommendedSkills.length > 0 && (
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
+                  padding: "12px 6px 4px", borderTop: "1px solid var(--color-border-subtle)", marginTop: 4,
+                }}>
+                  <span className="caption" style={{ flexShrink: 0 }}>🎯 Earn next:</span>
+                  {data.recommendedSkills.map(s => (
+                    <button
+                      key={s}
+                      className="badge badge-primary"
+                      style={{ cursor: "pointer" }}
+                      onClick={() => navigate("/skills")}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </Panel>
+          </motion.div>
+
+          {/* My Skill Badges */}
+          <motion.div variants={fadeUp}>
+            <Panel
+              title="My Skill Badges" icon="🏅" accent="cyan"
+              link="All badges" onLink={() => navigate("/skills")}
+            >
+              {data.topSkills.length === 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "8px 6px" }}>
+                  <p className="caption">No verified skills yet — your first badge changes everything.</p>
+                  <button className="btn btn-primary btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => navigate("/skills")}>
+                    Start verifying ↗
+                  </button>
+                </div>
+              ) : (
+                <motion.div variants={stagger}>
+                  {data.topSkills.map(s => <SkillRow key={s.skillId} skill={s} />)}
+                </motion.div>
+              )}
+            </Panel>
+          </motion.div>
+        </div>
+
+        {/* ── RIGHT COLUMN ─────────────────────────────────── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* Quick Actions */}
+          <motion.div variants={fadeUp}>
+            <Panel title="Quick Actions" icon="⚡" accent="gold">
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {[
+                  { icon: "🔬", label: "Verify Skill",   sub: "Take a test",   path: "/skills",     accent: "var(--color-primary-glow)" },
+                  { icon: "💼", label: "Browse Jobs",    sub: "See matches",   path: "/jobs",       accent: "var(--color-green-glow)" },
+                  { icon: "⚔️", label: "View Quests",   sub: "Earn XP",       path: "/challenges", accent: "var(--color-cyan-glow)" },
+                  { icon: "🛍️", label: "XP Store",      sub: "Spend wisely",  path: "/store",      accent: "var(--color-gold-glow)" },
+                ].map(a => (
+                  <button
+                    key={a.path}
+                    className="card card-interactive"
+                    style={{
+                      display: "flex", flexDirection: "column", alignItems: "flex-start",
+                      gap: 4, padding: "14px 12px", cursor: "pointer",
+                      border: "1px solid var(--color-border-subtle)",
+                      background: "none", textAlign: "left",
+                    }}
+                    onClick={() => navigate(a.path)}
+                  >
+                    <span style={{ fontSize: 18 }}>{a.icon}</span>
+                    <span style={{ fontSize: "var(--text-xs)", fontWeight: 600, color: "var(--color-text-secondary)" }}>{a.label}</span>
+                    <span className="caption" style={{ fontSize: 10 }}>{a.sub}</span>
+                  </button>
+                ))}
+              </div>
+            </Panel>
+          </motion.div>
+
+          {/* Recent Activity */}
+          <motion.div variants={fadeUp}>
+            <Panel
+              title="Recent Activity" icon="🕐" accent="green"
+              sub={data.recentActivity.length > 0 ? `${data.recentActivity.length} events` : undefined}
+            >
+              {data.recentActivity.length === 0 ? (
+                <p className="caption" style={{ padding: "8px 6px" }}>
+                  No activity yet — earn your first XP to start the log.
+                </p>
+              ) : (
+                <motion.div variants={stagger}>
+                  {data.recentActivity.map((item, i) => (
+                    <ActivityRow key={i} item={item} />
+                  ))}
+                </motion.div>
+              )}
+            </Panel>
+          </motion.div>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const { data, isLoading, error, refetch } = useDashboard();
 
-  /* ── Error state ─────────────────────────────────────────────── */
   if (error) {
     return (
       <PageLayout pageTitle="Dashboard">
         <div className="empty-state">
           <div className="empty-state-icon">⚠️</div>
-          <h3>Something went wrong</h3>
+          <h3>Couldn't load your dashboard</h3>
           <p>{error}</p>
-          <button className="btn btn-primary btn-sm mt-4" onClick={refetch}>
-            Try again
-          </button>
+          <button className="btn btn-primary btn-sm mt-4" onClick={refetch}>Retry</button>
         </div>
       </PageLayout>
     );
   }
-
-  /* ── Loading skeleton ────────────────────────────────────────── */
-  if (isLoading || !data) {
-    return (
-      <PageLayout pageTitle="Dashboard">
-        <div className="dash-skeleton">
-          <div className="skeleton dash-skeleton__header" />
-          <div className="dash-stats-grid mt-6">
-            {[...Array(4)].map((_, i) => <SkeletonCard key={i} height={110} />)}
-          </div>
-          <div className="dash-content-grid mt-6">
-            <div className="flex-col gap-4"><SkeletonCard height={260} /><SkeletonCard height={200} /></div>
-            <div className="flex-col gap-4"><SkeletonCard height={220} /><SkeletonCard height={240} /></div>
-          </div>
-        </div>
-      </PageLayout>
-    );
-  }
-
-  const { user, stats, recentActivity, activeChallenges, topSkills } = data;
 
   return (
     <PageLayout pageTitle="Dashboard">
-
-      {/* ── Welcome header ─────────────────────────────────────── */}
-      <motion.header
-        className="dash-header"
-        initial={{ opacity: 0, y: -12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ type: "spring", stiffness: 260, damping: 22 }}
-      >
-        <div className="dash-header__text">
-          <p className="dash-header__greeting label">{getGreeting()}</p>
-          <h1 className="dash-header__name">
-            {user.firstName} {user.lastName}
-            <span className="dash-header__wave" aria-hidden="true">👋</span>
-          </h1>
-          {user.professionalTitle && (
-            <p className="dash-header__title">{user.professionalTitle}</p>
-          )}
-        </div>
-        <div className="dash-header__right">
-          <div className="dash-header__week-xp">
-            <span className="dash-header__week-xp-label label">This week</span>
-            <div className="xp-display">
-              <span className="xp-icon">⚡</span>
-              <span className="xp-amount">+{stats.xpGainedThisWeek.toLocaleString()}</span>
-              <span className="dash-header__xp-unit">XP</span>
-            </div>
-          </div>
-          <button className="btn btn-outline btn-sm" onClick={() => navigate("/profile")}>
-            View Profile
-          </button>
-        </div>
-      </motion.header>
-
-      {/* ── Stat cards ─────────────────────────────────────────── */}
-      <motion.section
-        className="dash-stats-grid mt-6"
-        aria-label="Key statistics"
-        variants={containerVariants}
-        initial="hidden"
-        animate="show"
-      >
-        <StatCard
-          value={stats.xpBalance} label="Total XP"
-          sub={`+${stats.xpGainedThisWeek} this week`}
-          icon="⚡" variant="primary"
-        />
-        <StatCard
-          value={stats.totalBadges} label="Badges Earned"
-          sub={`🥇${stats.goldBadges}  🥈${stats.silverBadges}  🥉${stats.bronzeBadges}`}
-          icon="🏅" variant="accent"
-        />
-        <StatCard
-          value={stats.activeChallenges} label="Active Challenges"
-          sub={`${stats.completedChallenges} completed`}
-          icon="🏆" variant="gold"
-        />
-        <StatCard
-          value={stats.verifiedSkills} label="Verified Skills"
-          sub={`${stats.totalApplications} job applications`}
-          icon="🎯" variant="indigo"
-        />
-      </motion.section>
-
-      {/* ── Quick shortcuts ─────────────────────────────────────── */}
-      <section className="mt-8" aria-label="Quick actions">
-        <h2 className="dash-section-title">Quick Access</h2>
-        <motion.div
-          className="dash-shortcuts-grid mt-4"
-          variants={containerVariants}
-          initial="hidden"
-          animate="show"
-        >
-          {SHORTCUT_ITEMS.map((item) => (
-            <motion.button
-              key={item.path}
-              className={`dash-shortcut dash-shortcut--${item.color} card card-interactive`}
-              onClick={() => navigate(item.path)}
-              aria-label={item.label}
-              variants={itemVariants}
-              whileHover={{ y: -2, transition: { type: "spring", stiffness: 400 } }}
-              whileTap={{ scale: 0.97 }}
-            >
-              <span className="dash-shortcut__emoji">{item.emoji}</span>
-              <div className="dash-shortcut__text">
-                <span className="dash-shortcut__label">{item.label}</span>
-                <span className="dash-shortcut__desc">{item.desc}</span>
-              </div>
-              <span className="dash-shortcut__arrow" aria-hidden="true">→</span>
-            </motion.button>
-          ))}
-        </motion.div>
-      </section>
-
-      {/* ── Lower grid ─────────────────────────────────────────── */}
-      <div className="dash-content-grid mt-8">
-        <div className="flex-col gap-6">
-
-          {/* Active Challenges */}
-          <section className="card card-accent-top">
-            <div className="card-header dash-card-header">
-              <h2 className="dash-section-title" style={{ margin: 0 }}>Active Challenges</h2>
-              <button className="btn btn-ghost btn-xs" onClick={() => navigate("/challenges")}>
-                View all →
-              </button>
-            </div>
-            <motion.div
-              className="card-body flex-col gap-4"
-              variants={containerVariants}
-              initial="hidden"
-              animate="show"
-            >
-              {activeChallenges.length === 0 ? (
-                <div className="empty-state" style={{ padding: "var(--space-8) 0" }}>
-                  <div className="empty-state-icon">🏆</div>
-                  <p>No active challenges. Start one now!</p>
-                </div>
-              ) : activeChallenges.map((c) => (
-                <ChallengeRow key={c.challengeId} challenge={c} />
-              ))}
-            </motion.div>
-          </section>
-
-          {/* Top Skills */}
-          <section className="card">
-            <div className="card-header dash-card-header">
-              <h2 className="dash-section-title" style={{ margin: 0 }}>Top Skills</h2>
-              <button className="btn btn-ghost btn-xs" onClick={() => navigate("/skills")}>
-                All skills →
-              </button>
-            </div>
-            <motion.div
-              className="card-body flex-col gap-3"
-              variants={containerVariants}
-              initial="hidden"
-              animate="show"
-            >
-              {topSkills.map((skill) => {
-                const badge = skill.currentBadge ? BADGE_META[skill.currentBadge] : null;
-                return (
-                  <motion.div
-                    key={skill.verificationId}
-                    className="dash-skill-row"
-                    variants={itemVariants}
-                  >
-                    <div className="dash-skill-row__name">{getSkillName(skill.skillId)}</div>
-                    {badge ? (
-                      <span className={`badge badge-${badge.cls}`}>{badge.emoji} {badge.label}</span>
-                    ) : (
-                      <span className="badge badge-muted">Unverified</span>
-                    )}
-                    <button className="btn btn-ghost btn-xs" onClick={() => navigate("/skills")}>
-                      Level up
-                    </button>
-                  </motion.div>
-                );
-              })}
-            </motion.div>
-          </section>
-        </div>
-
-        <div className="flex-col gap-6">
-
-          {/* XP Milestone */}
-          <section className="card">
-            <div className="card-body">
-              <div className="dash-card-header mb-4">
-                <h2 className="dash-section-title" style={{ margin: 0 }}>XP Milestone</h2>
-                <span className="badge badge-primary">Level 5</span>
-              </div>
-              <div className="dash-xp-milestone__amounts">
-                <span className="xp-display">
-                  <span className="xp-icon">⚡</span>
-                  <span className="xp-amount-sm">{stats.xpBalance.toLocaleString()}</span>
-                </span>
-                <span className="dash-xp-milestone__target label">/ 5,000 XP</span>
-              </div>
-              <div className="progress-track progress-track-lg mt-3">
-                <motion.div
-                  className="progress-fill progress-xp"
-                  initial={{ width: "0%" }}
-                  animate={{ width: `${Math.min((stats.xpBalance / 5000) * 100, 100)}%` }}
-                  transition={{ duration: 1.2, ease: [0.4, 0, 0.2, 1], delay: 0.4 }}
-                  role="progressbar"
-                  aria-valuenow={stats.xpBalance}
-                  aria-valuemin={0}
-                  aria-valuemax={5000}
-                />
-              </div>
-              <p className="dash-xp-milestone__hint mt-3">
-                {Math.max(0, 5000 - stats.xpBalance).toLocaleString()} XP to reach{" "}
-                <strong>Level 6</strong>
-              </p>
-              <button
-                className="btn btn-xp btn-sm w-full mt-4"
-                onClick={() => navigate("/challenges")}
-              >
-                ⚡ Earn more XP
-              </button>
-            </div>
-          </section>
-
-          {/* Recent Activity */}
-          <section className="card">
-            <div className="card-header dash-card-header">
-              <h2 className="dash-section-title" style={{ margin: 0 }}>Recent Activity</h2>
-              <span className="badge badge-muted">{recentActivity.length} events</span>
-            </div>
-            <motion.div
-              className="card-body flex-col"
-              style={{ gap: 0 }}
-              variants={containerVariants}
-              initial="hidden"
-              animate="show"
-            >
-              {recentActivity.map((item) => (
-                <ActivityItem key={item.id} item={item} />
-              ))}
-            </motion.div>
-          </section>
-
-        </div>
-      </div>
+      {isLoading ? <SkeletonDash /> : <LiveDash data={data!} navigate={navigate} />}
     </PageLayout>
   );
 };

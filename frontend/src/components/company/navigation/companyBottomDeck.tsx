@@ -1,14 +1,11 @@
 /* ============================================================
    CompanyBottomDock.tsx
-   Company-specific bottom navigation dock.
+   Company-specific bottom navigation dock with collapse handle.
    Mirrors BottomDock.tsx exactly — same Framer Motion
-   magnification pattern — but reads COMPANY_NAV_ITEMS.
-   
-   Place this file at the same level as BottomDock.tsx, e.g.:
-     src/components/company/navigation/CompanyBottomDock.tsx
+   magnification + collapse pattern — but reads COMPANY_NAV_ITEMS.
    ============================================================ */
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   motion,
@@ -18,12 +15,10 @@ import {
 } from "framer-motion";
 import { COMPANY_NAV_ITEMS, type CompanyNavItem } from "./companyNavItems";
 
-// ── Magnification constants (matches user dock) ───────────────
 const ITEM_BASE = 48;
 const ITEM_MAG  = 68;
 const MAG_RANGE = 100;
 
-// ── DockItem ──────────────────────────────────────────────────
 interface DockItemProps {
   item:    CompanyNavItem;
   active:  boolean;
@@ -91,37 +86,60 @@ const DockItem = ({ item, active, mouseX, onClick }: DockItemProps) => {
   );
 };
 
-// ── CompanyBottomDock ─────────────────────────────────────────
 const CompanyBottomDock = () => {
   const navigate     = useNavigate();
   const { pathname } = useLocation();
   const mouseX       = useMotionValue(-9999);
+  const [collapsed, setCollapsed] = useState(false);
 
-  // Active matching: exact OR prefix (so /company/jobs/123 still highlights "jobs")
   const isActive = (path: string) => {
     if (path === "/company/dashboard") return pathname === path;
     return pathname === path || pathname.startsWith(path + "/");
   };
 
   return (
-    <nav
-      className="bdock"
-      aria-label="Company navigation"
-      onMouseMove={(e) => mouseX.set(e.clientX)}
-      onMouseLeave={() => mouseX.set(-9999)}
+    <motion.div
+      className="bdock-wrapper"
+      animate={{ y: collapsed ? "var(--layout-bottom-height, 64px)" : "0px" }}
+      transition={{ type: "spring", stiffness: 320, damping: 30, mass: 0.8 }}
     >
-      <div className="bdock-inner">
-        {COMPANY_NAV_ITEMS.map((item) => (
-          <DockItem
-            key={item.id}
-            item={item}
-            active={isActive(item.path)}
-            mouseX={mouseX}
-            onClick={() => navigate(item.path)}
-          />
-        ))}
-      </div>
-    </nav>
+      {/* Collapse handle */}
+      <button
+        className="bdock-collapse-handle"
+        onClick={() => setCollapsed((v) => !v)}
+        aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+      >
+        <motion.svg
+          width="16" height="16" viewBox="0 0 16 16"
+          fill="none" stroke="currentColor"
+          strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+          animate={{ rotate: collapsed ? 180 : 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 24 }}
+        >
+          <path d="M4 6l4 4 4-4" />
+        </motion.svg>
+      </button>
+
+      {/* Dock bar */}
+      <nav
+        className="bdock"
+        aria-label="Company navigation"
+        onMouseMove={(e) => mouseX.set(e.clientX)}
+        onMouseLeave={() => mouseX.set(-9999)}
+      >
+        <div className="bdock-inner">
+          {COMPANY_NAV_ITEMS.map((item) => (
+            <DockItem
+              key={item.id}
+              item={item}
+              active={isActive(item.path)}
+              mouseX={mouseX}
+              onClick={() => navigate(item.path)}
+            />
+          ))}
+        </div>
+      </nav>
+    </motion.div>
   );
 };
 

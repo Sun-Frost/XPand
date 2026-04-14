@@ -15,6 +15,24 @@ import { CITIES } from "../../constants/cities";
 // Tiny helpers
 // ---------------------------------------------------------------------------
 
+// Converts raw backend/DB error messages into user-friendly strings.
+const parseSaveError = (err: string | null): string | null => {
+  if (!err) return null;
+  // NOT NULL constraint → tell the user which field is missing
+  const nullMatch = err.match(/null value in column "([^"]+)"/i);
+  if (nullMatch) {
+    const col = nullMatch[1].replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    return `"${col}" is required. Please fill it in before saving.`;
+  }
+  // Unique / duplicate key
+  if (/unique constraint|duplicate key/i.test(err)) return "This entry already exists. Please check for duplicates.";
+  // Foreign key
+  if (/foreign key constraint/i.test(err)) return "A referenced record no longer exists. Please refresh and try again.";
+  // Generic DB noise — hide raw SQL
+  if (/could not execute statement|SQL \[/i.test(err)) return "Something went wrong while saving. Please check all fields and try again.";
+  return err;
+};
+
 const fmtDate = (d?: string | null): string => {
   if (!d) return "";
   // LocalDate arrives as "YYYY-MM-DD", LocalDateTime as "YYYY-MM-DDTHH:mm:ss"
@@ -165,7 +183,7 @@ const EditProfileModal: React.FC<{
               value={form.aboutMe ?? ""} onChange={set("aboutMe")} />
           </MField>
         </div>
-        {saveError && <p className="prof-modal-error prof-modal-full">{saveError}</p>}
+        {parseSaveError(saveError) && <p className="prof-modal-error prof-modal-full">{parseSaveError(saveError)}</p>}
       </div>
       <div className="modal-footer">
         <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
@@ -188,25 +206,45 @@ const EducationModal: React.FC<{
   onSave: (p: EducationPayload) => Promise<boolean>; onClose: () => void;
 }> = ({ initial = EMPTY_EDU, isSaving, saveError, onSave, onClose }) => {
   const [form, setForm] = useState<EducationPayload>(initial);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof EducationPayload, string>>>({});
   const set = (k: keyof EducationPayload) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       setForm((p) => ({ ...p, [k]: e.target.value || null }));
+      if (fieldErrors[k]) setFieldErrors((fe) => ({ ...fe, [k]: undefined }));
+    };
+
+  const handleSave = async () => {
+    const errors: Partial<Record<keyof EducationPayload, string>> = {};
+    if (!form.institutionName?.trim()) errors.institutionName = "Institution name is required.";
+    if (!form.degree?.trim()) errors.degree = "Degree is required.";
+    if (!form.fieldOfStudy?.trim()) errors.fieldOfStudy = "Field of study is required.";
+    if (!form.startDate?.trim()) errors.startDate = "Start date is required.";
+    if (Object.keys(errors).length > 0) { setFieldErrors(errors); return; }
+    if (await onSave(form)) onClose();
+  };
 
   return (
     <Modal title={initial === EMPTY_EDU ? "Add Education" : "Edit Education"} onClose={onClose}>
       <div className="modal-body prof-modal-grid">
-        <MField label="Institution">
-          <input className="input" value={form.institutionName} onChange={(e) => setForm(p => ({ ...p, institutionName: e.target.value }))} />
+        <MField label="Institution *">
+          <input className={`input${fieldErrors.institutionName ? " input-error" : ""}`} value={form.institutionName}
+            onChange={(e) => { setForm(p => ({ ...p, institutionName: e.target.value })); if (fieldErrors.institutionName) setFieldErrors(fe => ({ ...fe, institutionName: undefined })); }} />
+          {fieldErrors.institutionName && <span className="prof-field-error">{fieldErrors.institutionName}</span>}
         </MField>
-        <MField label="Degree">
-          <input className="input" placeholder="e.g. Bachelor of Science"
-            value={form.degree} onChange={(e) => setForm(p => ({ ...p, degree: e.target.value }))} />
+        <MField label="Degree *">
+          <input className={`input${fieldErrors.degree ? " input-error" : ""}`} placeholder="e.g. Bachelor of Science"
+            value={form.degree} onChange={(e) => { setForm(p => ({ ...p, degree: e.target.value })); if (fieldErrors.degree) setFieldErrors(fe => ({ ...fe, degree: undefined })); }} />
+          {fieldErrors.degree && <span className="prof-field-error">{fieldErrors.degree}</span>}
         </MField>
-        <MField label="Field of Study">
-          <input className="input" value={form.fieldOfStudy} onChange={(e) => setForm(p => ({ ...p, fieldOfStudy: e.target.value }))} />
+        <MField label="Field of Study *">
+          <input className={`input${fieldErrors.fieldOfStudy ? " input-error" : ""}`} value={form.fieldOfStudy}
+            onChange={(e) => { setForm(p => ({ ...p, fieldOfStudy: e.target.value })); if (fieldErrors.fieldOfStudy) setFieldErrors(fe => ({ ...fe, fieldOfStudy: undefined })); }} />
+          {fieldErrors.fieldOfStudy && <span className="prof-field-error">{fieldErrors.fieldOfStudy}</span>}
         </MField>
-        <MField label="Start Date">
-          <input className="input" type="date" value={form.startDate} onChange={(e) => setForm(p => ({ ...p, startDate: e.target.value }))} />
+        <MField label="Start Date *">
+          <input className={`input${fieldErrors.startDate ? " input-error" : ""}`} type="date" value={form.startDate}
+            onChange={(e) => { setForm(p => ({ ...p, startDate: e.target.value })); if (fieldErrors.startDate) setFieldErrors(fe => ({ ...fe, startDate: undefined })); }} />
+          {fieldErrors.startDate && <span className="prof-field-error">{fieldErrors.startDate}</span>}
         </MField>
         <MField label="End Date (leave blank if ongoing)">
           <input className="input" type="date" value={form.endDate ?? ""} onChange={set("endDate")} />
@@ -216,11 +254,11 @@ const EducationModal: React.FC<{
             <textarea className="input prof-textarea" rows={3} value={form.description ?? ""} onChange={set("description")} />
           </MField>
         </div>
-        {saveError && <p className="prof-modal-error prof-modal-full">{saveError}</p>}
+        {parseSaveError(saveError) && <p className="prof-modal-error prof-modal-full">{parseSaveError(saveError)}</p>}
       </div>
       <div className="modal-footer">
         <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={async () => { if (await onSave(form)) onClose(); }} disabled={isSaving}>
+        <button className="btn btn-primary" onClick={handleSave} disabled={isSaving}>
           {isSaving ? "Saving…" : "Save"}
         </button>
       </div>
@@ -239,25 +277,42 @@ const WorkModal: React.FC<{
   onSave: (p: WorkExperiencePayload) => Promise<boolean>; onClose: () => void;
 }> = ({ initial = EMPTY_WORK, isSaving, saveError, onSave, onClose }) => {
   const [form, setForm] = useState<WorkExperiencePayload>(initial);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof WorkExperiencePayload, string>>>({});
   const set = (k: keyof WorkExperiencePayload) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       setForm((p) => ({ ...p, [k]: e.target.value || null }));
+      if (fieldErrors[k]) setFieldErrors((fe) => ({ ...fe, [k]: undefined }));
+    };
+
+  const handleSave = async () => {
+    const errors: Partial<Record<keyof WorkExperiencePayload, string>> = {};
+    if (!form.jobTitle?.trim()) errors.jobTitle = "Job title is required.";
+    if (!form.companyName?.trim()) errors.companyName = "Company name is required.";
+    if (!form.startDate?.trim()) errors.startDate = "Start date is required.";
+    if (Object.keys(errors).length > 0) { setFieldErrors(errors); return; }
+    if (await onSave(form)) onClose();
+  };
 
   return (
     <Modal title={initial === EMPTY_WORK ? "Add Work Experience" : "Edit Experience"} onClose={onClose}>
       <div className="modal-body prof-modal-grid">
-        <MField label="Job Title">
-          <input className="input" value={form.jobTitle} onChange={(e) => setForm(p => ({ ...p, jobTitle: e.target.value }))} />
+        <MField label="Job Title *">
+          <input className={`input${fieldErrors.jobTitle ? " input-error" : ""}`} value={form.jobTitle}
+            onChange={(e) => { setForm(p => ({ ...p, jobTitle: e.target.value })); if (fieldErrors.jobTitle) setFieldErrors(fe => ({ ...fe, jobTitle: undefined })); }} />
+          {fieldErrors.jobTitle && <span className="prof-field-error">{fieldErrors.jobTitle}</span>}
         </MField>
-        <MField label="Company">
-          <input className="input" value={form.companyName} onChange={(e) => setForm(p => ({ ...p, companyName: e.target.value }))} />
+        <MField label="Company *">
+          <input className={`input${fieldErrors.companyName ? " input-error" : ""}`} value={form.companyName}
+            onChange={(e) => { setForm(p => ({ ...p, companyName: e.target.value })); if (fieldErrors.companyName) setFieldErrors(fe => ({ ...fe, companyName: undefined })); }} />
+          {fieldErrors.companyName && <span className="prof-field-error">{fieldErrors.companyName}</span>}
         </MField>
         <MField label="Location">
-          <input className="input" placeholder="City, Country or Remote"
-            value={form.location ?? ""} onChange={set("location")} />
+          <input className="input" placeholder="City, Country or Remote" value={form.location ?? ""} onChange={set("location")} />
         </MField>
-        <MField label="Start Date">
-          <input className="input" type="date" value={form.startDate} onChange={(e) => setForm(p => ({ ...p, startDate: e.target.value }))} />
+        <MField label="Start Date *">
+          <input className={`input${fieldErrors.startDate ? " input-error" : ""}`} type="date" value={form.startDate}
+            onChange={(e) => { setForm(p => ({ ...p, startDate: e.target.value })); if (fieldErrors.startDate) setFieldErrors(fe => ({ ...fe, startDate: undefined })); }} />
+          {fieldErrors.startDate && <span className="prof-field-error">{fieldErrors.startDate}</span>}
         </MField>
         <MField label="End Date (leave blank if current)">
           <input className="input" type="date" value={form.endDate ?? ""} onChange={set("endDate")} />
@@ -267,11 +322,11 @@ const WorkModal: React.FC<{
             <textarea className="input prof-textarea" rows={3} value={form.description ?? ""} onChange={set("description")} />
           </MField>
         </div>
-        {saveError && <p className="prof-modal-error prof-modal-full">{saveError}</p>}
+        {parseSaveError(saveError) && <p className="prof-modal-error prof-modal-full">{parseSaveError(saveError)}</p>}
       </div>
       <div className="modal-footer">
         <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={async () => { if (await onSave(form)) onClose(); }} disabled={isSaving}>
+        <button className="btn btn-primary" onClick={handleSave} disabled={isSaving}>
           {isSaving ? "Saving…" : "Save"}
         </button>
       </div>
@@ -290,28 +345,44 @@ const CertModal: React.FC<{
   onSave: (p: CertificationPayload) => Promise<boolean>; onClose: () => void;
 }> = ({ initial = EMPTY_CERT, isSaving, saveError, onSave, onClose }) => {
   const [form, setForm] = useState<CertificationPayload>(initial);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof CertificationPayload, string>>>({});
+
+  const handleSave = async () => {
+    const errors: Partial<Record<keyof CertificationPayload, string>> = {};
+    if (!form.name?.trim()) errors.name = "Certification name is required.";
+    if (!form.issuingOrganization?.trim()) errors.issuingOrganization = "Issuing organization is required.";
+    if (!form.issueDate?.trim()) errors.issueDate = "Issue date is required.";
+    if (Object.keys(errors).length > 0) { setFieldErrors(errors); return; }
+    if (await onSave(form)) onClose();
+  };
 
   return (
     <Modal title={initial === EMPTY_CERT ? "Add Certification" : "Edit Certification"} onClose={onClose}>
       <div className="modal-body prof-modal-grid">
-        <MField label="Certification Name">
-          <input className="input" value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} />
+        <MField label="Certification Name *">
+          <input className={`input${fieldErrors.name ? " input-error" : ""}`} value={form.name}
+            onChange={(e) => { setForm(p => ({ ...p, name: e.target.value })); if (fieldErrors.name) setFieldErrors(fe => ({ ...fe, name: undefined })); }} />
+          {fieldErrors.name && <span className="prof-field-error">{fieldErrors.name}</span>}
         </MField>
-        <MField label="Issuing Organization">
-          <input className="input" value={form.issuingOrganization} onChange={(e) => setForm(p => ({ ...p, issuingOrganization: e.target.value }))} />
+        <MField label="Issuing Organization *">
+          <input className={`input${fieldErrors.issuingOrganization ? " input-error" : ""}`} value={form.issuingOrganization}
+            onChange={(e) => { setForm(p => ({ ...p, issuingOrganization: e.target.value })); if (fieldErrors.issuingOrganization) setFieldErrors(fe => ({ ...fe, issuingOrganization: undefined })); }} />
+          {fieldErrors.issuingOrganization && <span className="prof-field-error">{fieldErrors.issuingOrganization}</span>}
         </MField>
-        <MField label="Issue Date">
-          <input className="input" type="date" value={form.issueDate} onChange={(e) => setForm(p => ({ ...p, issueDate: e.target.value }))} />
+        <MField label="Issue Date *">
+          <input className={`input${fieldErrors.issueDate ? " input-error" : ""}`} type="date" value={form.issueDate}
+            onChange={(e) => { setForm(p => ({ ...p, issueDate: e.target.value })); if (fieldErrors.issueDate) setFieldErrors(fe => ({ ...fe, issueDate: undefined })); }} />
+          {fieldErrors.issueDate && <span className="prof-field-error">{fieldErrors.issueDate}</span>}
         </MField>
         <MField label="Expiration Date (optional)">
           <input className="input" type="date" value={form.expirationDate ?? ""}
             onChange={(e) => setForm(p => ({ ...p, expirationDate: e.target.value || null }))} />
         </MField>
-        {saveError && <p className="prof-modal-error prof-modal-full">{saveError}</p>}
+        {parseSaveError(saveError) && <p className="prof-modal-error prof-modal-full">{parseSaveError(saveError)}</p>}
       </div>
       <div className="modal-footer">
         <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={async () => { if (await onSave(form)) onClose(); }} disabled={isSaving}>
+        <button className="btn btn-primary" onClick={handleSave} disabled={isSaving}>
           {isSaving ? "Saving…" : "Save"}
         </button>
       </div>
@@ -330,15 +401,28 @@ const ProjectModal: React.FC<{
   onSave: (p: ProjectPayload) => Promise<boolean>; onClose: () => void;
 }> = ({ initial = EMPTY_PROJ, isSaving, saveError, onSave, onClose }) => {
   const [form, setForm] = useState<ProjectPayload>(initial);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof ProjectPayload, string>>>({});
   const set = (k: keyof ProjectPayload) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       setForm((p) => ({ ...p, [k]: e.target.value || null }));
+      if (fieldErrors[k]) setFieldErrors((fe) => ({ ...fe, [k]: undefined }));
+    };
+
+  const handleSave = async () => {
+    const errors: Partial<Record<keyof ProjectPayload, string>> = {};
+    if (!form.title?.trim()) errors.title = "Project title is required.";
+    if (!form.description?.trim()) errors.description = "Description is required.";
+    if (Object.keys(errors).length > 0) { setFieldErrors(errors); return; }
+    if (await onSave(form)) onClose();
+  };
 
   return (
     <Modal title={initial === EMPTY_PROJ ? "Add Project" : "Edit Project"} onClose={onClose}>
       <div className="modal-body prof-modal-grid">
-        <MField label="Project Title">
-          <input className="input" value={form.title} onChange={(e) => setForm(p => ({ ...p, title: e.target.value }))} />
+        <MField label="Project Title *">
+          <input className={`input${fieldErrors.title ? " input-error" : ""}`} value={form.title}
+            onChange={(e) => { setForm(p => ({ ...p, title: e.target.value })); if (fieldErrors.title) setFieldErrors(fe => ({ ...fe, title: undefined })); }} />
+          {fieldErrors.title && <span className="prof-field-error">{fieldErrors.title}</span>}
         </MField>
         <MField label="Technologies Used">
           <input className="input" placeholder="React, TypeScript, Spring Boot…"
@@ -357,15 +441,17 @@ const ProjectModal: React.FC<{
           <input className="input" type="date" value={form.endDate ?? ""} onChange={set("endDate")} />
         </MField>
         <div className="prof-modal-full">
-          <MField label="Description">
-            <textarea className="input prof-textarea" rows={3} value={form.description ?? ""} onChange={set("description")} />
+          <MField label="Description *">
+            <textarea className={`input prof-textarea${fieldErrors.description ? " input-error" : ""}`} rows={3}
+              value={form.description ?? ""} onChange={set("description")} />
+            {fieldErrors.description && <span className="prof-field-error">{fieldErrors.description}</span>}
           </MField>
         </div>
-        {saveError && <p className="prof-modal-error prof-modal-full">{saveError}</p>}
+        {parseSaveError(saveError) && <p className="prof-modal-error prof-modal-full">{parseSaveError(saveError)}</p>}
       </div>
       <div className="modal-footer">
         <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={async () => { if (await onSave(form)) onClose(); }} disabled={isSaving}>
+        <button className="btn btn-primary" onClick={handleSave} disabled={isSaving}>
           {isSaving ? "Saving…" : "Save"}
         </button>
       </div>
@@ -948,6 +1034,11 @@ const pageStyles = `
   /* Empty CTA */
   .prof-empty-cta { background:none;border:1px dashed var(--color-border-default);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);color:var(--color-text-muted);font-size:var(--text-sm);font-family:var(--font-body);cursor:pointer;width:100%;text-align:center;transition:all var(--duration-fast); }
   .prof-empty-cta:hover { border-color:var(--color-premium,var(--color-primary-400));color:var(--color-premium,var(--color-primary-400)); }
+
+  /* Field-level validation errors */
+  .prof-field-error { display:block;color:var(--color-danger);font-size:var(--text-xs);margin-top:3px; }
+  .input-error { border-color:var(--color-danger) !important;outline-color:var(--color-danger); }
+  .input-error:focus { box-shadow:0 0 0 2px color-mix(in srgb, var(--color-danger) 20%, transparent); }
 
   /* Modal extras */
   .prof-modal-grid { display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4); }

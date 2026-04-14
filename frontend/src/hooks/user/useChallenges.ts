@@ -9,7 +9,7 @@ export interface ChallengeResponse {
   id: number;
   title: string;
   description: string;
-  type: string;           // ChallengeType enum value
+  type: string;
   conditionValue: number;
   xpReward: number;
   isActive: boolean;
@@ -22,13 +22,20 @@ export interface UserChallengeResponse {
   id: number;
   challengeId: number;
   challengeTitle: string;
-  type: string;           // ChallengeType enum value
+  type: string;
   xpReward: number;
   currentProgress: number;
   conditionValue: number;
   startDate: string | null;
   completedAt: string | null;
   status: "IN_PROGRESS" | "COMPLETED";
+}
+
+interface XPTransactionResponse {
+  id: number;
+  amount: number;
+  sourceType: string;
+  createdAt: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -44,11 +51,8 @@ export type ChallengeCategory =
   | "SOCIAL";
 
 export interface ChallengeWithProgress {
-  // Core identifiers
   challengeId: number;
   userChallengeId?: number;
-
-  // Challenge fields
   title: string;
   description: string;
   type: string;
@@ -57,13 +61,9 @@ export interface ChallengeWithProgress {
   isRepeatable: boolean;
   startDate: string | null;
   endDate: string | null;
-
-  // Progress fields (from UserChallengeResponse; undefined = not started)
   currentProgress: number;
   completedAt: string | null;
   status: "IN_PROGRESS" | "COMPLETED" | "NOT_STARTED";
-
-  // UI enrichment
   category: ChallengeCategory;
   icon: string;
   difficulty: 1 | 2 | 3 | 4 | 5;
@@ -98,60 +98,43 @@ export interface UseChallengesReturn {
 
 function getCategory(type: string): ChallengeCategory {
   switch (type) {
-    case "DAILY_LOGIN":
-      return "DAILY";
-    case "WEEKLY_ACTIVITY":
-      return "WEEKLY";
-    case "STREAK_DAYS":
-      return "STREAK";
+    case "DAILY_LOGIN":      return "DAILY";
+    case "WEEKLY_ACTIVITY":  return "WEEKLY";
+    case "STREAK_DAYS":      return "STREAK";
     case "VERIFY_SKILL":
     case "EARN_BADGE":
     case "EARN_GOLD_BADGE":
-    case "MULTI_SKILL_PROGRESS":
-      return "SKILL";
-    case "COMPLETE_PROFILE":
-    case "ADD_PROJECT":
-    case "ADD_CERTIFICATION":
-    case "REACH_XP":
-    case "COMPLETE_CHALLENGE":
-    case "APPLY_JOB":
-    case "APPLY_WITH_GOLD":
-    case "GET_ACCEPTED":
-    case "USE_XP_STORE":
-    case "SPEND_XP":
-      return "MILESTONE";
-    default:
-      return "MILESTONE";
+    case "MULTI_SKILL_PROGRESS": return "SKILL";
+    default:                 return "MILESTONE";
   }
 }
 
 function getIcon(type: string): string {
   const icons: Record<string, string> = {
-    COMPLETE_PROFILE: "👤",
-    ADD_PROJECT: "🗂️",
-    ADD_CERTIFICATION: "📜",
-    VERIFY_SKILL: "🎯",
-    EARN_BADGE: "🏅",
-    EARN_GOLD_BADGE: "🥇",
+    COMPLETE_PROFILE:     "👤",
+    ADD_PROJECT:          "🗂️",
+    ADD_CERTIFICATION:    "📜",
+    VERIFY_SKILL:         "🎯",
+    EARN_BADGE:           "🏅",
+    EARN_GOLD_BADGE:      "🥇",
     MULTI_SKILL_PROGRESS: "🧩",
-    DAILY_LOGIN: "☀️",
-    WEEKLY_ACTIVITY: "📅",
-    STREAK_DAYS: "🔥",
-    APPLY_JOB: "📤",
-    APPLY_WITH_GOLD: "🌟",
-    GET_ACCEPTED: "🎉",
-    USE_XP_STORE: "🛒",
-    SPEND_XP: "💸",
-    REACH_XP: "⚡",
-    COMPLETE_CHALLENGE: "🏆",
+    DAILY_LOGIN:          "☀️",
+    WEEKLY_ACTIVITY:      "📅",
+    STREAK_DAYS:          "🔥",
+    APPLY_JOB:            "📤",
+    APPLY_WITH_GOLD:      "🌟",
+    GET_ACCEPTED:         "🎉",
+    USE_XP_STORE:         "🛒",
+    SPEND_XP:             "💸",
+    REACH_XP:             "⚡",
+    COMPLETE_CHALLENGE:   "🏆",
   };
   return icons[type] ?? "🎮";
 }
 
 function getDifficulty(type: string, conditionValue: number): 1 | 2 | 3 | 4 | 5 {
   switch (type) {
-    case "DAILY_LOGIN":
-      return 1;
+    case "DAILY_LOGIN":    return 1;
     case "WEEKLY_ACTIVITY":
     case "STREAK_DAYS":
       return conditionValue <= 3 ? 1 : conditionValue <= 7 ? 2 : conditionValue <= 14 ? 3 : 4;
@@ -160,13 +143,11 @@ function getDifficulty(type: string, conditionValue: number): 1 | 2 | 3 | 4 | 5 
       return conditionValue === 1 ? 2 : conditionValue <= 3 ? 3 : 4;
     case "EARN_GOLD_BADGE":
     case "APPLY_WITH_GOLD":
-    case "GET_ACCEPTED":
-      return 4;
+    case "GET_ACCEPTED":   return 4;
     case "REACH_XP":
     case "COMPLETE_CHALLENGE":
       return conditionValue >= 500 ? 5 : 3;
-    default:
-      return 2;
+    default:               return 2;
   }
 }
 
@@ -197,10 +178,10 @@ function computeLevel(totalXp: number): {
 
 function getRank(level: number): PlayerStats["rank"] {
   if (level >= 10) return "LEGEND";
-  if (level >= 8) return "MASTER";
-  if (level >= 6) return "EXPERT";
-  if (level >= 4) return "JOURNEYMAN";
-  if (level >= 2) return "APPRENTICE";
+  if (level >= 8)  return "MASTER";
+  if (level >= 6)  return "EXPERT";
+  if (level >= 4)  return "JOURNEYMAN";
+  if (level >= 2)  return "APPRENTICE";
   return "RECRUIT";
 }
 
@@ -212,7 +193,6 @@ function mergeData(
   challenges: ChallengeResponse[],
   userChallenges: UserChallengeResponse[]
 ): ChallengeWithProgress[] {
-  // Index user progress by challengeId for O(1) lookup
   const progressMap = new Map<number, UserChallengeResponse>();
   for (const uc of userChallenges) {
     progressMap.set(uc.challengeId, uc);
@@ -223,23 +203,23 @@ function mergeData(
     .map((c) => {
       const uc = progressMap.get(c.id);
       return {
-        challengeId: c.id,
+        challengeId:     c.id,
         userChallengeId: uc?.id,
-        title: c.title,
-        description: c.description,
-        type: c.type,
-        conditionValue: c.conditionValue,
-        xpReward: c.xpReward,
-        isRepeatable: c.isRepeatable,
-        startDate: c.startDate,
-        endDate: c.endDate,
+        title:           c.title,
+        description:     c.description,
+        type:            c.type,
+        conditionValue:  c.conditionValue,
+        xpReward:        c.xpReward,
+        isRepeatable:    c.isRepeatable,
+        startDate:       c.startDate,
+        endDate:         c.endDate,
         currentProgress: uc?.currentProgress ?? 0,
-        completedAt: uc?.completedAt ?? null,
-        status: uc?.status ?? "NOT_STARTED",
-        category: getCategory(c.type),
-        icon: getIcon(c.type),
-        difficulty: getDifficulty(c.type, c.conditionValue),
-        isNew: false,
+        completedAt:     uc?.completedAt ?? null,
+        status:          uc?.status ?? "NOT_STARTED",
+        category:        getCategory(c.type),
+        icon:            getIcon(c.type),
+        difficulty:      getDifficulty(c.type, c.conditionValue),
+        isNew:           false,
       };
     });
 }
@@ -247,24 +227,24 @@ function mergeData(
 function buildPlayerStats(
   merged: ChallengeWithProgress[],
   totalXp: number,
-  currentStreak: number
+  currentStreak: number,
+  xpThisWeek: number
 ): PlayerStats {
   const completedCount = merged.filter((c) => c.status === "COMPLETED").length;
-  const activeCount = merged.filter((c) => c.status === "IN_PROGRESS").length;
-
+  const activeCount    = merged.filter((c) => c.status === "IN_PROGRESS").length;
   const { level, xpForCurrentLevel, xpToNextLevel } = computeLevel(totalXp);
 
   return {
     totalXp,
-    xpThisWeek: 0,         // Requires a dedicated XP transactions endpoint
+    xpThisWeek,
     currentLevel: level,
     xpToNextLevel,
     xpForCurrentLevel,
     currentStreak,
-    longestStreak: 0,
-    completedChallenges: completedCount,
-    activeChallenges: activeCount,
-    rank: getRank(level),
+    longestStreak:        0,
+    completedChallenges:  completedCount,
+    activeChallenges:     activeCount,
+    rank:                 getRank(level),
   };
 }
 
@@ -273,11 +253,11 @@ function buildPlayerStats(
 // ---------------------------------------------------------------------------
 
 export const useChallenges = (): UseChallengesReturn => {
-  const [allMerged, setAllMerged] = useState<ChallengeWithProgress[]>([]);
+  const [allMerged, setAllMerged]     = useState<ChallengeWithProgress[]>([]);
   const [playerStats, setPlayerStats] = useState<PlayerStats | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [tick, setTick] = useState(0);
+  const [isLoading, setIsLoading]     = useState(true);
+  const [error, setError]             = useState<string | null>(null);
+  const [tick, setTick]               = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -286,17 +266,25 @@ export const useChallenges = (): UseChallengesReturn => {
 
     (async () => {
       try {
-        const [challenges, userProgress, profile] = await Promise.all([
+        const [challenges, userProgress, profile, transactions] = await Promise.all([
           get<ChallengeResponse[]>("/user/challenges"),
           get<UserChallengeResponse[]>("/user/challenges/progress"),
           get<{ xpBalance: number; loginStreakDays?: number }>("/user/profile"),
+          get<XPTransactionResponse[]>("/user/store/transactions"),
         ]);
 
         if (cancelled) return;
 
+        const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const xpThisWeek = transactions
+          .filter((t) => t.amount > 0 && new Date(t.createdAt).getTime() > weekAgo)
+          .reduce((sum, t) => sum + t.amount, 0);
+
         const merged = mergeData(challenges, userProgress);
         setAllMerged(merged);
-        setPlayerStats(buildPlayerStats(merged, profile.xpBalance ?? 0, profile.loginStreakDays ?? 0));
+        setPlayerStats(
+          buildPlayerStats(merged, profile.xpBalance ?? 0, profile.loginStreakDays ?? 0, xpThisWeek)
+        );
       } catch (err) {
         if (!cancelled) {
           setError(
@@ -313,7 +301,7 @@ export const useChallenges = (): UseChallengesReturn => {
   }, [tick]);
 
   const completedChallenges = allMerged.filter((c) => c.status === "COMPLETED");
-  const activeChallenges = allMerged.filter((c) => c.status !== "COMPLETED");
+  const activeChallenges    = allMerged.filter((c) => c.status !== "COMPLETED");
 
   return {
     challenges: activeChallenges,

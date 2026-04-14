@@ -115,14 +115,14 @@ const AppRoutes: React.FC = () => {
       
       {/* ── Admin-only routes ── */}
       <Route element={<AdminGuard />}>
-        <Route path="/admin/dashboard"  element={<AdminDashboardPage />} />
+        <Route path="/admin/overview"  element={<AdminDashboardPage />} />
         <Route path="/admin/users"      element={<AdminUsersPage />} />
         <Route path="/admin/companies"  element={<AdminCompaniesPage />} />
         <Route path="/admin/challenges" element={<AdminChallengesPage />} />
         <Route path="/admin/store"      element={<AdminStorePage />} />
         <Route path="/admin/skills"     element={<AdminSkillsPage />} />
         {/* Redirect /admin → /admin/dashboard */}
-        <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/admin" element={<Navigate to="" replace />} />
       </Route>
 
       {/* Default — role-aware redirect */}
@@ -132,7 +132,7 @@ const AppRoutes: React.FC = () => {
           !token
             ? <Navigate to="/login" replace />
             : role === "admin"
-              ? <Navigate to="/admin/dashboard" replace />
+              ? <Navigate to="/admin/overview" replace />
               : role === "company"
                 ? <Navigate to="/company/dashboard" replace />
                 : <Navigate to="/dashboard" replace />

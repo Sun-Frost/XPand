@@ -9,6 +9,8 @@ import type { SentimentLabel, SentimentResult } from "./useSentiment";
 export type ItemType = "READINESS_REPORT" | "MOCK_INTERVIEW" | "PRIORITY_SLOT";
 export type TransactionType = "CHALLENGE" | "STORE_PURCHASE";
 export type StoreCategory = "REPORT" | "INTERVIEW" | "VISIBILITY";
+// Mirrors com.example.xpandbackend.models.Enums.SlotRank — Jackson serialises enums as their name by default
+export type SlotRank = "FIRST" | "SECOND" | "THIRD";
 
 export interface StoreItemResponse {
   id: number;
@@ -23,6 +25,7 @@ export interface UserPurchaseResponse {
   itemId: number;
   itemName: string;
   itemType: ItemType;
+  slotRank: SlotRank | null; // FIRST/SECOND/THIRD for PRIORITY_SLOT; null for all other item types
   associatedJobId: number | null;
   associatedJobTitle: string | null;
   isUsed: boolean;

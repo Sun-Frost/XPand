@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { get, put, post, del } from "../../api/axios";
 
 // ---------------------------------------------------------------------------
@@ -165,6 +165,108 @@ const extractError = (err: unknown, fallback: string): string =>
   (err instanceof Error ? err.message : fallback);
 
 // ---------------------------------------------------------------------------
+// Helpers — duplicate-detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalise a URL so that cosmetic differences (trailing slash, case,
+ * http vs https, www prefix) don't let duplicates slip through.
+ * Returns null when the value is empty / null / undefined.
+ */
+function normalizeUrl(raw: string | null | undefined): string | null {
+  if (!raw?.trim()) return null;
+  try {
+    const url = new URL(raw.trim());
+    // lower-case hostname, drop trailing slash on pathname
+    return `${url.hostname.toLowerCase().replace(/^www\./, "")}${url.pathname.replace(/\/$/, "")}${url.search}`.toLowerCase();
+  } catch {
+    // Not a valid URL — fall back to plain lower-cased string
+    return raw.trim().toLowerCase().replace(/\/$/, "");
+  }
+}
+
+/**
+ * Returns true when two URL strings point to the same resource
+ * (after normalisation), ignoring nulls.
+ */
+function urlsMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+  const na = normalizeUrl(a);
+  const nb = normalizeUrl(b);
+  return na !== null && nb !== null && na === nb;
+}
+
+/**
+ * Throw if the project payload duplicates the title, projectUrl, or githubUrl
+ * of an already-saved project. Title is always checked (it is the mandatory
+ * uniqueness anchor when URLs are absent). URL fields are only checked when
+ * the payload actually provides them. Pass `excludeId` when editing so the
+ * project isn't compared against itself.
+ */
+function assertUniqueProject(
+  existing: Project[],
+  payload: ProjectPayload,
+  excludeId?: number
+): void {
+  const peers = excludeId !== undefined
+    ? existing.filter((p) => p.id !== excludeId)
+    : existing;
+
+  const newTitle = payload.title.trim().toLowerCase();
+
+  for (const p of peers) {
+    if (p.title.trim().toLowerCase() === newTitle) {
+      throw new Error(
+        `You already have a project named "${p.title}". `
+         +
+        "Adding a fake project might cost you losing your account."
+      );
+    }
+    if (payload.projectUrl && urlsMatch(payload.projectUrl, p.projectUrl)) {
+      throw new Error(
+        `A project with this Project URL already exists ("${p.title}"). `  +
+        "Adding a fake project might cost you losing your account."
+      );
+    }
+    if (payload.githubUrl && urlsMatch(payload.githubUrl, p.githubUrl)) {
+      throw new Error(
+        `A project with this GitHub URL already exists ("${p.title}"). `  +
+        "Adding a fake project might cost you losing your account."
+      );
+    }
+  }
+}
+
+/**
+ * Throw if the certification payload shares the same name + issuing
+ * organisation combination with an already-saved certification.
+ * Pass `excludeId` when editing.
+ */
+function assertUniqueCertification(
+  existing: Certification[],
+  payload: CertificationPayload,
+  excludeId?: number
+): void {
+  const peers = excludeId !== undefined
+    ? existing.filter((c) => c.id !== excludeId)
+    : existing;
+
+  const newName = payload.name.trim().toLowerCase();
+  const newOrg  = payload.issuingOrganization.trim().toLowerCase();
+
+  for (const c of peers) {
+    if (
+      c.name.trim().toLowerCase() === newName &&
+      c.issuingOrganization.trim().toLowerCase() === newOrg
+    ) {
+      throw new Error(
+        `You already have the certification "${c.name}" from "${c.issuingOrganization}". ` +
+        "Adding a fake certification might cost you losing your account."
+      );
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
 
@@ -174,6 +276,12 @@ export const useProfile = (): UseProfileReturn => {
   const [workExperiences, setWorkExperiences] = useState<WorkExperience[]>([]);
   const [certifications, setCertifications] = useState<Certification[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+
+  // Refs that mirror state so validation can read the current list
+  // synchronously without going through a state updater (throwing inside
+  // a state updater crashes React's reconciler).
+  const projectsRef       = useRef<Project[]>([]);
+  const certificationsRef = useRef<Certification[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -202,6 +310,8 @@ export const useProfile = (): UseProfileReturn => {
         setWorkExperiences(work);
         setCertifications(certs);
         setProjects(projs);
+        projectsRef.current       = projs;
+        certificationsRef.current = certs;
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(extractError(err, "Failed to load profile."));
@@ -284,39 +394,47 @@ export const useProfile = (): UseProfileReturn => {
   // ── Certifications ───────────────────────────────────────────
   const addCertification = useCallback((payload: CertificationPayload) =>
     withSave(async () => {
+      // Reject if name + issuing organisation duplicate an existing certification
+      assertUniqueCertification(certificationsRef.current, payload);
       const item = await post<Certification>("/user/certifications", payload);
-      setCertifications((prev) => [...prev, item]);
+      setCertifications((prev) => { const next = [...prev, item]; certificationsRef.current = next; return next; });
     }), [withSave]);
 
   const updateCertification = useCallback((id: number, payload: CertificationPayload) =>
     withSave(async () => {
+      // Reject if name + issuing organisation duplicate another existing certification
+      assertUniqueCertification(certificationsRef.current, payload, id);
       const item = await put<Certification>(`/user/certifications/${id}`, payload);
-      setCertifications((prev) => prev.map((c) => (c.id === id ? item : c)));
+      setCertifications((prev) => { const next = prev.map((c) => (c.id === id ? item : c)); certificationsRef.current = next; return next; });
     }), [withSave]);
 
   const deleteCertification = useCallback((id: number) =>
     withSave(async () => {
       await del(`/user/certifications/${id}`);
-      setCertifications((prev) => prev.filter((c) => c.id !== id));
+      setCertifications((prev) => { const next = prev.filter((c) => c.id !== id); certificationsRef.current = next; return next; });
     }), [withSave]);
 
   // ── Projects ─────────────────────────────────────────────────
   const addProject = useCallback((payload: ProjectPayload) =>
     withSave(async () => {
+      // Reject if title/URLs duplicate an existing project
+      assertUniqueProject(projectsRef.current, payload);
       const item = await post<Project>("/user/projects", payload);
-      setProjects((prev) => [...prev, item]);
+      setProjects((prev) => { const next = [...prev, item]; projectsRef.current = next; return next; });
     }), [withSave]);
 
   const updateProject = useCallback((id: number, payload: ProjectPayload) =>
     withSave(async () => {
+      // Reject if title/URLs duplicate another existing project
+      assertUniqueProject(projectsRef.current, payload, id);
       const item = await put<Project>(`/user/projects/${id}`, payload);
-      setProjects((prev) => prev.map((p) => (p.id === id ? item : p)));
+      setProjects((prev) => { const next = prev.map((p) => (p.id === id ? item : p)); projectsRef.current = next; return next; });
     }), [withSave]);
 
   const deleteProject = useCallback((id: number) =>
     withSave(async () => {
       await del(`/user/projects/${id}`);
-      setProjects((prev) => prev.filter((p) => p.id !== id));
+      setProjects((prev) => { const next = prev.filter((p) => p.id !== id); projectsRef.current = next; return next; });
     }), [withSave]);
 
   return {

@@ -5,45 +5,47 @@ import { useApplications } from "../../hooks/user/useApplications";
 import type { ApplicationResponse, ApplicationStatus } from "../../hooks/user/useApplications";
 
 // ---------------------------------------------------------------------------
-// Constants — aligned with backend ApplicationStatus.java exactly:
-// PENDING | SHORTLISTED | REJECTED | WITHDRAWN
-// SHORTLISTED is the company's "accept/advance" action — shown to user as "Shortlisted"
+// Constants
 // ---------------------------------------------------------------------------
 
 const STATUS_CONFIG: Record<
   ApplicationStatus,
-  { label: string; icon: string; cls: string; color: string; bg: string; border: string; description: string }
+  { label: string; icon: React.ReactNode; cls: string; color: string; bg: string; border: string; description: string; glyph: string }
 > = {
   PENDING: {
     label: "Under Review",
-    icon: "🔄",
+    icon: null,
+    glyph: "◎",
     cls: "pending",
     color: "var(--color-cyan-400)",
     bg: "var(--color-info-bg)",
     border: "var(--color-info-border)",
-    description: "Your application has been submitted and is awaiting review.",
+    description: "Your application has been submitted and is currently being reviewed by the team.",
   },
   SHORTLISTED: {
     label: "Shortlisted",
-    icon: "⭐",
+    icon: null,
+    glyph: "◈",
     cls: "shortlisted",
     color: "#A78BFA",
     bg: "rgba(167,139,250,0.10)",
     border: "rgba(167,139,250,0.30)",
-    description: "Great news — you've been shortlisted! The company is actively considering your profile.",
+    description: "You've been shortlisted — the company is actively considering your profile.",
   },
   REJECTED: {
     label: "Not Selected",
-    icon: "✕",
+    icon: null,
+    glyph: "✕",
     cls: "rejected",
     color: "var(--color-danger)",
     bg: "var(--color-danger-bg)",
     border: "var(--color-danger-border)",
-    description: "This application did not progress. Keep applying — the right role is ahead.",
+    description: "This application didn't progress. Keep applying — the right role is ahead.",
   },
   WITHDRAWN: {
     label: "Withdrawn",
-    icon: "↩",
+    icon: null,
+    glyph: "↩",
     cls: "withdrawn",
     color: "var(--color-text-muted)",
     bg: "var(--color-bg-overlay)",
@@ -88,56 +90,56 @@ function timeAgo(iso: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Timeline — real flow: PENDING → SHORTLISTED or PENDING → REJECTED/WITHDRAWN
+// Timeline
 // ---------------------------------------------------------------------------
 
-const StatusTimeline: React.FC<{ status: ApplicationStatus; prioritySlotRank?: number | null }> = ({ status, prioritySlotRank }) => {
+const StatusTimeline: React.FC<{ status: ApplicationStatus; prioritySlotRank?: number | null }> = ({
+  status,
+  prioritySlotRank,
+}) => {
   const isTerminal    = status === "REJECTED" || status === "WITHDRAWN";
   const isShortlisted = status === "SHORTLISTED";
+
+  const steps = [
+    { key: "submitted",  label: "Submitted",    done: true,         active: false,       failed: false,      special: false },
+    { key: "review",     label: "Under Review", done: isShortlisted, active: !isTerminal && !isShortlisted, failed: false, special: false },
+    { key: "outcome",    label: isTerminal ? STATUS_CONFIG[status].label : isShortlisted ? "Shortlisted" : "Decision",
+                         done: false, active: !isTerminal, failed: isTerminal, special: isShortlisted },
+  ];
 
   return (
     <div className="ap-timeline-wrap">
       {prioritySlotRank && (
-        <div className="ap-priority-queue-badge">
-          <span>⭐</span>
-          <span>Priority applicant — Queue position #{prioritySlotRank}</span>
-          <span className="ap-priority-queue-hint">Reviewed before regular applicants</span>
+        <div className="ap-priority-badge">
+          <span className="ap-priority-badge__star">⭐</span>
+          <span className="ap-priority-badge__text">Priority Queue — Position <strong>#{prioritySlotRank}</strong></span>
+          <span className="ap-priority-badge__hint">Reviewed before standard applicants</span>
         </div>
       )}
       <div className="ap-timeline">
-
-        {/* Step 1: Submitted (always past once we have an application) */}
-        <div className="ap-timeline__step is-past">
-          <div className="ap-timeline__dot"><span>✓</span></div>
-          <span className="ap-timeline__label">Submitted</span>
-        </div>
-
-        <div className={`ap-timeline__connector ${!isTerminal ? "is-filled" : ""}`} />
-
-        {/* Step 2: Under Review (active when PENDING, past when SHORTLISTED) */}
-        <div className={`ap-timeline__step ${isShortlisted ? "is-past" : isTerminal ? "" : "is-active"}`}>
-          <div className="ap-timeline__dot">
-            <span>{isShortlisted ? "✓" : "🔄"}</span>
-          </div>
-          <span className="ap-timeline__label">Under Review</span>
-        </div>
-
-        <div className={`ap-timeline__connector ${isShortlisted ? "is-filled" : ""}`} />
-
-        {/* Step 3: Outcome — SHORTLISTED / REJECTED / WITHDRAWN / Decision pending */}
-        {isTerminal ? (
-          <div className="ap-timeline__step is-failed is-active">
-            <div className="ap-timeline__dot"><span>{STATUS_CONFIG[status].icon}</span></div>
-            <span className="ap-timeline__label">{STATUS_CONFIG[status].label}</span>
-          </div>
-        ) : (
-          <div className={`ap-timeline__step ${isShortlisted ? "is-active is-shortlisted" : ""}`}>
-            <div className="ap-timeline__dot">
-              <span>{isShortlisted ? "⭐" : "🏁"}</span>
+        {steps.map((step, i) => (
+          <React.Fragment key={step.key}>
+            <div className={[
+              "ap-tl-step",
+              step.done    ? "is-done"    : "",
+              step.active  ? "is-active"  : "",
+              step.failed  ? "is-failed"  : "",
+              step.special ? "is-special" : "",
+            ].filter(Boolean).join(" ")}>
+              <div className="ap-tl-dot">
+                {step.done    && <span>✓</span>}
+                {step.active  && !step.special && <span className="ap-tl-pulse" />}
+                {step.special && <span>◈</span>}
+                {step.failed  && <span>{STATUS_CONFIG[status].glyph}</span>}
+                {!step.done && !step.active && !step.failed && !step.special && <span className="ap-tl-idle" />}
+              </div>
+              <span className="ap-tl-label">{step.label}</span>
             </div>
-            <span className="ap-timeline__label">{isShortlisted ? "Shortlisted" : "Decision"}</span>
-          </div>
-        )}
+            {i < steps.length - 1 && (
+              <div className={`ap-tl-line ${step.done ? "is-filled" : ""}`} />
+            )}
+          </React.Fragment>
+        ))}
       </div>
     </div>
   );
@@ -151,110 +153,112 @@ const ApplicationCard: React.FC<{
   app: ApplicationResponse;
   onWithdraw: (id: number) => void;
   isWithdrawing: boolean;
-}> = ({ app, onWithdraw, isWithdrawing }) => {
+  index: number;
+}> = ({ app, onWithdraw, isWithdrawing, index }) => {
   const navigate = useNavigate();
   const [showConfirm, setShowConfirm] = useState(false);
 
   const cfg = STATUS_CONFIG[app.status];
-  // Can only withdraw while still pending — once shortlisted or rejected it's final
   const canWithdraw = app.status === "PENDING";
+  const initial = app.jobTitle.charAt(0).toUpperCase();
 
   return (
-    <article className={`ap-card card ap-card--${cfg.cls} animate-fade-in`}>
+    <article
+      className={`ap-card ap-card--${cfg.cls} animate-fade-in`}
+      style={{ animationDelay: `${index * 55}ms` }}
+    >
+      {/* Left status stripe */}
+      <div className="ap-card__stripe" style={{ background: cfg.color }} />
 
-      {/* Accent bar */}
-      <div className="ap-card__accent" style={{ background: cfg.color }} />
+      <div className="ap-card__body">
 
-      <div className="ap-card__inner">
-
-        {/* ── Header row ── */}
-        <div className="ap-card__header">
-          <div className="ap-card__company-row">
-            <div className="ap-card__logo" style={{ borderColor: cfg.border, color: cfg.color }}>
-              {app.jobTitle.charAt(0).toUpperCase()}
+        {/* ── Top row: logo + title + badge ── */}
+        <div className="ap-card__top">
+          <div className="ap-card__logo-wrap">
+            <div className="ap-card__logo" style={{ color: cfg.color, borderColor: cfg.border }}>
+              {initial}
             </div>
-            <div className="ap-card__title-group">
-              <button
-                className="ap-card__job-title"
-                onClick={() => navigate(`/jobs/${app.jobId}`)}
-              >
-                {app.jobTitle}
-              </button>
-              <div className="ap-card__meta">
-                <span className="ap-card__meta-item">Applied {timeAgo(app.appliedAt)}</span>
-                <span className="ap-card__meta-sep">·</span>
-                <span className="ap-card__meta-item">{formatDate(app.appliedAt)}</span>
-                {app.prioritySlotRank && (
-                  <>
-                    <span className="ap-card__meta-sep">·</span>
-                    <span className="ap-priority-tag">
-                      ⚡ Priority #{app.prioritySlotRank}
-                    </span>
-                  </>
-                )}
-              </div>
+            {app.prioritySlotRank && (
+              <span className="ap-card__logo-star" title={`Priority #${app.prioritySlotRank}`}>⚡</span>
+            )}
+          </div>
+
+          <div className="ap-card__title-block">
+            <button
+              className="ap-card__job-title"
+              onClick={() => navigate(`/jobs/${app.jobId}`)}
+            >
+              {app.jobTitle}
+            </button>
+            <div className="ap-card__meta">
+              <span>{timeAgo(app.appliedAt)}</span>
+              <span className="ap-card__dot">·</span>
+              <span>{formatDate(app.appliedAt)}</span>
+              {app.prioritySlotRank && (
+                <>
+                  <span className="ap-card__dot">·</span>
+                  <span className="ap-priority-inline">⚡ Priority #{app.prioritySlotRank}</span>
+                </>
+              )}
             </div>
           </div>
 
-          <span
-            className="ap-status-badge"
+          <div
+            className={`ap-status-chip ap-status-chip--${cfg.cls}`}
             style={{ color: cfg.color, background: cfg.bg, borderColor: cfg.border }}
           >
-            {cfg.icon} {cfg.label}
-          </span>
+            <span className="ap-status-chip__glyph">{cfg.glyph}</span>
+            <span>{cfg.label}</span>
+          </div>
         </div>
 
         {/* ── Timeline ── */}
         <StatusTimeline status={app.status} prioritySlotRank={app.prioritySlotRank} />
 
-        {/* ── Status message ── */}
+        {/* ── Status description ── */}
         <div
-          className="ap-card__status-msg"
-          style={{ background: cfg.bg, borderColor: cfg.border, color: cfg.color }}
+          className="ap-card__msg"
+          style={{ borderColor: cfg.border, color: cfg.color }}
         >
-          <span style={{ opacity: 0.9 }}>{cfg.description}</span>
+          <span className="ap-card__msg-glyph">{cfg.glyph}</span>
+          <span className="ap-card__msg-text">{cfg.description}</span>
         </div>
 
         {/* ── Actions ── */}
-        <div className="ap-card__actions">
+        <div className="ap-card__footer">
           <button
-            className="btn btn-ghost btn-sm"
+            className="ap-btn ap-btn--ghost"
             onClick={() => navigate(`/jobs/${app.jobId}`)}
           >
-            View Job →
+            View Posting
+            <span className="ap-btn__arrow">→</span>
           </button>
 
-          {canWithdraw && !showConfirm && (
-            <button
-              className="btn btn-ghost btn-sm ap-withdraw-btn"
-              onClick={() => setShowConfirm(true)}
-            >
-              Withdraw
-            </button>
-          )}
-
-          {canWithdraw && showConfirm && (
-            <div className="ap-confirm-row">
-              <span className="label" style={{ color: "var(--color-text-muted)" }}>
-                Withdraw this application?
-              </span>
+          <div className="ap-card__footer-right">
+            {canWithdraw && !showConfirm && (
               <button
-                className="btn btn-sm"
-                style={{
-                  background: "var(--color-danger-bg)",
-                  border: "1px solid var(--color-danger-border)",
-                  color: "var(--color-danger)",
-                }}
-                onClick={() => { onWithdraw(app.id); setShowConfirm(false); }}
-                disabled={isWithdrawing}
+                className="ap-btn ap-btn--ghost ap-btn--danger"
+                onClick={() => setShowConfirm(true)}
               >
-                {isWithdrawing ? "Withdrawing…" : "Yes, withdraw"}
+                Withdraw
               </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowConfirm(false)}>
-                Cancel
-              </button>
-            </div>
-          )}
+            )}
+            {canWithdraw && showConfirm && (
+              <div className="ap-confirm">
+                <span className="ap-confirm__label">Withdraw this application?</span>
+                <button
+                  className="ap-btn ap-btn--danger-solid"
+                  onClick={() => { onWithdraw(app.id); setShowConfirm(false); }}
+                  disabled={isWithdrawing}
+                >
+                  {isWithdrawing ? "Withdrawing…" : "Yes, withdraw"}
+                </button>
+                <button className="ap-btn ap-btn--ghost" onClick={() => setShowConfirm(false)}>
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </article>
@@ -266,27 +270,28 @@ const ApplicationCard: React.FC<{
 // ---------------------------------------------------------------------------
 
 const SkeletonCard: React.FC = () => (
-  <div className="ap-card card" style={{ padding: "var(--space-6)" }}>
-    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
-      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <div className="skeleton" style={{ width: 42, height: 42, borderRadius: 10 }} />
-        <div>
-          <div className="skeleton" style={{ width: 180, height: 18, marginBottom: 8 }} />
-          <div className="skeleton" style={{ width: 110, height: 11 }} />
+  <div className="ap-card ap-skeleton-card animate-fade-in">
+    <div className="ap-card__stripe skeleton-stripe" />
+    <div className="ap-card__body">
+      <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 20 }}>
+        <div className="skeleton" style={{ width: 48, height: 48, borderRadius: 12, flexShrink: 0 }} />
+        <div style={{ flex: 1 }}>
+          <div className="skeleton" style={{ width: "55%", height: 18, marginBottom: 8, borderRadius: 6 }} />
+          <div className="skeleton" style={{ width: "35%", height: 12, borderRadius: 6 }} />
         </div>
+        <div className="skeleton" style={{ width: 100, height: 28, borderRadius: 999 }} />
       </div>
-      <div className="skeleton" style={{ width: 96, height: 26, borderRadius: 20 }} />
-    </div>
-    <div className="skeleton" style={{ width: "100%", height: 54, borderRadius: 12, marginBottom: 16 }} />
-    <div style={{ display: "flex", gap: 12 }}>
-      <div className="skeleton" style={{ width: 80, height: 30 }} />
-      <div className="skeleton" style={{ width: 80, height: 30 }} />
+      <div className="skeleton" style={{ width: "100%", height: 52, borderRadius: 10, marginBottom: 14 }} />
+      <div className="skeleton" style={{ width: "100%", height: 44, borderRadius: 8, marginBottom: 16 }} />
+      <div style={{ display: "flex", gap: 10, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+        <div className="skeleton" style={{ width: 110, height: 34, borderRadius: 8 }} />
+      </div>
     </div>
   </div>
 );
 
 // ---------------------------------------------------------------------------
-// Stats bar — updated to reflect real statuses
+// Stats Bar
 // ---------------------------------------------------------------------------
 
 const StatsBar: React.FC<{
@@ -297,30 +302,22 @@ const StatsBar: React.FC<{
 }> = ({ total, pending, shortlisted, rejected }) => {
   const shortlistRate = total > 0 ? Math.round((shortlisted / total) * 100) : null;
 
+  const stats = [
+    { value: total,       label: "Total",          color: "var(--color-text-primary)",  accent: "var(--color-border-default)" },
+    { value: pending,     label: "In Review",       color: "var(--color-cyan-400)",       accent: "var(--color-info-border)" },
+    { value: shortlisted, label: "Shortlisted",     color: "#A78BFA",                    accent: "rgba(167,139,250,0.28)" },
+    { value: rejected,    label: "Not Selected",    color: "var(--color-danger)",          accent: "var(--color-danger-border)" },
+    { value: shortlistRate !== null ? `${shortlistRate}%` : "—", label: "Shortlist Rate", color: "var(--color-gold-light, #F5B731)", accent: "var(--color-gold-border)" },
+  ];
+
   return (
-    <div className="ap-stats-row">
-      <div className="ap-stat-card ap-stat-card--total">
-        <span className="ap-stat-card__num">{total}</span>
-        <span className="ap-stat-card__lbl">Total</span>
-      </div>
-      <div className="ap-stat-card ap-stat-card--pending">
-        <span className="ap-stat-card__num">{pending}</span>
-        <span className="ap-stat-card__lbl">In Review</span>
-      </div>
-      <div className="ap-stat-card ap-stat-card--shortlisted">
-        <span className="ap-stat-card__num">{shortlisted}</span>
-        <span className="ap-stat-card__lbl">Shortlisted ⭐</span>
-      </div>
-      <div className="ap-stat-card ap-stat-card--rejected">
-        <span className="ap-stat-card__num">{rejected}</span>
-        <span className="ap-stat-card__lbl">Not Selected</span>
-      </div>
-      <div className="ap-stat-card ap-stat-card--rate">
-        <span className="ap-stat-card__num">
-          {shortlistRate !== null ? `${shortlistRate}%` : "—"}
-        </span>
-        <span className="ap-stat-card__lbl">Shortlist Rate</span>
-      </div>
+    <div className="ap-stats">
+      {stats.map((s) => (
+        <div key={s.label} className="ap-stat" style={{ borderColor: s.accent }}>
+          <span className="ap-stat__value" style={{ color: s.color }}>{s.value}</span>
+          <span className="ap-stat__label">{s.label}</span>
+        </div>
+      ))}
     </div>
   );
 };
@@ -331,8 +328,7 @@ const StatsBar: React.FC<{
 
 const ApplicationsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { applications, isLoading, error, withdraw, isWithdrawing, refetch } =
-    useApplications();
+  const { applications, isLoading, error, withdraw, isWithdrawing, refetch } = useApplications();
 
   const [activeTab, setActiveTab] = useState<ApplicationStatus | "ALL">("ALL");
 
@@ -355,32 +351,33 @@ const ApplicationsPage: React.FC = () => {
 
   if (error) {
     return (
-      <div className="page-content">
-        <div className="empty-state">
-          <div className="empty-state-icon">⚠️</div>
-          <h3>Failed to load applications</h3>
-          <p>{error}</p>
-          <button className="btn btn-primary btn-sm mt-4" onClick={refetch}>Retry</button>
+      <PageLayout pageTitle="My Applications">
+        <div className="ap-error">
+          <div className="ap-error__glyph">⚠</div>
+          <h3 className="ap-error__title">Failed to load applications</h3>
+          <p className="ap-error__msg">{error}</p>
+          <button className="ap-btn ap-btn--primary" onClick={refetch}>Try again</button>
         </div>
         <style>{styles}</style>
-      </div>
+      </PageLayout>
     );
   }
 
   return (
     <PageLayout pageTitle="My Applications">
 
-      {/* ── Header ── */}
-      <header className="ap-page-header">
-        <div>
-          <button className="btn btn-ghost btn-sm ap-back-btn" onClick={() => navigate("/jobs")}>
+      {/* ── Page Header ── */}
+      <header className="ap-header">
+        <div className="ap-header__left">
+          <button className="ap-back-btn" onClick={() => navigate("/jobs")}>
             ← Jobs
           </button>
-          <h1 className="ap-page-title">My Applications</h1>
-          <p className="ap-page-sub">Track every role you've applied to.</p>
+          <h1 className="ap-title">My Applications</h1>
+          <p className="ap-subtitle">Track every role you've applied to</p>
         </div>
-        <button className="btn btn-primary" onClick={() => navigate("/jobs")}>
-          Browse Jobs →
+        <button className="ap-btn ap-btn--primary ap-cta" onClick={() => navigate("/jobs")}>
+          Browse Jobs
+          <span className="ap-btn__arrow">→</span>
         </button>
       </header>
 
@@ -395,58 +392,64 @@ const ApplicationsPage: React.FC = () => {
       )}
 
       {/* ── Tabs ── */}
-      <div className="ap-tabs">
+      <div className="ap-tabs" role="tablist">
         {STATUS_TABS.map((tab) => {
           const count = tab === "ALL"
             ? stats.total
             : (stats[tab.toLowerCase() as keyof typeof stats] ?? 0);
+          const isActive = activeTab === tab;
           return (
             <button
               key={tab}
-              className={`ap-tab ${activeTab === tab ? "is-active" : ""}`}
+              role="tab"
+              aria-selected={isActive}
+              className={`ap-tab ${isActive ? "is-active" : ""}`}
               onClick={() => setActiveTab(tab)}
             >
               {STATUS_TAB_LABELS[tab]}
-              {count > 0 && <span className="ap-tab__count">{count}</span>}
+              {count > 0 && (
+                <span className={`ap-tab__count ${isActive ? "is-active" : ""}`}>
+                  {count}
+                </span>
+              )}
             </button>
           );
         })}
       </div>
 
-      {/* ── List ── */}
+      {/* ── Content ── */}
       {isLoading ? (
         <div className="ap-list">
           {[1, 2, 3].map((i) => <SkeletonCard key={i} />)}
         </div>
       ) : sorted.length === 0 ? (
-        <div className="empty-state mt-8">
-          <div className="empty-state-icon">
-            {activeTab === "ALL" ? "📋" : STATUS_CONFIG[activeTab as ApplicationStatus]?.icon ?? "📋"}
+        <div className="ap-empty">
+          <div className="ap-empty__icon">
+            {activeTab === "ALL" ? "📋" : STATUS_CONFIG[activeTab as ApplicationStatus]?.glyph ?? "◎"}
           </div>
-          <h3>
-            {activeTab === "ALL"
-              ? "No applications yet"
-              : `No ${STATUS_TAB_LABELS[activeTab].toLowerCase()} applications`}
+          <h3 className="ap-empty__title">
+            {activeTab === "ALL" ? "No applications yet" : `No ${STATUS_TAB_LABELS[activeTab].toLowerCase()} applications`}
           </h3>
-          <p>
+          <p className="ap-empty__sub">
             {activeTab === "ALL"
-              ? "Start applying to skill-matched jobs."
-              : "Switch tabs to see your other applications."}
+              ? "Start applying to skill-matched jobs and your progress will appear here."
+              : "Switch tabs to see applications in other stages."}
           </p>
           {activeTab === "ALL" && (
-            <button className="btn btn-primary btn-sm mt-4" onClick={() => navigate("/jobs")}>
+            <button className="ap-btn ap-btn--primary ap-cta" onClick={() => navigate("/jobs")}>
               Browse Jobs →
             </button>
           )}
         </div>
       ) : (
-        <div className="ap-list stagger">
-          {sorted.map((app) => (
+        <div className="ap-list">
+          {sorted.map((app, i) => (
             <ApplicationCard
               key={app.id}
               app={app}
               onWithdraw={withdraw}
               isWithdrawing={isWithdrawing}
+              index={i}
             />
           ))}
         </div>
@@ -462,85 +465,101 @@ const ApplicationsPage: React.FC = () => {
 // ---------------------------------------------------------------------------
 
 const styles = `
-  /* ── Page header ─────────────────────────────────── */
-  .ap-page-header {
+  /* ── Header ──────────────────────────────────────────── */
+  .ap-header {
     display: flex;
-    align-items: flex-start;
+    align-items: flex-end;
     justify-content: space-between;
     gap: var(--space-6);
     flex-wrap: wrap;
-    margin-bottom: var(--space-6);
+    margin-bottom: var(--space-8);
+    padding-bottom: var(--space-6);
+    border-bottom: 1px solid var(--color-border-subtle);
   }
 
-  .ap-back-btn { margin-bottom: var(--space-3); }
+  .ap-back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+    color: var(--color-text-muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    margin-bottom: var(--space-3);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    transition: color var(--duration-fast) var(--ease-out);
+  }
+  .ap-back-btn:hover { color: var(--color-text-secondary); }
 
-  .ap-page-title {
+  .ap-title {
     font-family: var(--font-display);
-    font-size: var(--text-2xl);
-    font-weight: var(--weight-bold);
+    font-size: clamp(1.6rem, 3vw, 2.25rem);
+    font-weight: var(--weight-extrabold);
     color: var(--color-text-primary);
+    letter-spacing: -0.03em;
     margin: 0 0 var(--space-1);
+    line-height: 1.1;
   }
 
-  .ap-page-sub {
+  .ap-subtitle {
     font-size: var(--text-sm);
     color: var(--color-text-muted);
     margin: 0;
   }
 
-  /* ── Stats row ────────────────────────────────────── */
-  .ap-stats-row {
-    display: flex;
+  /* ── Stats ────────────────────────────────────────────── */
+  .ap-stats {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
     gap: var(--space-3);
-    flex-wrap: wrap;
-    margin-bottom: var(--space-6);
+    margin-bottom: var(--space-7);
   }
 
-  .ap-stat-card {
-    flex: 1;
-    min-width: 80px;
+  @media (max-width: 900px) { .ap-stats { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 560px) { .ap-stats { grid-template-columns: repeat(2, 1fr); } }
+
+  .ap-stat {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    padding: var(--space-4) var(--space-4);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--color-border-default);
+    gap: 5px;
+    padding: var(--space-4) var(--space-5);
     background: var(--color-bg-elevated);
-    text-align: center;
+    border: 1px solid;
+    border-radius: var(--radius-xl);
+    transition: transform var(--duration-fast) var(--ease-out);
   }
+  .ap-stat:hover { transform: translateY(-1px); }
 
-  .ap-stat-card--total       { background: var(--color-bg-overlay); }
-  .ap-stat-card--pending     { background: var(--color-info-bg); border-color: var(--color-info-border); }
-  .ap-stat-card--shortlisted { background: rgba(167,139,250,0.08); border-color: rgba(167,139,250,0.28); }
-  .ap-stat-card--shortlisted .ap-stat-card__num { color: #A78BFA; }
-  .ap-stat-card--rejected    { background: var(--color-danger-bg); border-color: var(--color-danger-border); }
-  .ap-stat-card--rate {
-    background: linear-gradient(135deg, rgba(167,139,250,0.08), rgba(34,211,238,0.06));
-    border-color: var(--color-border-strong);
-  }
-
-  .ap-stat-card__num {
+  .ap-stat__value {
     font-family: var(--font-display);
-    font-size: var(--text-2xl);
-    font-weight: var(--weight-bold);
-    color: var(--color-text-primary);
+    font-size: 1.75rem;
+    font-weight: var(--weight-extrabold);
     line-height: 1;
+    letter-spacing: -0.04em;
   }
 
-  .ap-stat-card__lbl {
+  .ap-stat__label {
     font-size: var(--text-xs);
     color: var(--color-text-muted);
-    white-space: nowrap;
+    font-weight: var(--weight-medium);
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
   }
 
-  /* ── Tabs ─────────────────────────────────────────── */
+  /* ── Tabs ─────────────────────────────────────────────── */
   .ap-tabs {
     display: flex;
-    gap: 2px;
-    border-bottom: 1px solid var(--color-border-subtle);
-    margin-bottom: var(--space-5);
+    gap: var(--space-1);
+    margin-bottom: var(--space-6);
     overflow-x: auto;
+    padding: 3px;
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-xl);
     -webkit-overflow-scrolling: touch;
   }
 
@@ -548,25 +567,24 @@ const styles = `
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
-    padding: var(--space-3) var(--space-4);
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    cursor: pointer;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-lg);
     font-size: var(--text-sm);
     font-family: var(--font-body);
+    font-weight: var(--weight-medium);
     color: var(--color-text-muted);
+    background: transparent;
+    border: none;
+    cursor: pointer;
     white-space: nowrap;
     transition: color var(--duration-fast) var(--ease-out),
-                border-color var(--duration-fast) var(--ease-out);
-    margin-bottom: -1px;
+                background var(--duration-fast) var(--ease-out);
   }
-
-  .ap-tab:hover { color: var(--color-text-secondary); }
+  .ap-tab:hover { color: var(--color-text-secondary); background: var(--color-bg-hover); }
 
   .ap-tab.is-active {
     color: var(--color-primary-400);
-    border-bottom-color: var(--color-primary-400);
+    background: var(--color-primary-glow);
     font-weight: var(--weight-semibold);
   }
 
@@ -574,75 +592,89 @@ const styles = `
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 18px;
+    min-width: 20px;
     height: 18px;
-    padding: 0 5px;
-    border-radius: var(--radius-full);
+    padding: 0 6px;
+    border-radius: 99px;
     background: var(--color-bg-overlay);
-    border: 1px solid var(--color-border-default);
-    font-family: var(--font-mono);
     font-size: 10px;
+    font-family: var(--font-mono);
     font-weight: var(--weight-bold);
-    color: var(--color-text-muted);
+    color: var(--color-text-disabled);
+    line-height: 1;
   }
-
-  .ap-tab.is-active .ap-tab__count {
-    background: var(--color-primary-glow);
-    border-color: var(--color-border-focus);
+  .ap-tab__count.is-active {
+    background: rgba(155,124,255,0.22);
     color: var(--color-primary-400);
   }
 
-  /* ── List ─────────────────────────────────────────── */
+  /* ── Card List ────────────────────────────────────────── */
   .ap-list {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-3);
   }
 
-  /* ── Card ─────────────────────────────────────────── */
+  /* ── Card ─────────────────────────────────────────────── */
   .ap-card {
-    position: relative;
+    display: flex;
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-xl);
     overflow: hidden;
-    padding: 0;
-    border-left: 3px solid var(--color-border-default);
     transition: transform var(--duration-base) var(--ease-spring),
+                border-color var(--duration-fast) var(--ease-out),
                 box-shadow var(--duration-base) var(--ease-out);
+    will-change: transform;
   }
 
-  .ap-card:hover { transform: translateX(2px); }
+  .ap-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--color-border-strong);
+    box-shadow: var(--shadow-md);
+  }
 
-  .ap-card--shortlisted { border-left-color: #A78BFA; }
-  .ap-card--pending     { border-left-color: var(--color-cyan-400); }
-  .ap-card--rejected    { border-left-color: var(--color-danger); }
-  .ap-card--withdrawn   { border-left-color: var(--color-border-strong); opacity: 0.72; }
+  .ap-card--shortlisted:hover { box-shadow: 0 8px 28px rgba(167,139,250,0.12); }
+  .ap-card--pending:hover     { box-shadow: 0 8px 28px rgba(34,211,238,0.10); }
+  .ap-card--rejected          { opacity: 0.85; }
+  .ap-card--withdrawn         { opacity: 0.65; }
 
-  .ap-card__inner {
-    padding: var(--space-6);
+  .ap-card__stripe {
+    width: 3px;
+    flex-shrink: 0;
+    border-radius: var(--radius-full) 0 0 var(--radius-full);
+    opacity: 0.9;
+  }
+
+  .ap-skeleton-card .skeleton-stripe {
+    background: var(--color-bg-overlay);
+  }
+
+  .ap-card__body {
+    flex: 1;
+    padding: var(--space-5) var(--space-6);
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
-  }
-
-  /* Header */
-  .ap-card__header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-  }
-
-  .ap-card__company-row {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-3);
-    flex: 1;
     min-width: 0;
   }
 
+  /* ── Card top row ─────────────────────────────────────── */
+  .ap-card__top {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+  }
+
+  .ap-card__logo-wrap {
+    position: relative;
+    flex-shrink: 0;
+  }
+
   .ap-card__logo {
-    width: 42px;
-    height: 42px;
+    width: 48px;
+    height: 48px;
     border-radius: var(--radius-lg);
     background: var(--color-bg-overlay);
     border: 1px solid;
@@ -650,16 +682,33 @@ const styles = `
     align-items: center;
     justify-content: center;
     font-family: var(--font-display);
-    font-weight: var(--weight-bold);
-    font-size: var(--text-lg);
-    flex-shrink: 0;
+    font-weight: var(--weight-extrabold);
+    font-size: var(--text-xl);
+    line-height: 1;
   }
 
-  .ap-card__title-group {
+  .ap-card__logo-star {
+    position: absolute;
+    bottom: -4px;
+    right: -4px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(245,158,11,0.15);
+    border: 1px solid rgba(245,158,11,0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+  }
+
+  .ap-card__title-block {
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    min-width: 0;
+    gap: 5px;
+    padding-top: 2px;
   }
 
   .ap-card__job-title {
@@ -672,205 +721,201 @@ const styles = `
     padding: 0;
     cursor: pointer;
     text-align: left;
-    line-height: 1.2;
-    transition: color var(--duration-fast) var(--ease-out);
-    white-space: nowrap;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 420px;
+    white-space: nowrap;
+    max-width: 440px;
+    transition: color var(--duration-fast) var(--ease-out);
   }
-
   .ap-card__job-title:hover { color: var(--color-primary-400); }
 
   .ap-card__meta {
     display: flex;
     align-items: center;
+    gap: var(--space-2);
     flex-wrap: wrap;
-    gap: var(--space-1);
-  }
-
-  .ap-card__meta-item {
     font-size: var(--text-xs);
     color: var(--color-text-muted);
   }
 
-  .ap-card__meta-sep { color: var(--color-border-strong); font-size: var(--text-xs); }
+  .ap-card__dot { color: var(--color-border-strong); }
 
-  .ap-priority-tag {
+  .ap-priority-inline {
     display: inline-flex;
     align-items: center;
     gap: 3px;
-    font-size: var(--text-xs);
     font-weight: var(--weight-semibold);
-    color: var(--color-gold-300, #FCD34D);
-    background: rgba(245,158,11,0.10);
-    border: 1px solid rgba(245,158,11,0.30);
-    border-radius: var(--radius-full);
-    padding: 1px 8px;
+    color: var(--color-gold-light, #F5B731);
   }
 
-  /* Status badge */
-  .ap-status-badge {
+  /* ── Status chip ──────────────────────────────────────── */
+  .ap-status-chip {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 12px;
-    border-radius: var(--radius-full);
+    gap: 6px;
+    padding: 5px 13px;
+    border-radius: 99px;
     border: 1px solid;
     font-size: var(--text-xs);
     font-weight: var(--weight-semibold);
+    letter-spacing: 0.04em;
     white-space: nowrap;
     flex-shrink: 0;
-    letter-spacing: 0.02em;
+    font-family: var(--font-mono);
   }
 
-  /* ── Timeline wrapper ─────────────────────────────── */
-  .ap-timeline-wrap {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
+  .ap-status-chip__glyph { font-size: 10px; opacity: 0.9; }
 
-  /* Priority queue badge — shown above timeline when user has a priority slot */
-  .ap-priority-queue-badge {
+  /* ── Priority badge ───────────────────────────────────── */
+  .ap-priority-badge {
     display: flex;
     align-items: center;
     gap: var(--space-2);
     padding: var(--space-2) var(--space-4);
-    background: rgba(245,158,11,0.08);
-    border: 1px solid rgba(245,158,11,0.25);
+    background: rgba(245,158,11,0.07);
+    border: 1px solid rgba(245,158,11,0.22);
     border-radius: var(--radius-lg);
     font-size: var(--text-xs);
-    font-weight: var(--weight-semibold);
     color: #F59E0B;
   }
 
-  .ap-priority-queue-hint {
+  .ap-priority-badge__text { font-weight: var(--weight-medium); }
+  .ap-priority-badge__hint {
     margin-left: auto;
-    font-weight: 400;
     color: var(--color-text-muted);
+    font-weight: 400;
     font-size: 11px;
   }
 
-  /* Shortlisted state in timeline */
-  .ap-timeline__step.is-shortlisted .ap-timeline__dot {
-    border-color: #A78BFA;
-    background: rgba(167,139,250,0.10);
-    color: #A78BFA;
-    box-shadow: 0 0 10px rgba(167,139,250,0.25);
-  }
-  .ap-timeline__step.is-shortlisted .ap-timeline__label { color: #A78BFA; }
-
-  /* ── Timeline ─────────────────────────────────────── */
+  /* ── Timeline ─────────────────────────────────────────── */
   .ap-timeline {
     display: flex;
     align-items: center;
-    padding: var(--space-3) var(--space-4);
-    background: var(--color-bg-overlay);
+    padding: var(--space-3) var(--space-5);
+    background: var(--color-bg-base);
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-lg);
     overflow-x: auto;
-    gap: 0;
   }
 
-  .ap-timeline__step {
+  .ap-tl-step {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--space-1);
+    gap: 6px;
     flex-shrink: 0;
   }
 
-  .ap-timeline__dot {
-    width: 30px;
-    height: 30px;
-    border-radius: var(--radius-full);
+  .ap-tl-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
     border: 2px solid var(--color-border-default);
     background: var(--color-bg-elevated);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 12px;
+    font-size: 11px;
     color: var(--color-text-disabled);
     transition: all var(--duration-base) var(--ease-out);
   }
 
-  .ap-timeline__step.is-active .ap-timeline__dot {
+  .ap-tl-step.is-done .ap-tl-dot {
+    border-color: var(--color-green-400);
+    background: rgba(45,212,160,0.10);
+    color: var(--color-green-400);
+  }
+
+  .ap-tl-step.is-active .ap-tl-dot {
     border-color: var(--color-cyan-400);
-    background: var(--color-cyan-glow, rgba(34,211,238,0.08));
+    background: rgba(34,211,238,0.08);
     color: var(--color-cyan-400);
-    box-shadow: var(--glow-cyan, 0 0 10px rgba(34,211,238,0.2));
+    box-shadow: var(--glow-cyan);
   }
 
-  .ap-timeline__step.is-past .ap-timeline__dot {
-    border-color: var(--color-verified, #34D399);
-    background: var(--color-verified-bg);
-    color: var(--color-verified, #34D399);
-  }
-
-  /* Shortlisted = positive outcome — purple glow */
-  .ap-timeline__step.is-shortlisted .ap-timeline__dot {
+  .ap-tl-step.is-special .ap-tl-dot {
     border-color: #A78BFA;
     background: rgba(167,139,250,0.12);
     color: #A78BFA;
     box-shadow: 0 0 14px rgba(167,139,250,0.30);
   }
 
-  .ap-timeline__step.is-failed .ap-timeline__dot {
+  .ap-tl-step.is-failed .ap-tl-dot {
     border-color: var(--color-danger);
     background: var(--color-danger-bg);
     color: var(--color-danger);
+    box-shadow: 0 0 10px rgba(248,113,113,0.25);
   }
 
-  .ap-timeline__step.is-active.is-failed .ap-timeline__dot {
-    box-shadow: 0 0 10px rgba(248,113,113,0.3);
+  .ap-tl-pulse {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--color-cyan-400);
+    animation: tlPulse 1.8s ease-in-out infinite;
   }
 
-  .ap-timeline__label {
+  @keyframes tlPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.4); opacity: 0.6; }
+  }
+
+  .ap-tl-idle {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--color-border-default);
+  }
+
+  .ap-tl-label {
     font-size: 10px;
     color: var(--color-text-disabled);
     white-space: nowrap;
-    text-align: center;
-    margin-top: 2px;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.04em;
+    font-weight: var(--weight-medium);
+    text-transform: uppercase;
   }
 
-  .ap-timeline__step.is-active       .ap-timeline__label { color: var(--color-cyan-400); }
-  .ap-timeline__step.is-past         .ap-timeline__label { color: var(--color-verified, #34D399); }
-  .ap-timeline__step.is-shortlisted  .ap-timeline__label { color: #A78BFA; }
-  .ap-timeline__step.is-failed       .ap-timeline__label { color: var(--color-danger); }
+  .ap-tl-step.is-done    .ap-tl-label { color: var(--color-green-400); }
+  .ap-tl-step.is-active  .ap-tl-label { color: var(--color-cyan-400); }
+  .ap-tl-step.is-special .ap-tl-label { color: #A78BFA; }
+  .ap-tl-step.is-failed  .ap-tl-label { color: var(--color-danger); }
 
-  .ap-timeline__connector {
+  .ap-tl-line {
     flex: 1;
     height: 2px;
-    background: var(--color-border-default);
-    margin-bottom: 18px;
-    min-width: 24px;
+    background: var(--color-border-subtle);
+    min-width: 32px;
+    margin-bottom: 22px;
     transition: background var(--duration-base) var(--ease-out);
   }
+  .ap-tl-line.is-filled { background: var(--color-green-400); }
 
-  .ap-timeline__connector.is-filled { background: var(--color-verified, #34D399); }
-  .ap-timeline__connector.is-dashed {
-    background: repeating-linear-gradient(
-      90deg,
-      var(--color-border-strong) 0,
-      var(--color-border-strong) 4px,
-      transparent 4px,
-      transparent 8px
-    );
-  }
-
-  /* ── Status message ───────────────────────────────── */
-  .ap-card__status-msg {
+  /* ── Status message ───────────────────────────────────── */
+  .ap-card__msg {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
-    border-radius: var(--radius-md);
-    font-size: var(--text-sm);
+    background: var(--color-bg-base);
     border: 1px solid;
+    border-radius: var(--radius-lg);
+    font-size: var(--text-sm);
     line-height: var(--leading-relaxed);
+    opacity: 0.92;
   }
 
-  /* ── Actions ──────────────────────────────────────── */
-  .ap-card__actions {
+  .ap-card__msg-glyph {
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 1px;
+    font-family: var(--font-mono);
+  }
+
+  .ap-card__msg-text { color: var(--color-text-secondary); }
+
+  /* ── Card Footer ──────────────────────────────────────── */
+  .ap-card__footer {
     display: flex;
     align-items: center;
     gap: var(--space-3);
@@ -879,31 +924,143 @@ const styles = `
     flex-wrap: wrap;
   }
 
-  .ap-withdraw-btn {
-    color: var(--color-danger) !important;
+  .ap-card__footer-right {
     margin-left: auto;
-  }
-
-  .ap-withdraw-btn:hover {
-    background: var(--color-danger-bg) !important;
-    border-color: var(--color-danger-border) !important;
-  }
-
-  .ap-confirm-row {
     display: flex;
     align-items: center;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-    margin-left: auto;
+    gap: var(--space-2);
   }
 
-  /* ── Responsive ───────────────────────────────────── */
+  /* ── Buttons ──────────────────────────────────────────── */
+  .ap-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 7px 16px;
+    border-radius: var(--radius-lg);
+    font-size: var(--text-sm);
+    font-family: var(--font-body);
+    font-weight: var(--weight-medium);
+    cursor: pointer;
+    border: 1px solid;
+    transition: all var(--duration-fast) var(--ease-out);
+    white-space: nowrap;
+    line-height: 1;
+  }
+
+  .ap-btn--primary {
+    background: var(--color-primary-500);
+    border-color: var(--color-primary-600);
+    color: var(--color-text-on-brand);
+  }
+  .ap-btn--primary:hover {
+    background: var(--color-primary-400);
+    box-shadow: var(--glow-primary);
+  }
+
+  .ap-btn--ghost {
+    background: transparent;
+    border-color: var(--color-border-default);
+    color: var(--color-text-secondary);
+  }
+  .ap-btn--ghost:hover {
+    background: var(--color-bg-hover);
+    border-color: var(--color-border-strong);
+    color: var(--color-text-primary);
+  }
+
+  .ap-btn--danger {
+    color: var(--color-danger);
+    background: transparent;
+    border-color: var(--color-border-default);
+  }
+  .ap-btn--danger:hover {
+    background: var(--color-danger-bg);
+    border-color: var(--color-danger-border);
+  }
+
+  .ap-btn--danger-solid {
+    background: var(--color-danger-bg);
+    border-color: var(--color-danger-border);
+    color: var(--color-danger);
+  }
+  .ap-btn--danger-solid:hover {
+    background: rgba(248,113,113,0.18);
+  }
+  .ap-btn--danger-solid:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .ap-btn__arrow { font-size: 13px; transition: transform var(--duration-fast) var(--ease-out); }
+  .ap-btn:hover .ap-btn__arrow { transform: translateX(3px); }
+
+  .ap-cta { font-weight: var(--weight-semibold); }
+
+  /* ── Confirm row ──────────────────────────────────────── */
+  .ap-confirm {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  .ap-confirm__label {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+  }
+
+  /* ── Error state ──────────────────────────────────────── */
+  .ap-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-16) var(--space-8);
+    text-align: center;
+  }
+  .ap-error__glyph { font-size: 2rem; }
+  .ap-error__title { font-family: var(--font-display); font-weight: var(--weight-bold); color: var(--color-text-primary); }
+  .ap-error__msg   { font-size: var(--text-sm); color: var(--color-text-muted); }
+
+  /* ── Empty state ──────────────────────────────────────── */
+  .ap-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-16) var(--space-8);
+    text-align: center;
+    background: var(--color-bg-elevated);
+    border: 1px dashed var(--color-border-default);
+    border-radius: var(--radius-2xl);
+  }
+  .ap-empty__icon  { font-size: 2.5rem; }
+  .ap-empty__title {
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+    font-weight: var(--weight-bold);
+    color: var(--color-text-primary);
+    margin: 0;
+  }
+  .ap-empty__sub {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    max-width: 360px;
+    line-height: var(--leading-relaxed);
+    margin: 0;
+  }
+
+  /* ── Responsive ───────────────────────────────────────── */
   @media (max-width: 768px) {
-    .ap-page-header { flex-direction: column; }
-    .ap-stats-row   { gap: var(--space-2); }
-    .ap-stat-card   { min-width: calc(50% - var(--space-2)); }
-    .ap-card__inner { padding: var(--space-4); }
+    .ap-header          { align-items: flex-start; }
+    .ap-card__body      { padding: var(--space-4); }
     .ap-card__job-title { max-width: 100%; }
+    .ap-card__top       { flex-wrap: wrap; }
+    .ap-status-chip     { order: -1; }
+    .ap-priority-badge  { flex-wrap: wrap; }
+    .ap-priority-badge__hint { margin-left: 0; }
   }
 `;
 

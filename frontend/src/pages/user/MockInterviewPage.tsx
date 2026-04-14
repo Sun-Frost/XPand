@@ -356,6 +356,94 @@ const StepByStepScreen: React.FC<{
   const qtype = QTYPE_CONFIG[currentQuestion.type];
   const tone  = TONE_CONFIG[currentQuestion.tone];
 
+  // ---------------------------------------------------------------------------
+  // Rolling sentiment sampler
+  // Polls every SAMPLE_INTERVAL_MS while the question is active (before submit).
+  // Samples are weighted: earlier samples (reading phase) count more than later
+  // ones (typing phase) to capture the genuine first-reaction sentiment.
+  // When the user submits, we pick the dominant label by weighted vote.
+  // ---------------------------------------------------------------------------
+  const SAMPLE_INTERVAL_MS = 4000; // capture every 4 s
+  const samplesRef = useRef<Array<{ label: SentimentLabel; confidence: number; weight: number }>>([]);
+  const sampleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sampleCountRef = useRef(0);
+  const isCapturingRef = useRef(false);
+
+  // Reset samples whenever the question changes
+  useEffect(() => {
+    samplesRef.current = [];
+    sampleCountRef.current = 0;
+  }, [currentQuestionIndex]);
+
+  // Start/stop the interval based on whether the question is active
+  useEffect(() => {
+    const shouldSample = permission === "granted" && !hasFeedback && !feedbackLoading;
+
+    if (!shouldSample) {
+      if (sampleTimerRef.current) {
+        clearInterval(sampleTimerRef.current);
+        sampleTimerRef.current = null;
+      }
+      return;
+    }
+
+    // Kick off an immediate first sample (captures the reading reaction)
+    const doSample = async () => {
+      if (isCapturingRef.current) return; // skip if a capture is already in-flight
+      isCapturingRef.current = true;
+      try {
+        const result = await captureAndAnalyse();
+        if (result.label !== "unknown") {
+          // Weight: first 2 samples (reading phase) get 2×, rest get 1×
+          const n = sampleCountRef.current;
+          const weight = n < 2 ? 2 : 1;
+          samplesRef.current.push({ label: result.label, confidence: result.confidence, weight });
+          sampleCountRef.current += 1;
+        }
+      } finally {
+        isCapturingRef.current = false;
+      }
+    };
+
+    doSample(); // immediate sample when question appears
+    sampleTimerRef.current = setInterval(doSample, SAMPLE_INTERVAL_MS);
+
+    return () => {
+      if (sampleTimerRef.current) {
+        clearInterval(sampleTimerRef.current);
+        sampleTimerRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentQuestionIndex, permission, hasFeedback, feedbackLoading]);
+
+  /** Derive the dominant sentiment from accumulated weighted samples. */
+  const getDominantSentiment = useCallback((): SentimentResult => {
+    const samples = samplesRef.current;
+    if (samples.length === 0) {
+      // No samples — fall back to a live capture at submit time
+      return { label: "neutral", confidence: 0.5 };
+    }
+
+    // Weighted vote across all labels
+    const scores: Partial<Record<SentimentLabel, number>> = {};
+    let totalWeight = 0;
+    for (const s of samples) {
+      scores[s.label] = (scores[s.label] ?? 0) + s.weight * s.confidence;
+      totalWeight += s.weight;
+    }
+
+    // Pick the label with the highest weighted score
+    const [dominantLabel, dominantScore] = (Object.entries(scores) as [SentimentLabel, number][])
+      .sort(([, a], [, b]) => b - a)[0];
+
+    return {
+      label: dominantLabel,
+      confidence: Math.min(dominantScore / Math.max(totalWeight, 1), 1),
+      rawExpressions: undefined,
+    };
+  }, []);
+
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -370,9 +458,21 @@ const StepByStepScreen: React.FC<{
   }, [hasFeedback]);
 
   const handleSubmit = useCallback(async () => {
-    const sentiment = await captureAndAnalyse();
+    // Stop the sampler immediately so no new samples race with submission
+    if (sampleTimerRef.current) {
+      clearInterval(sampleTimerRef.current);
+      sampleTimerRef.current = null;
+    }
+
+    // Use the weighted rolling average if we have samples; otherwise fall back
+    // to a final live capture so we never send an empty sentiment.
+    const sentiment =
+      samplesRef.current.length > 0
+        ? getDominantSentiment()
+        : await captureAndAnalyse();
+
     onSubmitAnswer(sentiment);
-  }, [captureAndAnalyse, onSubmitAnswer]);
+  }, [captureAndAnalyse, getDominantSentiment, onSubmitAnswer]);
 
   const canSubmit = currentAnswer.trim().length > 10 && !isFetchingFeedback && !hasFeedback && !feedbackLoading;
 

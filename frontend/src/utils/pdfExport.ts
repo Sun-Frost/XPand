@@ -24,15 +24,31 @@ async function loadHtml2Pdf(): Promise<typeof window.html2pdf> {
 }
 
 /** Wraps content in a styled PDF shell that matches XPand branding. */
-function buildPdfWrapper(innerHtml: string, title: string, subtitle?: string): HTMLElement {
+function buildPdfWrapper(innerHtml: string, title: string, subtitle?: string): { container: HTMLElement; wrapper: HTMLElement } {
+  // Position off-screen BELOW the viewport (not to the left) so html2canvas
+  // renders the element starting at x:0, preventing left-side clipping.
+  const container = document.createElement("div");
+  container.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: -1;
+    opacity: 0;
+    width: 794px;
+    background: #ffffff;
+    overflow: visible;
+  `;
+
   const wrapper = document.createElement("div");
+  wrapper.style.width = "794px";
+  wrapper.style.maxWidth = "794px";
+  wrapper.style.margin = "0 auto";
   wrapper.style.cssText = `
     font-family: 'Inter', 'Segoe UI', sans-serif;
     background: #ffffff;
     color: #1a1a2e;
     padding: 48px;
-    max-width: 900px;
-    margin: 0 auto;
+    width: 794px;
     box-sizing: border-box;
   `;
 
@@ -58,26 +74,28 @@ function buildPdfWrapper(innerHtml: string, title: string, subtitle?: string): H
     </div>
   `;
 
-  document.body.appendChild(wrapper);
-  return wrapper;
+  container.appendChild(wrapper);
+  document.body.appendChild(container);
+  return { container, wrapper };
 }
 
 /** Core export: renders innerHtml as a styled PDF. */
 export async function exportToPdf(innerHtml: string, options: PdfOptions): Promise<void> {
+  await document.fonts.ready;
   const html2pdf = await loadHtml2Pdf();
-  const wrapper = buildPdfWrapper(innerHtml, options.title ?? options.filename, options.subtitle);
+  const { container, wrapper } = buildPdfWrapper(innerHtml, options.title ?? options.filename, options.subtitle);
   const pdfOptions = {
     margin: 0,
     filename: `${options.filename}.pdf`,
     image: { type: "jpeg", quality: 0.97 },
     html2canvas: { scale: 2, useCORS: true, logging: false },
     jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-    pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+    pagebreak: { mode: ["css", "legacy"] },
   };
   try {
     await html2pdf().set(pdfOptions).from(wrapper).save();
   } finally {
-    document.body.removeChild(wrapper);
+    document.body.removeChild(container);
   }
 }
 

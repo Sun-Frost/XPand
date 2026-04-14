@@ -101,9 +101,6 @@ const CompanyDashboardPage: React.FC = () => {
             </div>
           </div>
         </div>
-        <button className="btn btn-xp" onClick={() => navigate("/company/jobs/new")}>
-          ＋ Post a Job
-        </button>
       </div>
 
       {/* ── Stats ── */}

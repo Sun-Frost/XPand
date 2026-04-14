@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import CompanyPageLayout from "../../components/company/companyPageLayout";
 import { useCompanyJobs, useJobApplicants } from "../../hooks/company/useCompany";
+import { exportApplicantCvPdf } from "../../utils/pdfExport";
 import type {
   ApplicationResponse,
   ApplicationStatus,
@@ -26,6 +27,7 @@ interface ApplicantRichProfile {
   isLoading: boolean;
   error: string | null;
 }
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -49,23 +51,23 @@ const getInitials = (name: string) =>
   name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
 // ---------------------------------------------------------------------------
-// Status config — PENDING | SHORTLISTED | REJECTED | WITHDRAWN
+// Status config
 // ---------------------------------------------------------------------------
 
 const STATUS_CONFIG: Record<ApplicationStatus, {
   label: string; color: string; bg: string; border: string; dot: string;
 }> = {
-  PENDING: { label: "Pending", color: "#94A3B8", bg: "rgba(148,163,184,.1)", border: "rgba(148,163,184,.25)", dot: "#94A3B8" },
-  SHORTLISTED: { label: "Shortlisted", color: "#22D3EE", bg: "rgba(34,211,238,.1)", border: "rgba(34,211,238,.28)", dot: "#22D3EE" },
-  REJECTED: { label: "Rejected", color: "#F87171", bg: "rgba(248,113,113,.1)", border: "rgba(248,113,113,.28)", dot: "#F87171" },
-  WITHDRAWN: { label: "Withdrawn", color: "#64748B", bg: "rgba(100,116,139,.08)", border: "rgba(100,116,139,.2)", dot: "#64748B" },
+  PENDING:     { label: "Pending",     color: "#94A3B8", bg: "rgba(148,163,184,.1)",  border: "rgba(148,163,184,.25)", dot: "#94A3B8" },
+  SHORTLISTED: { label: "Shortlisted", color: "#22D3EE", bg: "rgba(34,211,238,.1)",   border: "rgba(34,211,238,.28)",  dot: "#22D3EE" },
+  REJECTED:    { label: "Rejected",    color: "#F87171", bg: "rgba(248,113,113,.1)",   border: "rgba(248,113,113,.28)", dot: "#F87171" },
+  WITHDRAWN:   { label: "Withdrawn",   color: "#64748B", bg: "rgba(100,116,139,.08)", border: "rgba(100,116,139,.2)",  dot: "#64748B" },
 };
 
 const NEXT_STATUSES: Record<ApplicationStatus, ApplicationStatus[]> = {
-  PENDING: ["SHORTLISTED", "REJECTED"],
+  PENDING:     ["SHORTLISTED", "REJECTED"],
   SHORTLISTED: ["REJECTED"],
-  REJECTED: ["SHORTLISTED"],
-  WITHDRAWN: [],
+  REJECTED:    ["SHORTLISTED"],
+  WITHDRAWN:   [],
 };
 
 const STATUS_WEIGHT: Record<ApplicationStatus, number> = {
@@ -73,11 +75,11 @@ const STATUS_WEIGHT: Record<ApplicationStatus, number> = {
 };
 
 function xpLevel(xp: number): { level: number; title: string; color: string } {
-  if (xp >= 10000) return { level: 5, title: "Elite", color: "#F59E0B" };
-  if (xp >= 5000) return { level: 4, title: "Expert", color: "#A78BFA" };
-  if (xp >= 2000) return { level: 3, title: "Advanced", color: "#22D3EE" };
-  if (xp >= 500) return { level: 2, title: "Intermediate", color: "#34D399" };
-  return { level: 1, title: "Beginner", color: "#94A3B8" };
+  if (xp >= 10000) return { level: 5, title: "Elite",        color: "#F59E0B" };
+  if (xp >= 5000)  return { level: 4, title: "Expert",       color: "#A78BFA" };
+  if (xp >= 2000)  return { level: 3, title: "Advanced",     color: "#22D3EE" };
+  if (xp >= 500)   return { level: 2, title: "Intermediate", color: "#34D399" };
+  return             { level: 1, title: "Beginner",    color: "#94A3B8" };
 }
 
 // ---------------------------------------------------------------------------
@@ -113,9 +115,7 @@ function useApplicantProfile(userId: number | null): ApplicantRichProfile {
 
   useEffect(() => {
     if (!userId) return;
-
     setState((p) => ({ ...p, isLoading: true, error: null }));
-
     get<CompanyUserFullProfileResponse>(`/company/user/${userId}`)
       .then((res) => {
         setState({
@@ -135,14 +135,44 @@ function useApplicantProfile(userId: number | null): ApplicantRichProfile {
           error: err.message || "Failed to load profile",
         }));
       });
-
   }, [userId]);
 
   return state;
 }
 
+const mapWorkExperience = (w: WorkExperienceResponse) => ({
+  jobTitle: w.jobTitle,
+  companyName: w.companyName,
+  location: w.location ?? undefined,
+  startDate: w.startDate,
+  endDate: w.endDate ?? undefined,
+  description: w.description ?? undefined,
+});
+const mapEducation = (e: EducationResponse) => ({
+  degree: e.degree,
+  fieldOfStudy: e.fieldOfStudy,
+  institutionName: e.institutionName,
+  startDate: e.startDate,
+  endDate: e.endDate ?? undefined,
+  description: e.description ?? undefined,
+});
+const mapCertification = (c: CertificationResponse) => ({
+  name: c.name,
+  issuingOrganization: c.issuingOrganization,
+  issueDate: c.issueDate,
+  expirationDate: c.expirationDate ?? undefined,
+});
+const mapProject = (proj: ProjectResponse) => ({
+  title: proj.title,
+  description: proj.description ?? undefined,
+  technologiesUsed: proj.technologiesUsed ?? undefined,
+  projectUrl: proj.projectUrl ?? undefined,
+  githubUrl: proj.githubUrl ?? undefined,
+  startDate: proj.startDate ?? undefined,
+  endDate: proj.endDate ?? undefined,
+});
 // ---------------------------------------------------------------------------
-// CV Modal — centered full-viewport modal
+// CV Modal
 // ---------------------------------------------------------------------------
 
 const CVModal: React.FC<{
@@ -156,12 +186,12 @@ const CVModal: React.FC<{
 }> = ({ app, onClose, onStatusChange, isUpdating, isPriority, allPriorityDone, pendingPriorityCount }) => {
   const rich = useApplicantProfile(app.userId);
   const [actionLoading, setActionLoading] = useState<ApplicationStatus | null>(null);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const p = rich.profile;
   const initials = getInitials(app.userFullName);
   const level = p ? xpLevel(p.xpBalance) : null;
   const nextStatuses = NEXT_STATUSES[app.status] ?? [];
 
-  // A regular applicant's actions are locked until all priority apps are reviewed
   const isLocked = !isPriority && !allPriorityDone;
 
   const handleAction = async (status: ApplicationStatus) => {
@@ -173,6 +203,42 @@ const CVModal: React.FC<{
       setActionLoading(null);
     }
   };
+  
+  // ── PDF export ────────────────────────────────────────────────────────────
+  const handleExportPdf = useCallback(async () => {
+    setIsExportingPdf(true);
+    try {
+      await exportApplicantCvPdf({
+        app: {
+          userFullName: app.userFullName,
+          jobTitle: app.jobTitle,
+          appliedAt: app.appliedAt,
+          status: app.status,
+          prioritySlotRank: app.prioritySlotRank,
+        },
+        profile: p ? {
+          professionalTitle: p.professionalTitle ?? undefined,
+          aboutMe: p.aboutMe ?? undefined,
+          email: p.email ?? undefined,
+          phoneNumber: p.phoneNumber ?? undefined,
+          city: p.city ?? undefined,
+          country: p.country ?? undefined,
+          xpBalance: p.xpBalance,
+          linkedinUrl: p.linkedinUrl ?? undefined,
+          githubUrl: p.githubUrl ?? undefined,
+          portfolioUrl: p.portfolioUrl ?? undefined,
+        } : null,
+       workExperience: rich.workExperience.map(mapWorkExperience),
+education: rich.education.map(mapEducation),
+certifications: rich.certifications.map(mapCertification),
+projects: rich.projects.map(mapProject),
+      });
+    } catch (e) {
+      console.error("PDF export failed:", e);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  }, [app, p, rich]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -190,18 +256,37 @@ const CVModal: React.FC<{
             <button className="cv-close-btn" onClick={onClose} aria-label="Close">✕</button>
             <span className="cv-modal__topbar-label">
               Applicant CV
-              {isPriority && <span className="cv-modal__topbar-priority">⭐ Priority #{app.prioritySlotRank}</span>}
+              {isPriority && (
+                <span className={`cv-modal__topbar-priority cv-modal__topbar-priority--rank${app.prioritySlotRank}`}>
+                  {app.prioritySlotRank === 1 ? "👑 1st Priority — Auto-surfaced"
+                    : app.prioritySlotRank === 2 ? "🥈 2nd Priority — Must Review"
+                    : "⭐ 3rd Priority"}
+                </span>
+              )}
             </span>
           </div>
           <div className="cv-modal__topbar-actions">
             <StatusBadge status={app.status} size="md" />
-            {/* Locked state — regular applicant while priority pending */}
+
+            {/* ── Export CV as PDF ── */}
+            <button
+              className="cv-export-btn"
+              onClick={handleExportPdf}
+              disabled={isExportingPdf || rich.isLoading}
+              title="Download this applicant's CV as PDF"
+            >
+              {isExportingPdf
+                ? <><span className="cv-spinner" /> Exporting…</>
+                : <>⬇ Export CV</>}
+            </button>
+
+            {/* Locked state */}
             {isLocked && nextStatuses.length > 0 && app.status !== "WITHDRAWN" && (
               <div className="cv-locked-notice">
                 🔒 Review {pendingPriorityCount} priority applicant{pendingPriorityCount !== 1 ? "s" : ""} first
               </div>
             )}
-            {/* Actions — only shown when unlocked */}
+            {/* Actions */}
             {!isLocked && nextStatuses.length > 0 && app.status !== "WITHDRAWN" && (
               <div className="cv-action-group">
                 {nextStatuses.map((s) => {
@@ -315,7 +400,13 @@ const CVModal: React.FC<{
                 {app.prioritySlotRank && (
                   <div className="cv-sidebar__app-row">
                     <span className="cv-sidebar__app-lbl">Slot</span>
-                    <span className="cv-sidebar__priority">⭐ Priority #{app.prioritySlotRank}</span>
+                    <span className={`cv-sidebar__priority cv-sidebar__priority--rank${app.prioritySlotRank}`}>
+                      {app.prioritySlotRank === 1
+                        ? "👑 1st Priority"
+                        : app.prioritySlotRank === 2
+                        ? "🥈 2nd Priority"
+                        : "⭐ 3rd Priority"}
+                    </span>
                   </div>
                 )}
                 <div className="cv-sidebar__app-row">
@@ -496,7 +587,7 @@ const ApplicantCard: React.FC<{
   app: ApplicationResponse;
   onStatusChange: (id: number, status: ApplicationStatus) => Promise<void>;
   isUpdating: boolean;
-  isLocked: boolean;    // true for regular apps when priority not all done
+  isLocked: boolean;
   onViewCV: () => void;
 }> = ({ app, onStatusChange, isUpdating, isLocked, onViewCV }) => {
   const initials = getInitials(app.userFullName);
@@ -504,11 +595,19 @@ const ApplicantCard: React.FC<{
   const canAct = nextStatuses.length > 0 && app.status !== "WITHDRAWN" && !isLocked;
 
   return (
-    <div className={`ja-row ${app.status === "WITHDRAWN" ? "ja-row--withdrawn" : ""} ${app.prioritySlotRank ? "ja-row--priority" : ""} ${isLocked ? "ja-row--locked" : ""}`}>
+    <div className={`ja-row ${app.status === "WITHDRAWN" ? "ja-row--withdrawn" : ""} ${app.prioritySlotRank ? `ja-row--priority ja-row--priority-rank${app.prioritySlotRank}` : ""} ${isLocked ? "ja-row--locked" : ""}`}>
       {app.prioritySlotRank && (
-        <div className="ja-row__priority-strip">
-          <span>⭐</span>
-          <span>Priority #{app.prioritySlotRank}</span>
+        <div className={`ja-row__priority-strip ja-row__priority-strip--rank${app.prioritySlotRank}`}>
+          <span>{app.prioritySlotRank === 1 ? "👑" : app.prioritySlotRank === 2 ? "🥈" : "⭐"}</span>
+          <span>
+            {app.prioritySlotRank === 1 ? "1st Priority" : app.prioritySlotRank === 2 ? "2nd Priority" : "3rd Priority"}
+          </span>
+          {app.prioritySlotRank === 1 && (
+            <span className="ja-row__priority-strip__perk">Auto-surfaced · Top pick</span>
+          )}
+          {app.prioritySlotRank === 2 && (
+            <span className="ja-row__priority-strip__perk">Must Review</span>
+          )}
           <span className="ja-row__priority-strip__reviewed">
             {app.status !== "PENDING" ? "✓ Reviewed" : "Pending review"}
           </span>
@@ -522,10 +621,9 @@ const ApplicantCard: React.FC<{
         </div>
         <StatusBadge status={app.status} size="md" />
         <div className="ja-row__actions">
-          {/* Inline quick-action buttons on the row */}
           {canAct && nextStatuses.map((s) => {
             const isShortlist = s === "SHORTLISTED";
-            const isReject = s === "REJECTED";
+            const isReject    = s === "REJECTED";
             return (
               <button
                 key={s}
@@ -568,14 +666,17 @@ const JobApplicantsPage: React.FC = () => {
 
   const { priorityApps, regularApps } = useMemo(() => {
     const sorted = [...applications].sort((a, b) => {
+      // Priority applicants always come before regular ones
       if (a.prioritySlotRank && !b.prioritySlotRank) return -1;
       if (!a.prioritySlotRank && b.prioritySlotRank) return 1;
+      // Among priority applicants: rank 1 (most expensive) comes first
       if (a.prioritySlotRank && b.prioritySlotRank) return a.prioritySlotRank - b.prioritySlotRank;
+      // Among regular applicants: sort by status weight
       return (STATUS_WEIGHT[a.status] ?? 9) - (STATUS_WEIGHT[b.status] ?? 9);
     });
     return {
       priorityApps: sorted.filter((a) => a.prioritySlotRank !== null),
-      regularApps: sorted.filter((a) => a.prioritySlotRank === null),
+      regularApps:  sorted.filter((a) => a.prioritySlotRank === null),
     };
   }, [applications]);
 
@@ -584,6 +685,19 @@ const JobApplicantsPage: React.FC = () => {
 
   const pendingPriorityCount = useMemo(() =>
     priorityApps.filter((a) => a.status === "PENDING").length, [priorityApps]);
+
+  // ── Rank-1 auto-open: when company first loads the page, automatically open
+  // the CV of the rank-1 priority applicant (if pending) so they can't be missed.
+  const autoOpenedRef = React.useRef(false);
+  useEffect(() => {
+    if (autoOpenedRef.current) return;
+    if (isLoading) return;
+    const rank1 = priorityApps.find((a) => a.prioritySlotRank === 1 && a.status === "PENDING");
+    if (rank1) {
+      autoOpenedRef.current = true;
+      setCvApp(rank1);
+    }
+  }, [isLoading, priorityApps]);
 
   const filtered = useMemo(() => {
     const all = [...priorityApps, ...regularApps];
@@ -650,10 +764,7 @@ const JobApplicantsPage: React.FC = () => {
       {/* Summary stat pills */}
       {applications.length > 0 && (
         <div className="ja-stats">
-          <button
-            className={`ja-stat-pill ${filterStatus === "ALL" ? "ja-stat-pill--active" : ""}`}
-            onClick={() => setFilterStatus("ALL")}
-          >
+          <button className={`ja-stat-pill ${filterStatus === "ALL" ? "ja-stat-pill--active" : ""}`} onClick={() => setFilterStatus("ALL")}>
             <span className="ja-stat-pill__num">{applications.length}</span>
             <span className="ja-stat-pill__lbl">Total</span>
           </button>
@@ -663,12 +774,9 @@ const JobApplicantsPage: React.FC = () => {
             const cfg = STATUS_CONFIG[s];
             const active = filterStatus === s;
             return (
-              <button
-                key={s}
-                className={`ja-stat-pill ${active ? "ja-stat-pill--active" : ""}`}
+              <button key={s} className={`ja-stat-pill ${active ? "ja-stat-pill--active" : ""}`}
                 style={active ? { borderColor: cfg.border, background: cfg.bg, color: cfg.color } : {}}
-                onClick={() => setFilterStatus(active ? "ALL" : s)}
-              >
+                onClick={() => setFilterStatus(active ? "ALL" : s)}>
                 <span className="ja-stat-pill__dot" style={{ background: cfg.dot }} />
                 <span className="ja-stat-pill__num" style={active ? { color: cfg.color } : {}}>{count}</span>
                 <span className="ja-stat-pill__lbl">{cfg.label}</span>
@@ -678,12 +786,10 @@ const JobApplicantsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Errors */}
       {(error || updateError) && (
         <div className="ja-error-banner">⚠ {error || updateError}</div>
       )}
 
-      {/* Priority notice */}
       {priorityApps.length > 0 && !allPriorityDone && (
         <div className="ja-priority-notice">
           <span>📌</span>
@@ -700,7 +806,6 @@ const JobApplicantsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Empty */}
       {applications.length === 0 && (
         <div className="ja-empty">
           <div className="ja-empty__icon">📭</div>
@@ -718,12 +823,9 @@ const JobApplicantsPage: React.FC = () => {
             const active = filterStatus === s;
             const cfg = s !== "ALL" ? STATUS_CONFIG[s] : null;
             return (
-              <button
-                key={s}
-                className={`ja-filter-tab ${active ? "ja-filter-tab--active" : ""}`}
+              <button key={s} className={`ja-filter-tab ${active ? "ja-filter-tab--active" : ""}`}
                 style={active && cfg ? { color: cfg.color, borderBottomColor: cfg.color } : {}}
-                onClick={() => setFilterStatus(s)}
-              >
+                onClick={() => setFilterStatus(s)}>
                 {s === "ALL" ? "All" : cfg!.label}
                 <span className="ja-filter-tab__count">{count}</span>
               </button>
@@ -878,7 +980,6 @@ const styles = `
   .ja-list { display:flex; flex-direction:column; gap:8px; position:relative; }
   .ja-list--locked { user-select:none; }
 
-  /* Upgraded lock cover */
   .ja-list__lock-cover { position:absolute; inset:0; z-index:10; background:rgba(10,12,20,.82); backdrop-filter:blur(4px); border-radius:var(--radius-xl,14px); display:flex; align-items:center; justify-content:center; border:1px dashed rgba(245,158,11,.3); }
   .ja-lock-cover__inner { display:flex; flex-direction:column; align-items:center; gap:10px; padding:32px 24px; text-align:center; max-width:360px; }
   .ja-lock-cover__icon { font-size:2rem; }
@@ -891,9 +992,24 @@ const styles = `
   .ja-row--withdrawn { opacity:.55; }
   .ja-row--priority { border-color:rgba(245,158,11,.28); }
   .ja-row--priority::before { content:""; display:block; height:2px; background:linear-gradient(90deg,#D97706,#FCD34D); }
+  /* Rank 1 — gold crown treatment */
+  .ja-row--priority-rank1 { border-color:rgba(252,211,77,.45); box-shadow:0 0 0 1px rgba(252,211,77,.15), 0 4px 20px rgba(252,211,77,.08); }
+  .ja-row--priority-rank1::before { background:linear-gradient(90deg,#B45309,#FCD34D,#B45309); }
+  /* Rank 2 — silver highlight treatment */
+  .ja-row--priority-rank2 { border-color:rgba(96,165,250,.35); box-shadow:0 0 0 1px rgba(96,165,250,.1); }
+  .ja-row--priority-rank2::before { background:linear-gradient(90deg,#1D4ED8,#93C5FD); }
+  /* Rank 3 — standard amber treatment (unchanged) */
+  .ja-row--priority-rank3 { }
   .ja-row--locked { opacity:.7; }
   .ja-row__priority-strip { display:flex; align-items:center; gap:6px; padding:5px 16px; background:rgba(245,158,11,.05); font-family:var(--font-mono); font-size:10px; color:#F59E0B; border-bottom:1px solid rgba(245,158,11,.14); }
+  /* Rank-1 strip — gold */
+  .ja-row__priority-strip--rank1 { background:rgba(252,211,77,.07); border-bottom-color:rgba(252,211,77,.2); color:#FCD34D; }
+  /* Rank-2 strip — silver blue */
+  .ja-row__priority-strip--rank2 { background:rgba(96,165,250,.06); border-bottom-color:rgba(96,165,250,.18); color:#93C5FD; }
+  /* Rank-3 strip — standard amber */
+  .ja-row__priority-strip--rank3 { }
   .ja-row__priority-strip__reviewed { margin-left:auto; color:var(--color-text-muted); }
+  .ja-row__priority-strip__perk { font-size:9px; padding:1px 6px; border-radius:999px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); opacity:.85; }
   .ja-row__inner { display:flex; align-items:center; gap:14px; padding:14px 16px; }
   .ja-row__avatar { width:42px; height:42px; border-radius:50%; flex-shrink:0; background:var(--color-bg-overlay); border:1px solid var(--color-border-default); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-size:14px; font-weight:var(--weight-bold); color:var(--color-text-secondary); cursor:pointer; transition:all 130ms; }
   .ja-row__avatar:hover { border-color:var(--color-primary-500,#7C3AED); color:var(--color-primary-400,#A78BFA); }
@@ -905,28 +1021,12 @@ const styles = `
   .ja-row__cv-btn { padding:7px 14px; border-radius:var(--radius-lg,10px); border:1px solid var(--color-border-default); background:var(--color-bg-base); font-size:var(--text-sm,13px); color:var(--color-text-secondary); cursor:pointer; font-family:var(--font-body); transition:all 130ms; white-space:nowrap; }
   .ja-row__cv-btn:hover { border-color:var(--color-primary-400,#A78BFA); color:var(--color-primary-400,#A78BFA); }
 
-  /* Quick-action buttons on the row */
   .ja-row__quick-btn { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:1px solid var(--color-border-default); background:var(--color-bg-base); font-size:13px; font-weight:700; cursor:pointer; transition:all 130ms; flex-shrink:0; }
   .ja-row__quick-btn:disabled { opacity:.5; cursor:not-allowed; }
   .ja-row__quick-btn--shortlist { border-color:rgba(52,211,153,.35); color:#34D399; }
   .ja-row__quick-btn--shortlist:hover:not(:disabled) { background:#059669; border-color:#059669; color:#fff; }
   .ja-row__quick-btn--reject { border-color:rgba(248,113,113,.35); color:#F87171; }
   .ja-row__quick-btn--reject:hover:not(:disabled) { background:rgba(248,113,113,.15); }
-
-  /* Update dropdown */
-  .ja-drop-wrap { position:relative; }
-  .ja-row__update-btn { display:flex; align-items:center; gap:6px; padding:7px 14px; border-radius:var(--radius-lg,10px); border:1px solid var(--color-border-default); background:var(--color-bg-elevated); font-size:var(--text-sm,13px); font-family:var(--font-body); color:var(--color-text-primary); cursor:pointer; transition:all 130ms; font-weight:var(--weight-medium); white-space:nowrap; min-width:100px; justify-content:center; }
-  .ja-row__update-btn:hover:not(:disabled) { border-color:var(--color-primary-400,#A78BFA); background:rgba(167,139,250,.08); }
-  .ja-row__update-btn:disabled { opacity:.55; cursor:not-allowed; }
-  .ja-chevron { font-size:9px; }
-  .ja-dropdown { position:absolute; right:0; top:calc(100% + 6px); z-index:200; background:var(--color-bg-elevated); border:1px solid var(--color-border-default); border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,.4); min-width:200px; overflow:hidden; animation:ja-drop-in 130ms cubic-bezier(.34,1.56,.64,1); }
-  @keyframes ja-drop-in { from { opacity:0; transform:translateY(-6px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
-  .ja-dropdown__label { padding:10px 16px 8px; font-family:var(--font-mono); font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:.06em; border-bottom:1px solid var(--color-border-subtle); }
-  .ja-dropdown__item { display:flex; align-items:center; gap:10px; width:100%; padding:12px 16px; background:transparent; border:none; cursor:pointer; text-align:left; font-family:var(--font-body); font-size:var(--text-sm,13px); color:var(--color-text-secondary); transition:background 100ms; }
-  .ja-dropdown__item:hover { background:var(--color-bg-hover); color:var(--color-text-primary); }
-  .ja-dropdown__dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
-  .ja-dropdown__item-name { flex:1; font-weight:var(--weight-medium); }
-  .ja-dropdown__arrow { font-size:11px; color:var(--color-text-muted); }
 
   /* Status badge */
   .ja-status-badge { display:inline-flex; align-items:center; gap:6px; border-radius:999px; border:1px solid; font-weight:var(--weight-medium); font-family:var(--font-mono); white-space:nowrap; }
@@ -954,7 +1054,7 @@ const styles = `
   /* ═════════════════════════════════════════════════════════
      CV MODAL
   ═════════════════════════════════════════════════════════ */
-  .cv-overlay { position:fixed; top:var(--navbar-height, 60px); left:0; right:0; bottom:var(--bottom-deck-height, 64px); z-index:300; background:rgba(4,6,14,.85); backdrop-filter:blur(10px); display:flex; align-items:center; justify-content:center; padding:16px; animation:cv-fade 160ms ease; }
+  .cv-overlay { position:fixed; top:var(--navbar-height,60px); left:0; right:0; bottom:var(--bottom-deck-height,64px); z-index:300; background:rgba(4,6,14,.85); backdrop-filter:blur(10px); display:flex; align-items:center; justify-content:center; padding:16px; animation:cv-fade 160ms ease; }
   @keyframes cv-fade { from{opacity:0;} to{opacity:1;} }
 
   .cv-modal { width:100%; max-width:1020px; max-height:100%; background:var(--color-bg-elevated); border:1px solid var(--color-border-default); border-radius:20px; box-shadow:0 40px 100px rgba(0,0,0,.6); display:flex; flex-direction:column; overflow:hidden; animation:cv-in 200ms cubic-bezier(.34,1.2,.64,1); }
@@ -967,9 +1067,24 @@ const styles = `
   .cv-close-btn:hover { border-color:var(--color-border-strong); color:var(--color-text-primary); }
   .cv-modal__topbar-label { font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--color-text-muted); display:flex; align-items:center; gap:8px; }
   .cv-modal__topbar-priority { font-family:var(--font-mono); font-size:10px; padding:2px 8px; background:rgba(245,158,11,.12); border:1px solid rgba(245,158,11,.3); border-radius:999px; color:#F59E0B; }
+  /* Rank-1 topbar badge — gold */
+  .cv-modal__topbar-priority--rank1 { background:rgba(252,211,77,.12); border-color:rgba(252,211,77,.4); color:#FCD34D; }
+  /* Rank-2 topbar badge — silver blue */
+  .cv-modal__topbar-priority--rank2 { background:rgba(96,165,250,.1); border-color:rgba(96,165,250,.35); color:#93C5FD; }
+  /* Rank-3 topbar badge — standard amber (inherits default) */
+  .cv-modal__topbar-priority--rank3 { }
+  /* Sidebar priority label rank colors */
+  .cv-sidebar__priority--rank1 { color:#FCD34D; font-family:var(--font-mono); font-size:11px; font-weight:var(--weight-bold); }
+  .cv-sidebar__priority--rank2 { color:#93C5FD; font-family:var(--font-mono); font-size:11px; font-weight:var(--weight-bold); }
+  .cv-sidebar__priority--rank3 { color:#F59E0B; font-family:var(--font-mono); font-size:11px; font-weight:var(--weight-bold); }
   .cv-modal__topbar-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .cv-action-group { display:flex; align-items:center; gap:8px; }
   .cv-locked-notice { display:flex; align-items:center; gap:8px; padding:7px 14px; border-radius:var(--radius-lg,10px); background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.25); font-size:12px; color:#F59E0B; font-family:var(--font-mono); white-space:nowrap; }
+
+  /* ── Export CV PDF button ── */
+  .cv-export-btn { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:var(--radius-lg,10px); border:1px solid rgba(139,92,246,.35); background:rgba(139,92,246,.08); color:#A78BFA; font-family:var(--font-mono); font-size:11px; font-weight:700; letter-spacing:.04em; cursor:pointer; transition:all 130ms; white-space:nowrap; flex-shrink:0; }
+  .cv-export-btn:hover:not(:disabled) { background:rgba(139,92,246,.14); border-color:rgba(139,92,246,.6); box-shadow:0 0 10px rgba(139,92,246,.18); }
+  .cv-export-btn:disabled { opacity:.5; cursor:not-allowed; }
 
   .cv-action-btn { display:flex; align-items:center; gap:6px; padding:8px 18px; border-radius:var(--radius-lg,10px); border:1px solid; font-size:var(--text-sm,13px); font-family:var(--font-body); font-weight:var(--weight-semibold); cursor:pointer; transition:all 130ms; white-space:nowrap; }
   .cv-action-btn:disabled { opacity:.6; cursor:not-allowed; }
@@ -1103,6 +1218,7 @@ const styles = `
     .cv-project-grid { grid-template-columns:1fr; }
     .ja-row__inner { flex-wrap:wrap; gap:10px; }
     .ja-row__actions { width:100%; justify-content:flex-end; }
+    .cv-modal__topbar-actions { gap:6px; }
   }
 `;
 

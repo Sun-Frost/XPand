@@ -30,9 +30,9 @@ const CATEGORY_ACCENT: Record<string, { color: string; glow: string; gradient: s
 };
 
 const PRIORITY_SLOT_RANKS = [
-  { rank: 3, label: "3rd Priority", xp: 100, color: "#94A3B8", medal: "🥉" },
-  { rank: 2, label: "2nd Priority", xp: 120, color: "#60A5FA", medal: "🥈" },
-  { rank: 1, label: "1st Priority", xp: 150, color: "#FCD34D", medal: "🥇" },
+  { rank: 3, label: "3rd Priority", perk: "Top of list before regular applicants", xp: 100, color: "#94A3B8", medal: "🥉" },
+  { rank: 2, label: "2nd Priority", perk: "Silver highlight + Must Review nudge",   xp: 120, color: "#60A5FA", medal: "🥈" },
+  { rank: 1, label: "1st Priority", perk: "CV auto-opens when company views job",   xp: 150, color: "#FCD34D", medal: "🥇" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -146,9 +146,14 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
                     onClick={() => setSelectedRank(r.rank)}
                   >
                     <span className="store-rank-option__medal">{r.medal}</span>
-                    <span className="store-rank-option__label" style={selectedRank === r.rank ? { color: r.color } : {}}>
-                      {r.label}
-                    </span>
+                    <div className="store-rank-option__text">
+                      <span className="store-rank-option__label" style={selectedRank === r.rank ? { color: r.color } : {}}>
+                        {r.label}
+                      </span>
+                      <span className="store-rank-option__perk" style={selectedRank === r.rank ? { color: r.color, opacity: 0.8 } : {}}>
+                        {r.perk}
+                      </span>
+                    </div>
                     <span className="store-rank-option__cost" style={selectedRank === r.rank ? { color: r.color } : {}}>
                       {r.xp} XP
                     </span>
@@ -716,13 +721,15 @@ const styles = `
 
   /* Priority rank selector */
   .store-modal__rank-section { display:flex; flex-direction:column; gap:var(--space-3); }
-  .store-modal__rank-options { display:flex; gap:var(--space-3); }
-  .store-rank-option { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:var(--space-3) var(--space-2); border-radius:var(--radius-lg); border:1px solid var(--color-border-default); background:var(--color-bg-overlay); cursor:pointer; transition:all var(--duration-fast); }
+  .store-modal__rank-options { display:flex; flex-direction:column; gap:var(--space-2); }
+  .store-rank-option { width:100%; display:flex; align-items:center; gap:var(--space-3); padding:var(--space-3) var(--space-4); border-radius:var(--radius-lg); border:1px solid var(--color-border-default); background:var(--color-bg-overlay); cursor:pointer; transition:all var(--duration-fast); text-align:left; }
   .store-rank-option:hover { border-color:var(--color-border-strong); background:var(--color-bg-elevated); }
   .store-rank-option--selected { }
-  .store-rank-option__medal { font-size:1.3rem; }
-  .store-rank-option__label { font-family:var(--font-mono); font-size:var(--text-xs); font-weight:600; color:var(--color-text-muted); }
-  .store-rank-option__cost { font-family:var(--font-mono); font-size:var(--text-base); font-weight:700; color:var(--color-text-secondary); }
+  .store-rank-option__medal { font-size:1.3rem; flex-shrink:0; }
+  .store-rank-option__text { flex:1; display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .store-rank-option__label { font-family:var(--font-mono); font-size:var(--text-xs); font-weight:700; color:var(--color-text-secondary); }
+  .store-rank-option__perk { font-size:10px; color:var(--color-text-muted); line-height:1.4; }
+  .store-rank-option__cost { font-family:var(--font-mono); font-size:var(--text-base); font-weight:700; color:var(--color-text-secondary); flex-shrink:0; }
 
   /* Job selector */
   .store-modal__job-section { display:flex; flex-direction:column; gap:var(--space-3); }

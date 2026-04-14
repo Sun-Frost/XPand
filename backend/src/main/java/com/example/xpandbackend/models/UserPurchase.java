@@ -1,5 +1,6 @@
 package com.example.xpandbackend.models;
 
+import com.example.xpandbackend.models.Enums.SlotRank;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
@@ -31,6 +32,12 @@ public class UserPurchase {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "associated_job_id")
     private JobPosting associatedJob;
+
+    // Populated only for PRIORITY_SLOT purchases; null for all other item types.
+    // Stored as a string so DB values are human-readable (FIRST / SECOND / THIRD).
+    @Enumerated(EnumType.STRING)
+    @Column(name = "slot_rank")
+    private SlotRank slotRank;
 
     @Column(nullable = false)
     private Boolean isUsed = false;

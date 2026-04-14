@@ -2,6 +2,7 @@ package com.example.xpandbackend.service;
 
 import com.example.xpandbackend.models.*;
 import com.example.xpandbackend.models.Enums.ItemType;
+import com.example.xpandbackend.models.Enums.SlotRank;
 import com.example.xpandbackend.models.Enums.TransactionType;
 import com.example.xpandbackend.dto.request.PurchaseItemRequest;
 import com.example.xpandbackend.dto.response.StoreItemResponse;
@@ -52,15 +53,24 @@ public class StoreService {
         }
 
         // ── Determine the actual XP cost ──────────────────────────────────────
-        // Priority slots have rank-tiered pricing: 3rd=100 XP, 2nd=120 XP, 1st=150 XP.
-        // The DB item stores the base price; the actual deduction uses the rank.
+        // Resolve and validate slotRank for PRIORITY_SLOT purchases.
+        // We resolve it once here so the same value drives XP cost,
+        // entity persistence, and the response DTO — no chance of drift.
+        SlotRank resolvedSlotRank = null;
         int costXp;
         if (item.getItemType() == ItemType.PRIORITY_SLOT) {
-            int rank = request.getSlotRank() != null ? request.getSlotRank() : 3;
-            costXp = switch (rank) {
-                case 1 -> 150;
-                case 2 -> 120;
-                default -> 100; // rank 3
+            if (request.getSlotRank() == null || request.getSlotRank() < 1 || request.getSlotRank() > 3) {
+                throw new BadRequestException("A valid slot rank (1, 2, or 3) must be provided for a Priority Slot purchase.");
+            }
+            resolvedSlotRank = switch (request.getSlotRank()) {
+                case 1 -> SlotRank.FIRST;
+                case 2 -> SlotRank.SECOND;
+                default -> SlotRank.THIRD;
+            };
+            costXp = switch (resolvedSlotRank) {
+                case FIRST  -> 150;
+                case SECOND -> 120;
+                case THIRD  -> 100;
             };
         } else {
             costXp = item.getCostXp();
@@ -73,6 +83,7 @@ public class StoreService {
         purchase.setUser(user);
         purchase.setItem(item);
         purchase.setAssociatedJob(associatedJob);
+        purchase.setSlotRank(resolvedSlotRank); // ← persists rank 1/2/3; null for non-priority items
         purchase.setIsUsed(false);
         userPurchaseRepository.save(purchase);
 
@@ -120,6 +131,7 @@ public class StoreService {
         r.setItemId(p.getItem().getId());
         r.setItemName(p.getItem().getName());
         r.setItemType(p.getItem().getItemType());
+        r.setSlotRank(p.getSlotRank()); // FIRST / SECOND / THIRD, or null for non-priority items
         r.setIsUsed(p.getIsUsed());
         r.setPurchasedAt(p.getPurchasedAt());
         if (p.getAssociatedJob() != null) {

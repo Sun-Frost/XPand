@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AI_TIMEOUT_MS, get, post } from "../../api/axios";
 import type { SentimentLabel, SentimentResult } from "./useSentiment";
+import type { IconName } from "../../components/ui/Icon";
 
 // ---------------------------------------------------------------------------
 // Types — aligned to Java DTOs exactly
@@ -62,7 +63,7 @@ export interface ReadinessReportResponse {
 
 export interface StoreItemWithMeta extends StoreItemResponse {
   category: StoreCategory;
-  icon: string;
+  icon: IconName;
   tagline: string;
   features: string[];
   badge?: "POPULAR" | "NEW" | "LIMITED";
@@ -131,23 +132,23 @@ export interface LiveQuestion {
 
 const ITEM_META: Record<ItemType, Omit<StoreItemWithMeta, keyof StoreItemResponse>> = {
   READINESS_REPORT: {
-    category: "REPORT", icon: "📊", tagline: "Know exactly where you stand.",
+    category: "REPORT", icon: "readiness", tagline: "Know exactly where you stand.",
     features: ["Full skill-gap analysis vs. job requirements", "Percentile ranking among verified candidates", "Specific areas to improve before applying", "AI-generated recommendations"],
     badge: "POPULAR",
   },
   MOCK_INTERVIEW: {
-    category: "INTERVIEW", icon: "🎙️", tagline: "Practice until perfect.",
+    category: "INTERVIEW", icon: "interview", tagline: "Practice until perfect.",
     features: ["Questions tailored to job requirements & personal history", "Adaptive AI — adjusts to your confidence in real time", "Mix of technical and personal questions", "Sentiment-driven tone: Good Cop or Bad Cop", "Full performance summary at the end"],
     badge: "NEW",
   },
   PRIORITY_SLOT: {
-    category: "VISIBILITY", icon: "⭐", tagline: "Get seen first.",
+    category: "VISIBILITY", icon: "badge-gold", tagline: "Get seen first.",
     features: ["Jump to top of applicant list", "Highlighted profile badge", "Priority review by hiring managers", "Choose your slot rank (1st, 2nd, 3rd)"],
   },
 };
 
 function enrichItem(raw: StoreItemResponse): StoreItemWithMeta {
-  return { ...raw, ...(ITEM_META[raw.itemType] ?? { category: "REPORT" as StoreCategory, icon: "📦", tagline: raw.description, features: [] }) };
+  return { ...raw, ...(ITEM_META[raw.itemType] ?? { category: "REPORT" as StoreCategory, icon: "collection" as IconName, tagline: raw.description, features: [] }) };
 }
 
 // ---------------------------------------------------------------------------

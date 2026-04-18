@@ -39,6 +39,22 @@ const LOGIN_ENDPOINTS = [
   "/auth/admin/login",
 ] as const;
 
+// Messages that mean "we found the account but access is blocked" —
+// these are definitive answers, not "wrong account type" errors.
+// We must stop trying other endpoints when we see these.
+const DEFINITIVE_BLOCK_PHRASES = [
+  "verify your email",
+  "verification",
+  "pending approval",
+  "suspended",
+  "google sign-in",
+];
+
+const isDefinitiveBlock = (message: string): boolean => {
+  const lower = message.toLowerCase();
+  return DEFINITIVE_BLOCK_PHRASES.some(phrase => lower.includes(phrase));
+};
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
@@ -77,28 +93,33 @@ export const useLogin = (onSuccess?: OnSuccessCallback): UseLoginReturn => {
         return; // stop trying further endpoints
       } catch (err: unknown) {
         const status = (err as any)?.response?.status;
+        const message: string =
+          (err as any)?.response?.data?.message ??
+          (err instanceof Error ? err.message : "An unexpected error occurred.");
 
-        // 401 = wrong password for this account type → try next
-        // 403 = account exists but blocked (e.g. company pending approval)
-        // Any other error → surface it immediately
         if (status === 401) {
-          // Could be wrong account type, keep trying
-          lastError =
-            (err as any)?.response?.data?.message ?? "Invalid email or password.";
+          lastError = message;
+
+          // If this 401 is a definitive block (e.g. "verify your email",
+          // "pending approval") it means we found the account but access
+          // is blocked — stop trying other endpoints immediately so the
+          // user sees the real reason instead of a generic credential error.
+          if (isDefinitiveBlock(message)) {
+            break;
+          }
+
+          // Otherwise it's just "wrong account type for this endpoint" — keep trying
           continue;
         }
 
         if (status === 403) {
-          lastError =
-            (err as any)?.response?.data?.message ??
-            "Account access denied. It may be pending approval.";
-          break; // found the account, but access denied — don't try others
+          // Found the account, but access denied — don't try others
+          lastError = message || "Account access denied. It may be pending approval.";
+          break;
         }
 
         // Network error or 500 — surface immediately
-        lastError =
-          (err as any)?.response?.data?.message ??
-          (err instanceof Error ? err.message : "An unexpected error occurred.");
+        lastError = message;
         break;
       }
     }

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import CompanyPageLayout from "../../components/company/companyPageLayout";
+import { Icon } from "../../components/ui/Icon";
 import { useCompanyJobs } from "../../hooks/company/useCompany";
 import type { JobPostingResponse, JobStatus, JobType } from "../../hooks/company/useCompany";
 
@@ -151,14 +152,14 @@ const JobCard: React.FC<{
         <div className="mj-card__actions">
           {job.status === "ACTIVE" && !expired && !isArchived && (
             <>
-              <button className="btn btn-ghost btn-sm" onClick={onEdit}>✏️ Edit</button>
+              <button className="btn btn-ghost btn-sm" onClick={onEdit}><Icon name="edit" size={14} label="" /> Edit</button>
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={onClose}
                 disabled={isClosing}
                 style={{ color: "var(--color-danger)" }}
               >
-                {isClosing ? "Closing…" : "✕ Close"}
+                {isClosing ? "Closing…" : <><Icon name="close" size={12} label="" /> Close</>}
               </button>
             </>
           )}
@@ -167,7 +168,7 @@ const JobCard: React.FC<{
             : <button className="btn btn-ghost btn-sm" onClick={onUnarchive} title="Restore from archive">↩ Restore</button>
           }
           <button className="btn btn-primary btn-sm" onClick={onViewApplicants}>
-            👥 Applicants
+            <Icon name="question-personal" size={14} label="" /> Applicants
           </button>
         </div>
       </div>
@@ -183,8 +184,8 @@ const JobCard: React.FC<{
       )}
 
       <div className="mj-card__meta">
-        {job.location && <span className="mj-meta-item">📍 {highlight(job.location, searchQuery)}</span>}
-        {job.salaryRange && <span className="mj-meta-item">💰 {job.salaryRange}</span>}
+        {job.location && <span className="mj-meta-item"><Icon name="location" size={12} label="" /> {highlight(job.location, searchQuery)}</span>}
+        {job.salaryRange && <span className="mj-meta-item"><Icon name="salary" size={12} label="" /> {job.salaryRange}</span>}
         <span className={`mj-meta-item ${expired ? "mj-meta--expired" : ""}`}>
           ⏱ Deadline: {fmtDate(job.deadline)}
         </span>
@@ -193,7 +194,7 @@ const JobCard: React.FC<{
       {job.requiredSkills.length > 0 && (
         <div className="mj-card__skills">
           {majorSkills.map((s) => (
-            <span key={s.skillId} className="badge badge-premium">★ {highlight(s.skillName, searchQuery)}</span>
+            <span key={s.skillId} className="badge badge-premium"><Icon name="badge-gold" size={10} label="" /> {highlight(s.skillName, searchQuery)}</span>
           ))}
           {minorSkills.map((s) => (
             <span key={s.skillId} className="badge badge-muted">◇ {highlight(s.skillName, searchQuery)}</span>
@@ -233,20 +234,20 @@ const CompactRow: React.FC<{
         {highlight(job.title, searchQuery)}
       </span>
       {job.jobType && <span className="badge badge-muted mj-row__type">{JOB_TYPE_LABEL[job.jobType] ?? job.jobType}</span>}
-      {job.location && <span className="mj-row__loc">📍 {job.location}</span>}
+      {job.location && <span className="mj-row__loc"><Icon name="location" size={12} label="" /> {job.location}</span>}
       <span className={`mj-row__deadline ${expired ? "mj-meta--expired" : ""}`}>⏱ {fmtDate(job.deadline)}</span>
       <div className="mj-row__actions">
         {job.status === "ACTIVE" && !expired && !isArchived && (
           <>
-            <button className="btn btn-ghost btn-sm" onClick={onEdit}>✏️</button>
-            <button className="btn btn-ghost btn-sm" onClick={onClose} disabled={isClosing} style={{ color: "var(--color-danger)" }}>✕</button>
+            <button className="btn btn-ghost btn-sm" onClick={onEdit}><Icon name="edit" size={14} label="Edit" /></button>
+            <button className="btn btn-ghost btn-sm" onClick={onClose} disabled={isClosing} style={{ color: "var(--color-danger)" }}><Icon name="close" size={12} label="Clear" /></button>
           </>
         )}
         {!isArchived
           ? <button className="btn btn-ghost btn-sm" onClick={onArchive} title="Archive">⬇</button>
           : <button className="btn btn-ghost btn-sm" onClick={onUnarchive} title="Restore">↩</button>
         }
-        <button className="btn btn-primary btn-sm" onClick={onViewApplicants}>👥</button>
+        <button className="btn btn-primary btn-sm" onClick={onViewApplicants}><Icon name="question-personal" size={14} label="Applicants" /></button>
       </div>
     </div>
   );
@@ -267,14 +268,14 @@ const BulkBar: React.FC<{
     <div className="mj-bulk-bar__actions">
       {hasCloseable && (
         <button className="btn btn-ghost btn-sm" onClick={onBulkClose} style={{ color: "var(--color-danger)" }}>
-          ✕ Close selected
+          <Icon name="close" size={12} label="" /> Close selected
         </button>
       )}
       <button className="btn btn-ghost btn-sm" onClick={onBulkArchive}>
         ⬇ Archive selected
       </button>
       <button className="btn btn-ghost btn-sm" onClick={onClearSelection}>
-        ✕ Clear
+        <Icon name="close" size={12} label="" /> Clear
       </button>
     </div>
   </div>
@@ -436,7 +437,7 @@ const ManageJobsPage: React.FC = () => {
             className={`mj-view-btn ${viewMode === "compact" ? "mj-view-btn--active" : ""}`}
             onClick={() => setViewMode("compact")}
             title="Compact view"
-          >☰</button>
+          ><Icon name="clipboard" size={14} label="Compact view" /></button>
         </div>
       </div>
 
@@ -446,7 +447,7 @@ const ManageJobsPage: React.FC = () => {
       {/* Search + Sort + Type filter row */}
       <div className="mj-toolbar">
         <div className="mj-search-wrap">
-          <span className="mj-search-icon">🔍</span>
+          <span className="mj-search-icon"><Icon name="search" size={14} label="" /></span>
           <input
             ref={searchRef}
             className="mj-search"
@@ -457,7 +458,7 @@ const ManageJobsPage: React.FC = () => {
             aria-label="Search jobs"
           />
           {search && (
-            <button className="mj-search-clear" onClick={() => { setSearch(""); searchRef.current?.focus(); }}>✕</button>
+            <button className="mj-search-clear" onClick={() => { setSearch(""); searchRef.current?.focus(); }}><Icon name="close" size={12} label="Clear" /></button>
           )}
         </div>
 
@@ -533,7 +534,7 @@ const ManageJobsPage: React.FC = () => {
       {/* Empty states */}
       {jobs.length === 0 && (
         <div className="empty-state">
-          <div className="empty-state-icon">📭</div>
+          <div className="empty-state-icon"><Icon name="work" size={32} label="" /></div>
           <h3>No jobs posted yet</h3>
           <p>Post your first job to start receiving applications from verified candidates.</p>
           <button className="btn btn-primary btn-sm mt-4" onClick={() => navigate("/company/jobs/new")}>
@@ -544,7 +545,7 @@ const ManageJobsPage: React.FC = () => {
 
       {jobs.length > 0 && filtered.length === 0 && (
         <div className="empty-state">
-          <div className="empty-state-icon">🔍</div>
+          <div className="empty-state-icon"><Icon name="search" size={32} label="" /></div>
           <h3>{search ? `No results for "${search}"` : `No ${filter.toLowerCase()} jobs`}</h3>
           <p>{search ? "Try a different search term or clear the filters." : "No jobs with this status right now."}</p>
           {search && (

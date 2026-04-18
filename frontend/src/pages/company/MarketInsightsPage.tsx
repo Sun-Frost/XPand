@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from "react";
 import CompanyPageLayout from "../../components/company/companyPageLayout";
+import { Icon, type IconName } from "../../components/ui/Icon";
 import { useMarketInsights } from "../../hooks/company/useCompany";
 import { exportMarketInsightsPdf } from "../../utils/pdfExport";
 import type { SkillDemand } from "../../hooks/company/useCompany";
@@ -75,11 +76,11 @@ const LOC_COLORS = ["#A78BFA", "#34D399", "#F59E0B", "#60A5FA", "#F472B6", "#22D
 // Stat tile
 // ---------------------------------------------------------------------------
 
-const StatTile: React.FC<{ icon: string; value: string | number; label: string; color?: string; sub?: string }> = ({
+const StatTile: React.FC<{ icon: IconName; value: string | number; label: string; color?: string; sub?: string }> = ({
   icon, value, label, color = "var(--color-verified)", sub
 }) => (
   <div className="mi-stat" style={{ "--mc": color } as React.CSSProperties}>
-    <div className="mi-stat__icon">{icon}</div>
+    <div className="mi-stat__icon"><Icon name={icon} size={22} label="" /></div>
     <div className="mi-stat__value">{value}</div>
     <div className="mi-stat__label">{label}</div>
     {sub && <div className="mi-stat__sub">{sub}</div>}
@@ -139,7 +140,7 @@ const MarketInsightsPage: React.FC = () => {
     return (
       <CompanyPageLayout pageTitle="Market Insights">
         <div className="empty-state">
-          <div className="empty-state-icon">⚠️</div>
+          <div className="empty-state-icon"><Icon name="warning" size={32} label="" /></div>
           <h3>Failed to load insights</h3>
           <p>{error ?? "No data available."}</p>
           <button className="btn btn-ghost btn-sm mt-4" onClick={refetch}>Retry</button>
@@ -203,13 +204,13 @@ const MarketInsightsPage: React.FC = () => {
 
       {/* ── Primary stats overview ── */}
       <div className="mi-stats">
-        <StatTile icon="💼" value={insights.totalActiveJobs} label="Active Jobs"
+        <StatTile icon="work" value={insights.totalActiveJobs} label="Active Jobs"
           color="var(--color-verified)" sub={`${jobTypesCount} types`} />
-        <StatTile icon="🎯" value={uniqueSkills} label="Skills in Demand"
+        <StatTile icon="cat-default" value={uniqueSkills} label="Skills in Demand"
           color="var(--color-premium,#8B5CF6)" sub={`avg ${avgJobsPerSkill} jobs/skill`} />
-        <StatTile icon="⭐" value={majorSkillsCount} label="Major Requirement"
+        <StatTile icon="badge" value={majorSkillsCount} label="Major Requirement"
           color="var(--color-xp,#F59E0B)" sub={`${minorOnlySkills} minor-only`} />
-        <StatTile icon="📍" value={locationsCount} label="Hiring Locations"
+        <StatTile icon="location" value={locationsCount} label="Hiring Locations"
           color="var(--color-info,#60A5FA)" sub={topLocation ? topLocation[0] : undefined} />
       </div>
 
@@ -217,7 +218,7 @@ const MarketInsightsPage: React.FC = () => {
       <div className="mi-extended-stats">
         {/* Demand concentration */}
         <div className="mi-ext-card">
-          <div className="mi-ext-card__icon">🔥</div>
+          <div className="mi-ext-card__icon"><Icon name="challenge-streak" size={24} label="" /></div>
           <div className="mi-ext-card__body">
             <div className="mi-ext-card__value" style={{ color: "#F59E0B" }}>{top5Concentration}%</div>
             <div className="mi-ext-card__label">Demand concentration</div>
@@ -228,7 +229,7 @@ const MarketInsightsPage: React.FC = () => {
         {/* Top job type */}
         {topJobType && (
           <div className="mi-ext-card">
-            <div className="mi-ext-card__icon">📋</div>
+            <div className="mi-ext-card__icon"><Icon name="clipboard" size={24} label="" /></div>
             <div className="mi-ext-card__body">
               <div className="mi-ext-card__value" style={{ color: JOB_TYPE_COLORS[topJobType[0]] ?? "#A78BFA" }}>
                 {topJobType[0].replace(/_/g, " ")}
@@ -242,7 +243,7 @@ const MarketInsightsPage: React.FC = () => {
         {/* Top location */}
         {topLocation && (
           <div className="mi-ext-card">
-            <div className="mi-ext-card__icon">📍</div>
+            <div className="mi-ext-card__icon"><Icon name="location" size={24} label="" /></div>
             <div className="mi-ext-card__body">
               <div className="mi-ext-card__value" style={{ color: "#22D3EE" }}>{topLocation[0]}</div>
               <div className="mi-ext-card__label">Top hiring location</div>
@@ -254,7 +255,7 @@ const MarketInsightsPage: React.FC = () => {
         {/* Top skill */}
         {insights.topSkills.length > 0 && (
           <div className="mi-ext-card">
-            <div className="mi-ext-card__icon">🏆</div>
+            <div className="mi-ext-card__icon"><Icon name="trophy" size={24} label="" /></div>
             <div className="mi-ext-card__body">
               <div className="mi-ext-card__value" style={{ color: "#A78BFA" }}>{insights.topSkills[0].skillName}</div>
               <div className="mi-ext-card__label">#1 most in-demand skill</div>
@@ -271,7 +272,7 @@ const MarketInsightsPage: React.FC = () => {
         <div className="mi-col mi-col--wide">
           <div className="mi-panel">
             <div className="mi-panel__head">
-              <h2 className="mi-panel__title">🎯 Skill Demand</h2>
+              <h2 className="mi-panel__title"><Icon name="cat-default" size={16} label="" /> Skill Demand</h2>
               <span className="mi-panel__hint">Based on active job postings</span>
             </div>
             <div className="mi-panel__body">
@@ -303,7 +304,7 @@ const MarketInsightsPage: React.FC = () => {
           {insights.skillDemand.length > 0 && (
             <div className="mi-panel">
               <div className="mi-panel__head">
-                <h2 className="mi-panel__title">📈 Skill Metrics</h2>
+                <h2 className="mi-panel__title"><Icon name="filter-growing" size={16} label="" /> Skill Metrics</h2>
                 <span className="mi-panel__hint">Distribution analysis</span>
               </div>
               <div className="mi-panel__body">
@@ -324,7 +325,7 @@ const MarketInsightsPage: React.FC = () => {
           {/* Job type breakdown */}
           <div className="mi-panel">
             <div className="mi-panel__head">
-              <h2 className="mi-panel__title">📋 Job Types</h2>
+              <h2 className="mi-panel__title"><Icon name="clipboard" size={16} label="" /> Job Types</h2>
             </div>
             <div className="mi-panel__body">
               {Object.entries(insights.jobTypeBreakdown).sort((a, b) => b[1] - a[1]).map(([type, count]) => (
@@ -341,7 +342,7 @@ const MarketInsightsPage: React.FC = () => {
           {topLocations.length > 0 && (
             <div className="mi-panel">
               <div className="mi-panel__head">
-                <h2 className="mi-panel__title">📍 Top Locations</h2>
+                <h2 className="mi-panel__title"><Icon name="location" size={16} label="" /> Top Locations</h2>
                 <span className="mi-panel__hint">{locationsCount} total</span>
               </div>
               <div className="mi-panel__body">
@@ -360,7 +361,7 @@ const MarketInsightsPage: React.FC = () => {
           {insights.topSkills.length > 0 && (
             <div className="mi-panel">
               <div className="mi-panel__head">
-                <h2 className="mi-panel__title">🔥 Hot Skills</h2>
+                <h2 className="mi-panel__title"><Icon name="challenge-streak" size={16} label="" /> Hot Skills</h2>
                 <span className="mi-panel__hint">Most in-demand right now</span>
               </div>
               <div className="mi-panel__body">
@@ -372,7 +373,7 @@ const MarketInsightsPage: React.FC = () => {
                         <span className="mi-hot-skill__name">{s.skillName}</span>
                         <span className="mi-hot-skill__count">{s.jobCount} job{s.jobCount !== 1 ? "s" : ""}</span>
                       </div>
-                      {i < 3 && <span className="mi-hot-skill__medal">{i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉"}</span>}
+                      {i < 3 && <span className="mi-hot-skill__medal"><Icon name={i === 0 ? "badge-gold" : i === 1 ? "badge-silver" : "badge-bronze"} size={14} label="" /></span>}
                     </div>
                   ))}
                 </div>
@@ -383,7 +384,7 @@ const MarketInsightsPage: React.FC = () => {
           {/* Job type + location summary */}
           <div className="mi-panel">
             <div className="mi-panel__head">
-              <h2 className="mi-panel__title">📊 Market Summary</h2>
+              <h2 className="mi-panel__title"><Icon name="cat-data" size={16} label="" /> Market Summary</h2>
             </div>
             <div className="mi-panel__body">
               <MetricRow label="Total active jobs" value={insights.totalActiveJobs} color="#34D399" />

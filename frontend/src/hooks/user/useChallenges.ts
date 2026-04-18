@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { get } from "../../api/axios";
+import type { IconName } from "../../components/ui/Icon";
 
 // ---------------------------------------------------------------------------
 // Backend response types (matching Java DTOs)
@@ -65,7 +66,7 @@ export interface ChallengeWithProgress {
   completedAt: string | null;
   status: "IN_PROGRESS" | "COMPLETED" | "NOT_STARTED";
   category: ChallengeCategory;
-  icon: string;
+  icon: IconName;
   difficulty: 1 | 2 | 3 | 4 | 5;
   isNew: boolean;
 }
@@ -109,27 +110,24 @@ function getCategory(type: string): ChallengeCategory {
   }
 }
 
-function getIcon(type: string): string {
-  const icons: Record<string, string> = {
-    COMPLETE_PROFILE:     "👤",
-    ADD_PROJECT:          "🗂️",
-    ADD_CERTIFICATION:    "📜",
-    VERIFY_SKILL:         "🎯",
-    EARN_BADGE:           "🏅",
-    EARN_GOLD_BADGE:      "🥇",
-    MULTI_SKILL_PROGRESS: "🧩",
-    DAILY_LOGIN:          "☀️",
-    WEEKLY_ACTIVITY:      "📅",
-    STREAK_DAYS:          "🔥",
-    APPLY_JOB:            "📤",
-    APPLY_WITH_GOLD:      "🌟",
-    GET_ACCEPTED:         "🎉",
-    USE_XP_STORE:         "🛒",
-    SPEND_XP:             "💸",
-    REACH_XP:             "⚡",
-    COMPLETE_CHALLENGE:   "🏆",
+function getIcon(type: string): IconName {
+  const icons: Record<string, IconName> = {
+    VERIFY_SKILL:         "cat-default",
+    EARN_BADGE:           "badge",
+    EARN_GOLD_BADGE:      "badge-gold",
+    MULTI_SKILL_PROGRESS: "cat-data",
+    DAILY_LOGIN:          "challenge-daily",
+    WEEKLY_ACTIVITY:      "challenge-weekly",
+    STREAK_DAYS:          "challenge-streak",
+    APPLY_JOB:            "work",
+    APPLY_WITH_GOLD:      "badge-gold",
+    GET_ACCEPTED:         "success",
+    USE_XP_STORE:         "store",
+    SPEND_XP:             "xp-spend",
+    REACH_XP:             "xp",
+    COMPLETE_CHALLENGE:   "trophy",
   };
-  return icons[type] ?? "🎮";
+  return icons[type] ?? "quest";
 }
 
 function getDifficulty(type: string, conditionValue: number): 1 | 2 | 3 | 4 | 5 {

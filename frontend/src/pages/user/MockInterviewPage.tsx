@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import PageLayout from "../../components/user/PageLayout";
+import { Icon, type IconName } from "../../components/ui/Icon";
 import { useMockInterview } from "../../hooks/user/useStore";
 import { useSentiment } from "../../hooks/user/useSentiment";
 import type {
@@ -67,29 +68,29 @@ const ProseBlock: React.FC<{ block: Block; accent?: string }> = ({ block, accent
 };
 
 // Sentiment display config
-const SENTIMENT_CONFIG: Record<SentimentLabel, { emoji: string; label: string; color: string; bg: string; border: string }> = {
-  happy:     { emoji: "😊", label: "Happy",      color: "#34D399", bg: "#34D39912", border: "#34D39933" },
-  neutral:   { emoji: "😐", label: "Neutral",    color: "#94A3B8", bg: "#94A3B812", border: "#94A3B833" },
-  nervous:   { emoji: "😰", label: "Nervous",    color: "#60A5FA", bg: "#60A5FA12", border: "#60A5FA33" },
-  angry:     { emoji: "😤", label: "Frustrated", color: "#F87171", bg: "#F8717112", border: "#F8717133" },
-  confident: { emoji: "😎", label: "Confident",  color: "#FBBF24", bg: "#FBBF2412", border: "#FBBF2433" },
-  unknown:   { emoji: "🎭", label: "Unknown",    color: "#A78BFA", bg: "#A78BFA12", border: "#A78BFA33" },
+const SENTIMENT_CONFIG: Record<SentimentLabel, { icon: IconName; label: string; color: string; bg: string; border: string }> = {
+  happy:     { icon: "mood-happy" as IconName, label: "Happy",      color: "#34D399", bg: "#34D39912", border: "#34D39933" },
+  neutral:   { icon: "mood-neutral" as IconName, label: "Neutral",    color: "#94A3B8", bg: "#94A3B812", border: "#94A3B833" },
+  nervous:   { icon: "mood-nervous" as IconName, label: "Nervous",    color: "#60A5FA", bg: "#60A5FA12", border: "#60A5FA33" },
+  angry:     { icon: "mood-frustrated" as IconName, label: "Frustrated", color: "#F87171", bg: "#F8717112", border: "#F8717133" },
+  confident: { icon: "mood-confident" as IconName, label: "Confident",  color: "#FBBF24", bg: "#FBBF2412", border: "#FBBF2433" },
+  unknown:   { icon: "interviewer-unknown" as IconName, label: "Unknown",    color: "#A78BFA", bg: "#A78BFA12", border: "#A78BFA33" },
 };
 
-const MODE_CONFIG: Record<InterviewerMode, { label: string; color: string; bg: string; border: string; icon: string; desc: string }> = {
-  friendly: { label: "Good Cop",  icon: "🤝", color: "#34D399", bg: "#0D2B1F", border: "#34D39933", desc: "Supportive & encouraging" },
-  strict:   { label: "Bad Cop",   icon: "⚡", color: "#F87171", bg: "#2B0D0D", border: "#F8717133", desc: "Challenging & direct" },
+const MODE_CONFIG: Record<InterviewerMode, { label: string; color: string; bg: string; border: string; icon: IconName; desc: string }> = {
+  friendly: { label: "Good Cop",  icon: "challenge-social", color: "#34D399", bg: "#0D2B1F", border: "#34D39933", desc: "Supportive & encouraging" },
+  strict:   { label: "Bad Cop",   icon: "xp", color: "#F87171", bg: "#2B0D0D", border: "#F8717133", desc: "Challenging & direct" },
 };
 
-const TONE_CONFIG: Record<InterviewTone, { label: string; color: string; bg: string; border: string; icon: string }> = {
-  good_cop: { label: "Good Cop",  icon: "🤝", color: "#34D399", bg: "#0D2B1F", border: "#34D39933" },
-  bad_cop:  { label: "Bad Cop",   icon: "⚡", color: "#F87171", bg: "#2B0D0D", border: "#F8717133" },
-  neutral:  { label: "Neutral",   icon: "🎯", color: "#94A3B8", bg: "#1A2030", border: "#94A3B833" },
+const TONE_CONFIG: Record<InterviewTone, { label: string; color: string; bg: string; border: string; icon: IconName }> = {
+  good_cop: { label: "Good Cop",  icon: "challenge-social", color: "#34D399", bg: "#0D2B1F", border: "#34D39933" },
+  bad_cop:  { label: "Bad Cop",   icon: "xp", color: "#F87171", bg: "#2B0D0D", border: "#F8717133" },
+  neutral:  { label: "Neutral",   icon: "cat-default", color: "#94A3B8", bg: "#1A2030", border: "#94A3B833" },
 };
 
-const QTYPE_CONFIG: Record<QuestionType, { label: string; color: string; bg: string; border: string; icon: string }> = {
-  technical: { label: "Technical", icon: "⚙️", color: "#60A5FA", bg: "#1E3A5F18", border: "#60A5FA33" },
-  personal:  { label: "Personal",  icon: "🙋", color: "#C084FC", bg: "#4A178018", border: "#C084FC33" },
+const QTYPE_CONFIG: Record<QuestionType, { label: string; color: string; bg: string; border: string; icon: IconName }> = {
+  technical: { label: "Technical", icon: "cat-backend", color: "#60A5FA", bg: "#1E3A5F18", border: "#60A5FA33" },
+  personal:  { label: "Personal",  icon: "question-personal", color: "#C084FC", bg: "#4A178018", border: "#C084FC33" },
 };
 
 // ---------------------------------------------------------------------------
@@ -127,7 +128,7 @@ const SentimentWidget: React.FC<{
         {!isGranted && (
           <div className="mi-camera-placeholder">
             <span className="mi-camera-placeholder__icon">
-              {isHardDenied || permission === "unsupported" ? "🚫" : "📷"}
+              {isHardDenied || permission === "unsupported" ? <Icon name="blocked" size={24} label="" /> : <Icon name="camera" size={24} label="" />}
             </span>
             <p className="mi-camera-placeholder__text">
               {cameraError ?? (permission === "pending"
@@ -150,7 +151,7 @@ const SentimentWidget: React.FC<{
 
       {isGranted && sc && (
         <div className="mi-sentiment-badge" style={{ background: sc.bg, borderColor: sc.border }}>
-          <span className="mi-sentiment-badge__emoji">{sc.emoji}</span>
+          <span className="mi-sentiment-badge__emoji"><Icon name={sc.icon} size={18} label={sc.label} /></span>
           <div className="mi-sentiment-badge__info">
             <span className="mi-sentiment-badge__label" style={{ color: sc.color }}>{sc.label}</span>
             <span className="mi-sentiment-badge__conf">{Math.round((lastSentiment?.confidence ?? 0) * 100)}% confidence</span>
@@ -177,7 +178,7 @@ const ModeBadge: React.FC<{ mode: InterviewerMode }> = ({ mode }) => {
   const mc = MODE_CONFIG[mode];
   return (
     <div className="mi-mode-badge" style={{ background: mc.bg, borderColor: mc.border }}>
-      <span className="mi-mode-badge__icon">{mc.icon}</span>
+      <span className="mi-mode-badge__icon"><Icon name={mc.icon} size={16} label={mc.label} /></span>
       <div className="mi-mode-badge__info">
         <span className="mi-mode-badge__label" style={{ color: mc.color }}>{mc.label} Mode</span>
         <span className="mi-mode-badge__desc">{mc.desc}</span>
@@ -205,7 +206,7 @@ const IdleScreen: React.FC<{
     <div className="mi-idle">
       <div className="mi-idle__card">
         <div className="mi-idle__glow" />
-        <div className="mi-idle__icon">🎙️</div>
+        <div className="mi-idle__icon"><Icon name="interview" size={40} label="" /></div>
         <div className="mi-idle__tag">AI MOCK INTERVIEW</div>
         <h2 className="mi-idle__title">Ready to Practice?</h2>
         <p className="mi-idle__desc">
@@ -214,10 +215,10 @@ const IdleScreen: React.FC<{
         </p>
         <ul className="mi-idle__tips">
           {[
-            "Mix of Technical ⚙️ and Personal 🙋 questions",
+            "Mix of Technical and Personal questions",
             "Each question adapts to your previous answer",
             "Camera detects your sentiment in real time (optional)",
-            "AI switches between Good Cop 🤝 and Bad Cop ⚡ tone",
+            "AI switches between Good Cop and Bad Cop tone",
             "Full performance summary at the end",
           ].map((t, i) => (
             <li key={i} className="mi-idle__tip"><span className="mi-idle__tip-dot" />{t}</li>
@@ -225,7 +226,7 @@ const IdleScreen: React.FC<{
         </ul>
         <div className="mi-idle__mode-preview">
           <div className="mi-idle__mode-item" style={{ background: "#0D2B1F", borderColor: "#34D39933" }}>
-            <span>🤝</span>
+            <Icon name="challenge-social" size={16} label="" />
             <div>
               <div style={{ color: "#34D399", fontWeight: 700, fontSize: 12 }}>GOOD COP</div>
               <div style={{ color: "#94A3B8", fontSize: 11 }}>Nervous / weak answer</div>
@@ -233,14 +234,14 @@ const IdleScreen: React.FC<{
           </div>
           <div className="mi-idle__mode-arrow">↔</div>
           <div className="mi-idle__mode-item" style={{ background: "#2B0D0D", borderColor: "#F8717133" }}>
-            <span>⚡</span>
+            <Icon name="xp" size={16} label="" />
             <div>
               <div style={{ color: "#F87171", fontWeight: 700, fontSize: 12 }}>BAD COP</div>
               <div style={{ color: "#94A3B8", fontSize: 11 }}>Confident / strong answer</div>
             </div>
           </div>
         </div>
-        {error && <div className="mi-error-box"><span>⚠</span> {error}</div>}
+        {error && <div className="mi-error-box"><Icon name="warning" size={14} label="" /> {error}</div>}
         <button className="mi-start-btn" onClick={handleStart} disabled={isStarting}>
           {isStarting
             ? <span className="mi-start-btn__inner"><span className="mi-spinner" />Gemini is preparing your first question…</span>
@@ -291,11 +292,11 @@ const FeedbackPanel: React.FC<{ feedback: QuestionFeedback }> = ({ feedback }) =
   return (
     <div className="mi-feedback-panel" style={{ borderColor: mc.border, background: `${mc.bg}` }}>
       <div className="mi-feedback-panel__header">
-        <span className="mi-feedback-panel__mode-icon">{mc.icon}</span>
+        <span className="mi-feedback-panel__mode-icon"><Icon name={mc.icon} size={14} label="" /></span>
         <span className="mi-feedback-panel__mode-label" style={{ color: mc.color }}>{mc.label} Mode</span>
         <div className="mi-feedback-panel__spacer" />
         <span className="mi-sentiment-chip" style={{ background: sc.bg, borderColor: sc.border, color: sc.color }}>
-          {sc.emoji} {sc.label}
+          <Icon name={sc.icon} size={14} label="" /> {sc.label}
         </span>
         <span className="mi-qtype-chip" style={{
           background: QTYPE_CONFIG[feedback.questionType].bg,
@@ -538,7 +539,7 @@ const StepByStepScreen: React.FC<{
                 <span className="mi-answer-footer__warn"> (write more)</span>
               )}
             </span>
-            {error && <div className="mi-error-box mi-error-box--inline"><span>⚠</span> {error}</div>}
+            {error && <div className="mi-error-box mi-error-box--inline"><Icon name="warning" size={14} label="" /> {error}</div>}
             {!hasFeedback && !feedbackLoading && (
               <button className="mi-submit-btn" onClick={handleSubmit} disabled={!canSubmit}>
                 {isFetchingFeedback
@@ -607,8 +608,8 @@ const StepByStepScreen: React.FC<{
                 const qc = QTYPE_CONFIG[f.questionType];
                 return (
                   <div key={i} className="mi-sentiment-dot" title={`Q${i + 1}: ${sc.label} · ${qc.label}`}>
-                    <span className="mi-sentiment-dot__emoji">{sc.emoji}</span>
-                    <span className="mi-sentiment-dot__type">{qc.icon}</span>
+                    <span className="mi-sentiment-dot__emoji"><Icon name={sc.icon} size={14} label={sc.label} /></span>
+                    <span className="mi-sentiment-dot__type"><Icon name={qc.icon} size={14} label={qc.label} /></span>
                     <span className="mi-sentiment-dot__q">Q{i + 1}</span>
                   </div>
                 );
@@ -621,14 +622,14 @@ const StepByStepScreen: React.FC<{
         <div className="mi-mode-legend">
           <div className="mi-sidebar-section-label">MODE GUIDE</div>
           <div className="mi-mode-legend__item">
-            <span>🤝</span>
+            <Icon name="challenge-social" size={16} label="" />
             <div>
               <div style={{ color: "#34D399", fontSize: 11, fontWeight: 700 }}>GOOD COP</div>
               <div style={{ color: "#64748B", fontSize: 11 }}>Nervous / weak answers</div>
             </div>
           </div>
           <div className="mi-mode-legend__item">
-            <span>⚡</span>
+            <Icon name="xp" size={16} label="" />
             <div>
               <div style={{ color: "#F87171", fontSize: 11, fontWeight: 700 }}>BAD COP</div>
               <div style={{ color: "#64748B", fontSize: 11 }}>Confident / strong answers</div>
@@ -636,14 +637,14 @@ const StepByStepScreen: React.FC<{
           </div>
           <div className="mi-sidebar-section-label" style={{ marginTop: 8 }}>QUESTION TYPES</div>
           <div className="mi-mode-legend__item">
-            <span>⚙️</span>
+            <span><Icon name="cat-backend" size={16} label="" /></span>
             <div>
               <div style={{ color: "#60A5FA", fontSize: 11, fontWeight: 700 }}>TECHNICAL</div>
               <div style={{ color: "#64748B", fontSize: 11 }}>Skills & domain knowledge</div>
             </div>
           </div>
           <div className="mi-mode-legend__item">
-            <span>🙋</span>
+            <span><Icon name="question-personal" size={16} label="" /></span>
             <div>
               <div style={{ color: "#C084FC", fontSize: 11, fontWeight: 700 }}>PERSONAL</div>
               <div style={{ color: "#64748B", fontSize: 11 }}>Your background & experience</div>
@@ -682,7 +683,7 @@ const CompletedScreen: React.FC<{
             Completed {new Date(createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
           </p>
         </div>
-        <div className="mi-completed-banner__icon">✓</div>
+        <div className="mi-completed-banner__icon"><Icon name="check" size={24} label="" /></div>
       </div>
 
       {/* Sentiment + type journey strip */}
@@ -697,9 +698,9 @@ const CompletedScreen: React.FC<{
               return (
                 <div key={i} className="mi-journey-item" title={`${qc.label} · ${sc.label} · ${rec.answerQuality}`}>
                   <span className="mi-journey-item__q">Q{i + 1}</span>
-                  <span className="mi-journey-item__type" style={{ color: qc.color }}>{qc.icon}</span>
-                  <span className="mi-journey-item__emoji">{sc.emoji}</span>
-                  <span className="mi-journey-item__mode-icon" style={{ color: mc.color }}>{mc.icon}</span>
+                  <span className="mi-journey-item__type" style={{ color: qc.color }}><Icon name={qc.icon} size={14} label="" /></span>
+                  <span className="mi-journey-item__emoji"><Icon name={sc.icon} size={14} label="" /></span>
+                  <span className="mi-journey-item__mode-icon" style={{ color: mc.color }}><Icon name={mc.icon} size={14} label="" /></span>
                   <span className="mi-journey-item__quality" style={{
                     color: rec.answerQuality === "strong" ? "#34D399" : rec.answerQuality === "moderate" ? "#FBBF24" : "#F87171"
                   }}>{rec.answerQuality}</span>
@@ -739,14 +740,14 @@ const CompletedScreen: React.FC<{
 
         <aside className="mi-completed-sidebar">
           <div className="mi-sidebar-card">
-            <h3 className="mi-sidebar-card__title">🗺️ Answer Records</h3>
+            <h3 className="mi-sidebar-card__title"><Icon name="map" size={14} label="" /> Answer Records</h3>
             <div className="mi-sidebar-card__answers">
               {answerRecords.map((rec, i) => {
                 const qc = QTYPE_CONFIG[rec.questionType];
                 return (
                   <div key={i} className="mi-sidebar-card__answer-chunk">
                     <div className="mi-sidebar-card__answer-meta">
-                      <span style={{ color: qc.color, fontSize: 10, fontWeight: 700 }}>{qc.icon} {qc.label}</span>
+                      <span style={{ color: qc.color, fontSize: 10, fontWeight: 700 }}><Icon name={qc.icon} size={10} label="" /> {qc.label}</span>
                       <span className="mi-sidebar-card__answer-q">Q{i + 1}</span>
                     </div>
                     <p className="mi-sidebar-card__answer-question">{rec.question}</p>
@@ -757,7 +758,7 @@ const CompletedScreen: React.FC<{
             </div>
           </div>
 
-          <button className="mi-buy-btn" onClick={onBuyAnother}>🎙️ Practice Again →</button>
+          <button className="mi-buy-btn" onClick={onBuyAnother}><Icon name="interview" size={14} label="" /> Practice Again →</button>
           <button className="mi-skills-btn" onClick={() => window.history.back()}>← Back to Store</button>
         </aside>
       </div>

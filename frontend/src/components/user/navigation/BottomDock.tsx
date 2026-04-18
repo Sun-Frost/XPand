@@ -24,8 +24,8 @@ import { NAV_ITEMS, type NavItem } from "./navItems";
 import "../../../assets/css/BottomDock.css";
 
 /* ── Magnification constants ─────────────────────────────────── */
-const ITEM_BASE = 48;
-const ITEM_MAG  = 68;
+const ITEM_BASE = 28;
+const ITEM_MAG  = 48;
 const MAG_RANGE = 100;
 
 /* ── DockItem ────────────────────────────────────────────────── */

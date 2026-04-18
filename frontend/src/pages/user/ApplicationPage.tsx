@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import PageLayout from "../../components/user/PageLayout";
+import { Icon } from "../../components/ui/Icon";
 import { useApplications } from "../../hooks/user/useApplications";
 import type { ApplicationResponse, ApplicationStatus } from "../../hooks/user/useApplications";
 
@@ -35,7 +36,7 @@ const STATUS_CONFIG: Record<
   REJECTED: {
     label: "Not Selected",
     icon: null,
-    glyph: "✕",
+    glyph: "×",
     cls: "rejected",
     color: "var(--color-danger)",
     bg: "var(--color-danger-bg)",
@@ -127,7 +128,7 @@ const StatusTimeline: React.FC<{ status: ApplicationStatus; prioritySlotRank?: n
               step.special ? "is-special" : "",
             ].filter(Boolean).join(" ")}>
               <div className="ap-tl-dot">
-                {step.done    && <span>✓</span>}
+                {step.done    && <span><Icon name="check" size={14} label="" /></span>}
                 {step.active  && !step.special && <span className="ap-tl-pulse" />}
                 {step.special && <span>◈</span>}
                 {step.failed  && <span>{STATUS_CONFIG[status].glyph}</span>}
@@ -179,7 +180,7 @@ const ApplicationCard: React.FC<{
               {initial}
             </div>
             {app.prioritySlotRank && (
-              <span className="ap-card__logo-star" title={`Priority #${app.prioritySlotRank}`}>⚡</span>
+              <span className="ap-card__logo-star" title={`Priority #${app.prioritySlotRank}`}><Icon name="xp" size={12} label="" /></span>
             )}
           </div>
 
@@ -197,7 +198,7 @@ const ApplicationCard: React.FC<{
               {app.prioritySlotRank && (
                 <>
                   <span className="ap-card__dot">·</span>
-                  <span className="ap-priority-inline">⚡ Priority #{app.prioritySlotRank}</span>
+                  <span className="ap-priority-inline"><Icon name="xp" size={12} label="" /> Priority #{app.prioritySlotRank}</span>
                 </>
               )}
             </div>
@@ -353,7 +354,7 @@ const ApplicationsPage: React.FC = () => {
     return (
       <PageLayout pageTitle="My Applications">
         <div className="ap-error">
-          <div className="ap-error__glyph">⚠</div>
+          <div className="ap-error__glyph"><Icon name="warning" size={20} label="" /></div>
           <h3 className="ap-error__title">Failed to load applications</h3>
           <p className="ap-error__msg">{error}</p>
           <button className="ap-btn ap-btn--primary" onClick={refetch}>Try again</button>
@@ -425,7 +426,7 @@ const ApplicationsPage: React.FC = () => {
       ) : sorted.length === 0 ? (
         <div className="ap-empty">
           <div className="ap-empty__icon">
-            {activeTab === "ALL" ? "📋" : STATUS_CONFIG[activeTab as ApplicationStatus]?.glyph ?? "◎"}
+            {activeTab === "ALL" ? <Icon name="clipboard" size={14} label="" /> : STATUS_CONFIG[activeTab as ApplicationStatus]?.glyph ?? "◎"}
           </div>
           <h3 className="ap-empty__title">
             {activeTab === "ALL" ? "No applications yet" : `No ${STATUS_TAB_LABELS[activeTab].toLowerCase()} applications`}

@@ -10,6 +10,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { Icon } from "../ui/Icon";
 
 interface CompanyNavbarProps {
   companyName: string | null;
@@ -85,7 +86,7 @@ const CompanyNavbar: React.FC<CompanyNavbarProps> = ({
           <button className="btn btn-ghost btn-icon navbar__icon-btn"
             onClick={onToggleTheme}
             aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}>
-            {isDarkMode ? "☀️" : "🌙"}
+            {isDarkMode ? <Icon name="sun" size={14} label="" /> : <Icon name="moon" size={14} label="" />}
           </button>
 
           {/* Company menu */}
@@ -110,11 +111,11 @@ const CompanyNavbar: React.FC<CompanyNavbarProps> = ({
                 <div className="divider" style={{ margin: 0 }} />
                 <ul className="navbar__menu-list">
                   {[
-                    { label: "Dashboard",     path: "/company/dashboard", icon: "🏢" },
-                    { label: "Manage Jobs",   path: "/company/jobs",      icon: "📋" },
-                    { label: "Post New Job",  path: "/company/jobs/new",  icon: "＋" },
-                    { label: "Market Insights", path: "/company/insights", icon: "📊" },
-                    { label: "Company Profile", path: "/company/profile",  icon: "⚙️" },
+                    { label: "Dashboard",     path: "/company/dashboard", icon: <Icon name="market-intel" size={14} label="" /> },
+                    { label: "Manage Jobs",   path: "/company/jobs",      icon: <Icon name="briefcase" size={14} label="" /> },
+                    { label: "Post New Job",  path: "/company/jobs/new",  icon: <Icon name="add-job" size={14} label="" /> },
+                    { label: "Market Insights", path: "/company/insights", icon: <Icon name="filter-growing" size={14} label="" /> },
+                    { label: "Company Profile", path: "/company/profile",  icon: <Icon name="profile" size={14} label="" /> },
                   ].map((item) => (
                     <li key={item.path} role="menuitem">
                       <button className="navbar__menu-item" onClick={() => go(item.path)}>
@@ -127,7 +128,7 @@ const CompanyNavbar: React.FC<CompanyNavbarProps> = ({
                 <div className="divider" style={{ margin: 0 }} />
                 <div className="navbar__menu-footer">
                   <button className="navbar__menu-item navbar__menu-item--danger" onClick={handleSignOut}>
-                    <span className="navbar__menu-icon">🚪</span>
+                    <span className="navbar__menu-icon"><Icon name="logout" size={14} label="" /></span>
                     Sign Out
                   </button>
                 </div>

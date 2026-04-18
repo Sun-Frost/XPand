@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import CompanyPageLayout from "../../components/company/companyPageLayout";
+import { Icon, type IconName } from "../../components/ui/Icon";
 import { useCompanyProfile, useCompanyJobs } from "../../hooks/company/useCompany";
 import type { JobPostingResponse, ApplicationStatus } from "../../hooks/company/useCompany";
 
@@ -28,11 +29,11 @@ const JOB_TYPE_LABEL: Record<string, string> = {
 // Stat card
 // ---------------------------------------------------------------------------
 
-const Stat: React.FC<{ icon: string; value: string | number; label: string; sub?: string; color?: string }> = ({
+const Stat: React.FC<{ icon: IconName; value: string | number; label: string; sub?: string; color?: string }> = ({
   icon, value, label, sub, color = "var(--color-verified)"
 }) => (
   <div className="cd-stat" style={{ "--sc": color } as React.CSSProperties}>
-    <div className="cd-stat__icon">{icon}</div>
+    <div className="cd-stat__icon"><Icon name={icon} size={24} label="" /></div>
     <div className="cd-stat__body">
       <div className="cd-stat__value">{value}</div>
       <div className="cd-stat__label">{label}</div>
@@ -89,12 +90,12 @@ const CompanyDashboardPage: React.FC = () => {
         <div className="cd-header__left">
           {profile && !profile.isApproved && (
             <div className="cd-pending-banner">
-              <span>⏳</span>
+              <Icon name="pending" size={16} label="" />
               <span>Your company is <strong>pending approval</strong>. You can prepare jobs but they won't be visible until approved.</span>
             </div>
           )}
           <div className="cd-welcome">
-            <div className="cd-welcome__icon">🏢</div>
+            <div className="cd-welcome__icon"><Icon name="job-type-full-time" size={28} label="" /></div>
             <div>
               <h1 className="cd-welcome__name">{profile?.companyName ?? "Company"}</h1>
               <p className="cd-welcome__sub">{profile?.industry ?? "No industry set"}{profile?.location ? ` · ${profile.location}` : ""}</p>
@@ -105,30 +106,30 @@ const CompanyDashboardPage: React.FC = () => {
 
       {/* ── Stats ── */}
       <div className="cd-stats">
-        <Stat icon="💼" value={stats.active} label="Active Jobs" color="var(--color-verified)" />
-        <Stat icon="📁" value={stats.total} label="Total Postings" color="var(--color-primary-400, #A78BFA)" />
-        <Stat icon="🔒" value={stats.closed} label="Closed / Expired" color="var(--color-text-muted)" />
-        <Stat icon="🎯" value={stats.totalSkills} label="Skills Required" color="var(--color-xp, #F59E0B)" />
+        <Stat icon="work" value={stats.active} label="Active Jobs" color="var(--color-verified)" />
+        <Stat icon="clipboard" value={stats.total} label="Total Postings" color="var(--color-primary-400, #A78BFA)" />
+        <Stat icon="locked" value={stats.closed} label="Closed / Expired" color="var(--color-text-muted)" />
+        <Stat icon="cat-default" value={stats.totalSkills} label="Skills Required" color="var(--color-xp, #F59E0B)" />
       </div>
 
       {/* ── Quick actions ── */}
       <div className="cd-quick">
         <button className="cd-quick-btn" onClick={() => navigate("/company/jobs")}>
-          <span className="cd-quick-btn__icon">📋</span>
+          <span className="cd-quick-btn__icon"><Icon name="clipboard" size={24} label="" /></span>
           <div>
             <div className="cd-quick-btn__title">Manage Jobs</div>
             <div className="cd-quick-btn__sub">Edit, close, view applicants</div>
           </div>
         </button>
         <button className="cd-quick-btn" onClick={() => navigate("/company/insights")}>
-          <span className="cd-quick-btn__icon">📊</span>
+          <span className="cd-quick-btn__icon"><Icon name="cat-data" size={24} label="" /></span>
           <div>
             <div className="cd-quick-btn__title">Market Insights</div>
             <div className="cd-quick-btn__sub">Skill demand, trends</div>
           </div>
         </button>
         <button className="cd-quick-btn" onClick={() => navigate("/company/profile")}>
-          <span className="cd-quick-btn__icon">🏢</span>
+          <span className="cd-quick-btn__icon"><Icon name="job-type-full-time" size={24} label="" /></span>
           <div>
             <div className="cd-quick-btn__title">Company Profile</div>
             <div className="cd-quick-btn__sub">Edit your public listing</div>
@@ -149,7 +150,7 @@ const CompanyDashboardPage: React.FC = () => {
 
         {!jobsError && jobs.length === 0 && (
           <div className="cd-empty">
-            <div className="cd-empty__icon">📭</div>
+            <div className="cd-empty__icon"><Icon name="search" size={40} label="" /></div>
             <p>No jobs posted yet.</p>
             <button className="btn btn-primary btn-sm" onClick={() => navigate("/company/jobs/new")}>Post your first job</button>
           </div>
@@ -165,7 +166,7 @@ const CompanyDashboardPage: React.FC = () => {
                     <div className="cd-job-row__title">{job.title}</div>
                     <div className="cd-job-row__meta">
                       {job.jobType && <span className="badge badge-muted">{JOB_TYPE_LABEL[job.jobType] ?? job.jobType}</span>}
-                      {job.location && <span className="cd-job-row__loc">📍 {job.location}</span>}
+                      {job.location && <span className="cd-job-row__loc"><Icon name="location" size={12} label="" /> {job.location}</span>}
                       <span className="cd-job-row__deadline">Deadline: {fmtDate(job.deadline)}</span>
                     </div>
                     <div className="cd-job-row__skills">

@@ -1,0 +1,793 @@
+/* ============================================================
+   XPand Design System — theme-enhancements.css  v6.1
+   "Obsidian Rank · Premium Layer"
+
+   PURPOSE: Additive enhancement layer over theme.css v6.0.
+   Import AFTER theme.css. Zero palette or token changes.
+
+   SECTIONS:
+   1. Motion tokens (new vars only)
+   2. Ambient background motion
+   3. Interactive energy layer
+   4. XP feedback system
+   5. Hero section visual treatment
+   6. Depth variation (glass / soft layers)
+   7. Motion hierarchy per element type
+   ============================================================ */
+
+
+/* ══════════════════════════════════════════════════════════
+   § 1  MOTION TOKENS
+   New custom properties for all animation work below.
+   Attached to :root so they apply in both themes.
+   ══════════════════════════════════════════════════════════ */
+:root {
+  /* Durations */
+  --dur-ambient:   18s;   /* slow drift — background orbs        */
+  --dur-breathe:   4.8s;  /* logo / active pulse                 */
+  --dur-ripple:    0.55s; /* button press ripple                 */
+  --dur-xp-burst:  1.4s;  /* XP float, badge pop                 */
+  --dur-hero-in:   0.9s;  /* hero entrance                       */
+
+  /* Easings */
+  --ease-bounce-out: cubic-bezier(0.34, 1.48, 0.64, 1);
+  --ease-hero:       cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Depth: new token for glass surfaces */
+  --glass-bg:           rgba(255,255,255,0.03);
+  --glass-border:       rgba(255,255,255,0.08);
+  --glass-blur:         12px;
+  --glass-bg-light:     rgba(255,255,255,0.65);
+  --glass-border-light: rgba(0,0,0,0.07);
+
+  /* XP reward palette aliases (stay semantic) */
+  --xp-burst-color:  var(--color-xp-gold-light);
+  --xp-burst-glow:   var(--color-xp-gold-glow);
+}
+
+
+/* ══════════════════════════════════════════════════════════
+   § 2  AMBIENT BACKGROUND MOTION
+   Two slow, translucent orbs that drift behind the hex grid.
+   They use the existing palette glows — nothing new added.
+   body::before / body::after already owned by theme.css,
+   so we use a new dedicated pseudo-element via a sibling
+   class .ambient-layer that should wrap #root, OR we inject
+   the orbs via body > * layering with @property if supported.
+   Safest approach: dedicated .ambient-canvas element added
+   once to the DOM (empty div before #root), plus keyframe
+   enhancement on the existing body::after gradient.
+   ══════════════════════════════════════════════════════════ */
+
+/* Replacement for body::after — same position, now animated */
+body::after {
+  animation: ambientHaze var(--dur-ambient) ease-in-out infinite alternate;
+}
+
+@keyframes ambientHaze {
+  0%   { opacity: 1;    transform: scaleX(1)   scaleY(1); }
+  40%  { opacity: 0.72; transform: scaleX(1.08) scaleY(0.92); }
+  70%  { opacity: 0.88; transform: scaleX(0.95) scaleY(1.06); }
+  100% { opacity: 1;    transform: scaleX(1.04) scaleY(0.97); }
+}
+
+/* Secondary ambient orb — bottom-right accent (cyan glow) */
+.ambient-canvas {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.ambient-canvas::before,
+.ambient-canvas::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  will-change: transform, opacity;
+}
+
+/* Violet orb — top-left drift */
+.ambient-canvas::before {
+  width: 480px;
+  height: 480px;
+  top: -120px;
+  left: -80px;
+  background: radial-gradient(circle,
+    rgba(115, 85, 204, 0.10) 0%,
+    transparent 70%
+  );
+  animation: orbDriftA var(--dur-ambient) ease-in-out infinite alternate;
+}
+
+/* Cyan orb — bottom-right drift */
+.ambient-canvas::after {
+  width: 400px;
+  height: 400px;
+  bottom: -100px;
+  right: -60px;
+  background: radial-gradient(circle,
+    rgba(34, 211, 238, 0.07) 0%,
+    transparent 70%
+  );
+  animation: orbDriftB calc(var(--dur-ambient) * 1.2) ease-in-out infinite alternate;
+}
+
+@keyframes orbDriftA {
+  0%   { transform: translate(0, 0)    scale(1); }
+  33%  { transform: translate(60px, 40px) scale(1.05); }
+  66%  { transform: translate(20px, 80px) scale(0.96); }
+  100% { transform: translate(80px, 20px) scale(1.02); }
+}
+
+@keyframes orbDriftB {
+  0%   { transform: translate(0, 0)      scale(1); }
+  50%  { transform: translate(-50px, -40px) scale(1.08); }
+  100% { transform: translate(-20px, -70px) scale(0.95); }
+}
+
+/* Light mode: orbs are subtler */
+[data-theme="light"] .ambient-canvas::before {
+  background: radial-gradient(circle,
+    rgba(91, 66, 180, 0.05) 0%,
+    transparent 70%
+  );
+}
+[data-theme="light"] .ambient-canvas::after {
+  background: radial-gradient(circle,
+    rgba(6, 182, 212, 0.04) 0%,
+    transparent 70%
+  );
+}
+
+/* Respect reduced-motion globally */
+@media (prefers-reduced-motion: reduce) {
+  body::after,
+  .ambient-canvas::before,
+  .ambient-canvas::after {
+    animation: none;
+  }
+}
+
+
+/* ══════════════════════════════════════════════════════════
+   § 3  INTERACTIVE ENERGY LAYER
+   Hover / focus effects that go beyond a basic box-shadow.
+   ══════════════════════════════════════════════════════════ */
+
+/* ── 3a. Button ripple on click ──────────────────────────── */
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at var(--ripple-x, 50%) var(--ripple-y, 50%),
+    rgba(255,255,255,0.18) 0%,
+    transparent 60%
+  );
+  opacity: 0;
+  transform: scale(0.4);
+  transition:
+    opacity  var(--dur-ripple) var(--ease-hero),
+    transform var(--dur-ripple) var(--ease-hero);
+  pointer-events: none;
+}
+.btn:active::after {
+  opacity: 1;
+  transform: scale(2.2);
+  transition-duration: 0s;
+}
+
+/* ── 3b. Card: inner light-source on hover ───────────────── */
+.card-interactive::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle at var(--card-mouse-x, 50%) var(--card-mouse-y, 50%),
+    rgba(155, 124, 255, 0.055) 0%,
+    transparent 55%
+  );
+  opacity: 0;
+  transition: opacity var(--duration-slow) var(--ease-smooth);
+  pointer-events: none;
+  z-index: 1;
+}
+.card-interactive:hover::after { opacity: 1; }
+
+/* ── 3c. Skill badge: shimmer sweep on hover ─────────────── */
+.skill-badge {
+  overflow: hidden;
+}
+.skill-badge::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(255,255,255,0.10) 50%,
+    transparent 70%
+  );
+  transform: translateX(-100%);
+  transition: transform 0.4s var(--ease-smooth);
+  pointer-events: none;
+}
+.skill-badge { position: relative; }
+.skill-badge:hover::after { transform: translateX(100%); }
+
+/* Gold tier shimmer is warmer */
+.skill-badge.gold::after {
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(245, 183, 49, 0.18) 50%,
+    transparent 70%
+  );
+}
+
+/* ── 3d. Stat card: value brightens on hover ─────────────── */
+.stat-card {
+  transition:
+    border-color var(--duration-base) var(--ease-smooth),
+    box-shadow   var(--duration-base) var(--ease-smooth),
+    transform    var(--duration-base) var(--ease-spring);
+}
+.stat-card:hover { transform: translateY(-2px); }
+.stat-card:hover .stat-value {
+  color: var(--color-primary-300);
+  transition: color var(--duration-base) var(--ease-smooth);
+}
+
+/* ── 3e. Tab item: underline expand ─────────────────────────*/
+.tab-item {
+  position: relative;
+}
+.tab-item::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  right: 50%;
+  height: 2px;
+  background: var(--color-primary-400);
+  border-radius: var(--radius-full);
+  transition: left var(--duration-base) var(--ease-spring),
+              right var(--duration-base) var(--ease-spring);
+}
+.tab-item:not(.active):hover::after {
+  left: 20%;
+  right: 20%;
+  opacity: 0.35;
+}
+.tab-item.active::after {
+  left: 0;
+  right: 0;
+  opacity: 1;
+}
+/* Remove the existing border-bottom approach from the active state
+   since ::after handles it — keep only color change */
+.tab-item.active { border-bottom-color: transparent; }
+
+/* ── 3f. Input: focused state with inner glow depth ────────*/
+.input:focus {
+  box-shadow:
+    0 0 0 3px var(--color-primary-glow),
+    inset 0 1px 3px rgba(0,0,0,0.25);
+}
+
+/* ── 3g. Logo mark: breathe pulse when app is active ────────*/
+.logo-mark {
+  animation: logoBreathe var(--dur-breathe) ease-in-out infinite;
+}
+@keyframes logoBreathe {
+  0%, 100% { box-shadow: var(--glow-primary); }
+  50%       { box-shadow: 0 0 0 1px rgba(155,124,255,0.32), 0 0 28px rgba(155,124,255,0.22); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo-mark { animation: none; }
+}
+
+
+/* ══════════════════════════════════════════════════════════
+   § 4  XP FEEDBACK SYSTEM
+   Floating micro-rewards, badge pop, progress pulse.
+   ══════════════════════════════════════════════════════════ */
+
+/* ── 4a. XP float label — added via JS on XP gain ──────────
+   Usage: inject <span class="xp-float" style="--xp-x:…; --xp-y:…">+50 XP</span>
+   into document.body, remove after animation ends.            */
+.xp-float {
+  position: fixed;
+  left: var(--xp-x, 50%);
+  top:  var(--xp-y, 50%);
+  transform: translate(-50%, -50%);
+  z-index: var(--z-tooltip, 900);
+  pointer-events: none;
+
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  color: var(--xp-burst-color);
+  letter-spacing: var(--tracking-wide);
+  text-shadow: 0 0 12px var(--xp-burst-glow);
+
+  animation: xpFloatUp var(--dur-xp-burst) var(--ease-hero) forwards;
+  white-space: nowrap;
+}
+
+@keyframes xpFloatUp {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.7) translateY(0); }
+  18%  { opacity: 1; transform: translate(-50%, -50%) scale(1.15) translateY(-6px); }
+  55%  { opacity: 1; transform: translate(-50%, -50%) scale(1) translateY(-20px); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.9) translateY(-44px); }
+}
+
+/* ── 4b. Progress bar: shimmer + pulse when filling ─────────
+   Add .progress-filling class while the bar width is animating */
+.progress-bar.progress-filling {
+  animation:
+    progressShimmer 1.2s ease-in-out infinite,
+    progressPulse   2s ease-in-out infinite;
+}
+
+@keyframes progressShimmer {
+  0%   { filter: brightness(1); }
+  50%  { filter: brightness(1.22); }
+  100% { filter: brightness(1); }
+}
+@keyframes progressPulse {
+  0%, 100% { box-shadow: none; }
+  50%       { box-shadow: 0 0 8px rgba(155,124,255,0.35); }
+}
+
+.progress-bar-gold.progress-filling {
+  animation:
+    progressShimmer 1.2s ease-in-out infinite,
+    xpBarPulse 2s ease-in-out infinite;
+}
+@keyframes xpBarPulse {
+  0%, 100% { box-shadow: none; }
+  50%       { box-shadow: 0 0 10px rgba(212,148,10,0.45); }
+}
+
+/* ── 4c. Achievement pop — badge unlock moment ───────────────
+   Add .achievement-pop class momentarily when a badge unlocks  */
+.skill-badge.achievement-pop {
+  animation: achievePop var(--dur-xp-burst) var(--ease-bounce-out) forwards;
+}
+@keyframes achievePop {
+  0%   { transform: scale(1);   box-shadow: none; }
+  25%  { transform: scale(1.18); box-shadow: 0 0 0 4px var(--color-gold-glow), 0 0 20px rgba(212,148,10,0.35); }
+  55%  { transform: scale(0.96); }
+  75%  { transform: scale(1.05); }
+  100% { transform: scale(1);   box-shadow: none; }
+}
+
+/* ── 4d. Level-up screen overlay ────────────────────────────
+   Full-screen moment: add .levelup-overlay to a fixed element  */
+.levelup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-modal, 400) + 10);
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 60% 50% at 50% 50%,
+    rgba(155,124,255,0.15) 0%,
+    transparent 65%
+  );
+  animation: levelUpFlash 1.8s var(--ease-hero) forwards;
+}
+@keyframes levelUpFlash {
+  0%   { opacity: 0; }
+  15%  { opacity: 1; }
+  60%  { opacity: 0.7; }
+  100% { opacity: 0; }
+}
+
+/* ── 4e. XP pill: live glow when score updates ──────────────
+   Add .xp-pill--live for actively changing XP displays        */
+.xp-pill--live {
+  animation: xpPilgrim 2.4s ease-in-out infinite;
+  box-shadow: 0 0 0 1px var(--color-gold-border);
+}
+@keyframes xpPilgrim {
+  0%, 100% { box-shadow: 0 0 0 1px var(--color-gold-border); }
+  50%       { box-shadow: var(--glow-gold), 0 0 0 1px var(--color-gold-border); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-bar.progress-filling,
+  .progress-bar-gold.progress-filling,
+  .xp-pill--live { animation: none; }
+}
+
+
+/* ══════════════════════════════════════════════════════════
+   § 5  HERO SECTION VISUAL TREATMENT
+   For dashboard headers and top-of-page identity moments.
+   Class: .hero-section — wraps your page-title + CTA row.
+   ══════════════════════════════════════════════════════════ */
+
+.hero-section {
+  position: relative;
+  padding: var(--space-12, 3rem) var(--layout-content-padding, 2rem)
+           var(--space-10, 2.5rem);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Gradient underlayer — violet to transparent */
+.hero-section::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 70% 80% at 10% 50%,
+      rgba(115,85,204,0.12) 0%, transparent 60%),
+    linear-gradient(180deg,
+      rgba(115,85,204,0.06) 0%,
+      transparent 100%);
+  z-index: -2;
+  pointer-events: none;
+}
+
+/* Bottom edge fade — blends hero into page content cleanly */
+.hero-section::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-border-default) 20%,
+    var(--color-border-subtle) 80%,
+    transparent 100%
+  );
+  z-index: -1;
+}
+
+/* Hero title: gradient text using existing brand gradient */
+.hero-section .page-title,
+.hero-section h1 {
+  background: linear-gradient(
+    120deg,
+    var(--color-text-primary) 0%,
+    var(--color-primary-300) 60%,
+    var(--color-cyan-300) 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: heroTitleIn var(--dur-hero-in) var(--ease-hero) both;
+}
+
+/* Hero subtitle entrance */
+.hero-section .page-subtitle {
+  animation: heroSubIn var(--dur-hero-in) var(--ease-hero) 0.12s both;
+}
+
+/* Hero CTA row entrance */
+.hero-section > * { animation: heroSubIn var(--dur-hero-in) var(--ease-hero) both; }
+.hero-section > *:nth-child(1) { animation-delay: 0s; }
+.hero-section > *:nth-child(2) { animation-delay: 0.08s; }
+.hero-section > *:nth-child(3) { animation-delay: 0.16s; }
+.hero-section > *:nth-child(4) { animation-delay: 0.24s; }
+
+@keyframes heroTitleIn {
+  from { opacity: 0; transform: translateY(14px); filter: blur(6px); }
+  to   { opacity: 1; transform: translateY(0);    filter: blur(0); }
+}
+@keyframes heroSubIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Variant: hero with rank badge (shows current rank tier) */
+.hero-section--ranked::before {
+  background:
+    radial-gradient(ellipse 70% 80% at 10% 50%,
+      rgba(212,148,10,0.09) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 60% at 90% 30%,
+      rgba(115,85,204,0.10) 0%, transparent 55%),
+    linear-gradient(180deg,
+      rgba(212,148,10,0.04) 0%, transparent 100%);
+}
+
+/* Light mode hero */
+[data-theme="light"] .hero-section::before {
+  background:
+    radial-gradient(ellipse 70% 80% at 10% 50%,
+      rgba(91,66,180,0.06) 0%, transparent 60%),
+    linear-gradient(180deg,
+      rgba(91,66,180,0.03) 0%, transparent 100%);
+}
+[data-theme="light"] .hero-section .page-title,
+[data-theme="light"] .hero-section h1 {
+  background: linear-gradient(
+    120deg,
+    var(--color-text-primary) 0%,
+    var(--color-primary-500) 55%,
+    var(--color-cyan-500) 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-section .page-title,
+  .hero-section h1,
+  .hero-section .page-subtitle,
+  .hero-section > * { animation: none; }
+}
+
+
+/* ══════════════════════════════════════════════════════════
+   § 6  DEPTH VARIATION — GLASS & SOFT LAYERS
+   New surface types that sit between card and nothing.
+   Uses the existing surface color tokens.
+   ══════════════════════════════════════════════════════════ */
+
+/* ── 6a. Glass panel — for floating UI, overlays, sidebars ── */
+.surface-glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+  border-radius: var(--radius-xl);
+}
+[data-theme="light"] .surface-glass {
+  background: var(--glass-bg-light);
+  border-color: var(--glass-border-light);
+}
+
+/* ── 6b. Soft inset — sunken region inside a card ───────────
+   Use for "inner panel" / code blocks / progress areas        */
+.surface-inset {
+  background: rgba(0,0,0,0.20);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+}
+[data-theme="light"] .surface-inset {
+  background: rgba(0,0,0,0.04);
+}
+
+/* ── 6c. Glow panel — semantic highlight surface ─────────────
+   For "featured" content, active skill, unlocked cert         */
+.surface-glow-primary {
+  background: linear-gradient(
+    135deg,
+    rgba(91,66,180,0.10) 0%,
+    rgba(115,85,204,0.05) 100%
+  );
+  border: 1px solid rgba(155,124,255,0.18);
+  border-radius: var(--radius-xl);
+  position: relative;
+  overflow: hidden;
+}
+.surface-glow-primary::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(155,124,255,0.40),
+    transparent
+  );
+}
+
+.surface-glow-gold {
+  background: linear-gradient(
+    135deg,
+    rgba(212,148,10,0.09) 0%,
+    rgba(212,148,10,0.04) 100%
+  );
+  border: 1px solid rgba(212,148,10,0.22);
+  border-radius: var(--radius-xl);
+  position: relative;
+  overflow: hidden;
+}
+.surface-glow-gold::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(245,183,49,0.40),
+    transparent
+  );
+}
+
+.surface-glow-cyan {
+  background: linear-gradient(
+    135deg,
+    rgba(34,211,238,0.08) 0%,
+    rgba(14,165,201,0.04) 100%
+  );
+  border: 1px solid rgba(34,211,238,0.18);
+  border-radius: var(--radius-xl);
+  position: relative;
+  overflow: hidden;
+}
+.surface-glow-cyan::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(34,211,238,0.40),
+    transparent
+  );
+}
+
+/* ── 6d. Frosted card — elevated, used for popovers / tips ── */
+.card-frosted {
+  background: rgba(26,30,42,0.82);
+  border: 1px solid var(--color-border-default);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg),
+              inset 0 1px 0 rgba(255,255,255,0.06);
+}
+[data-theme="light"] .card-frosted {
+  background: rgba(255,255,255,0.80);
+  border-color: rgba(0,0,0,0.09);
+  box-shadow: var(--shadow-lg),
+              inset 0 1px 0 rgba(255,255,255,0.90);
+}
+
+/* ── 6e. Divider with gradient fade ─────────────────────────
+   Drop-in replacement for .divider when inside a hero/surface */
+.divider-glow {
+  height: 1px;
+  border: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-border-strong) 30%,
+    var(--color-primary-glow) 50%,
+    var(--color-border-strong) 70%,
+    transparent 100%
+  );
+  margin: var(--space-4) 0;
+}
+
+
+/* ══════════════════════════════════════════════════════════
+   § 7  MOTION HIERARCHY
+   Different animation behaviors per element category,
+   establishing a clear "attention tier" system.
+   ══════════════════════════════════════════════════════════ */
+
+/* TIER 0 — instant, no delay (inputs, toggles) */
+input, textarea, select,
+.theme-toggle,
+.tab-item,
+.navbar__menu-item {
+  transition-duration: var(--duration-fast);
+}
+
+/* TIER 1 — snappy (buttons, badges, icon-buttons) */
+.btn,
+.badge,
+.skill-badge,
+.btn-icon, .btn-icon-sm, .btn-icon-lg {
+  transition-duration: var(--duration-base);
+}
+
+/* TIER 2 — responsive (cards, stat-cards) */
+.card,
+.stat-card,
+.xp-pill {
+  transition-duration: var(--duration-base);
+}
+
+/* TIER 3 — measured (navbar, sidebar, modals) */
+.navbar,
+.modal,
+.toast {
+  transition-duration: var(--duration-slow);
+}
+
+/* TIER 4 — deliberate (page-level surfaces, hero) */
+.hero-section,
+.pagelayout-content,
+body {
+  transition-duration: var(--duration-slow);
+}
+
+/* ── 7a. Sidebar items: stagger on mount ─────────────────────
+   Apply .sidebar-nav to <ul>/<nav> wrapping .sidebar-item els  */
+.sidebar-nav .sidebar-item:nth-child(1)  { animation-delay:  20ms; }
+.sidebar-nav .sidebar-item:nth-child(2)  { animation-delay:  50ms; }
+.sidebar-nav .sidebar-item:nth-child(3)  { animation-delay:  80ms; }
+.sidebar-nav .sidebar-item:nth-child(4)  { animation-delay: 110ms; }
+.sidebar-nav .sidebar-item:nth-child(5)  { animation-delay: 140ms; }
+.sidebar-nav .sidebar-item:nth-child(6)  { animation-delay: 170ms; }
+.sidebar-nav .sidebar-item:nth-child(7)  { animation-delay: 200ms; }
+.sidebar-nav .sidebar-item:nth-child(8)  { animation-delay: 230ms; }
+
+/* ── 7b. Stat card grid: cascade entrance ───────────────────
+   Wrap stat cards in .stat-grid for staggered entrance        */
+.stat-grid { display: contents; }
+.stat-grid .stat-card {
+  animation: fadeIn var(--duration-slow) var(--ease-out) both;
+}
+.stat-grid .stat-card:nth-child(1) { animation-delay:  0ms; }
+.stat-grid .stat-card:nth-child(2) { animation-delay: 60ms; }
+.stat-grid .stat-card:nth-child(3) { animation-delay: 120ms; }
+.stat-grid .stat-card:nth-child(4) { animation-delay: 180ms; }
+
+/* ── 7c. Card grid: staggered fade-up ───────────────────────
+   Wrap .card els in .card-grid for orchestrated entrance      */
+.card-grid { display: contents; }
+.card-grid .card {
+  animation: fadeIn var(--duration-slow) var(--ease-out) both;
+}
+.card-grid .card:nth-child(1) { animation-delay:  0ms; }
+.card-grid .card:nth-child(2) { animation-delay:  70ms; }
+.card-grid .card:nth-child(3) { animation-delay: 140ms; }
+.card-grid .card:nth-child(4) { animation-delay: 210ms; }
+.card-grid .card:nth-child(5) { animation-delay: 280ms; }
+.card-grid .card:nth-child(6) { animation-delay: 350ms; }
+
+/* ── 7d. Badge tier: gold gets a persistent shimmer ─────────
+   Gold is the highest tier — it earns ambient life           */
+.skill-badge.gold {
+  background-image: linear-gradient(
+    105deg,
+    var(--color-gold-bg) 0%,
+    rgba(245,183,49,0.08) 50%,
+    var(--color-gold-bg) 100%
+  );
+  background-size: 200% 100%;
+  animation: goldBadgeShimmer 4s ease-in-out infinite;
+}
+@keyframes goldBadgeShimmer {
+  0%, 100% { background-position: 0% center; }
+  50%       { background-position: 200% center; }
+}
+
+/* ── 7e. Notification dot: pulse to demand attention ────────*/
+.navbar__notif-dot {
+  animation: notifPulse 2.2s ease-in-out infinite;
+}
+@keyframes notifPulse {
+  0%, 100% { box-shadow: none; opacity: 1; }
+  50%       { box-shadow: 0 0 0 4px rgba(155,124,255,0.22); opacity: 0.85; }
+}
+
+/* ── 7f. New/earned badges: pop in ──────────────────────────
+   Add .badge--new to freshly awarded badges                   */
+.badge--new {
+  animation: badgeNew 0.55s var(--ease-bounce-out) both;
+}
+@keyframes badgeNew {
+  0%   { opacity: 0; transform: scale(0.5) rotate(-6deg); }
+  70%  { opacity: 1; transform: scale(1.08) rotate(1deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+/* ── 7g. Global: honour prefers-reduced-motion ──────────────*/
+@media (prefers-reduced-motion: reduce) {
+  .skill-badge.gold   { animation: none; }
+  .navbar__notif-dot  { animation: none; }
+  .stat-grid .stat-card,
+  .card-grid .card    { animation: none; }
+  .sidebar-nav .sidebar-item { animation-delay: 0ms; }
+  .hero-section > *   { animation: none; }
+}

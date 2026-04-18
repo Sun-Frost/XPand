@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import CompanyPageLayout from "../../components/company/companyPageLayout";
+import { Icon } from "../../components/ui/Icon";
 import { useCompanyJobs, useJobApplicants } from "../../hooks/company/useCompany";
 import { exportApplicantCvPdf } from "../../utils/pdfExport";
 import type {
@@ -253,14 +254,14 @@ projects: rich.projects.map(mapProject),
         {/* TOP BAR */}
         <div className="cv-modal__topbar">
           <div className="cv-modal__topbar-left">
-            <button className="cv-close-btn" onClick={onClose} aria-label="Close">✕</button>
+            <button className="cv-close-btn" onClick={onClose} aria-label="Close"><Icon name="close" size={14} label="Close" /></button>
             <span className="cv-modal__topbar-label">
               Applicant CV
               {isPriority && (
                 <span className={`cv-modal__topbar-priority cv-modal__topbar-priority--rank${app.prioritySlotRank}`}>
-                  {app.prioritySlotRank === 1 ? "👑 1st Priority — Auto-surfaced"
-                    : app.prioritySlotRank === 2 ? "🥈 2nd Priority — Must Review"
-                    : "⭐ 3rd Priority"}
+                  {app.prioritySlotRank === 1 ? <><Icon name="trophy" size={12} label="" /> 1st Priority — Auto-surfaced</>
+                    : app.prioritySlotRank === 2 ? <><Icon name="badge-silver" size={12} label="" /> 2nd Priority — Must Review</>
+                    : <><Icon name="badge-bronze" size={12} label="" /> 3rd Priority</>}
                 </span>
               )}
             </span>
@@ -283,7 +284,7 @@ projects: rich.projects.map(mapProject),
             {/* Locked state */}
             {isLocked && nextStatuses.length > 0 && app.status !== "WITHDRAWN" && (
               <div className="cv-locked-notice">
-                🔒 Review {pendingPriorityCount} priority applicant{pendingPriorityCount !== 1 ? "s" : ""} first
+                <Icon name="locked" size={14} label="" /> Review {pendingPriorityCount} priority applicant{pendingPriorityCount !== 1 ? "s" : ""} first
               </div>
             )}
             {/* Actions */}
@@ -302,7 +303,7 @@ projects: rich.projects.map(mapProject),
                     >
                       {busy
                         ? <span className="cv-spinner" />
-                        : <><span>{isShortlist ? "✓" : "✕"}</span> {STATUS_CONFIG[s].label}</>
+                        : <><Icon name={isShortlist ? "check" : "close"} size={12} label="" /> {STATUS_CONFIG[s].label}</>
                       }
                     </button>
                   );
@@ -342,19 +343,19 @@ projects: rich.projects.map(mapProject),
               <ul className="cv-sidebar__contact-list">
                 {p?.email && (
                   <li className="cv-sidebar__contact-item">
-                    <span className="cv-sidebar__contact-icon">✉</span>
+                    <span className="cv-sidebar__contact-icon"><Icon name="contact" size={14} label="" /></span>
                     <a href={`mailto:${p.email}`} className="cv-sidebar__contact-val cv-sidebar__contact-val--link">{p.email}</a>
                   </li>
                 )}
                 {p?.phoneNumber && (
                   <li className="cv-sidebar__contact-item">
-                    <span className="cv-sidebar__contact-icon">📞</span>
+                    <span className="cv-sidebar__contact-icon"><Icon name="contact" size={14} label="" /></span>
                     <span className="cv-sidebar__contact-val">{p.phoneNumber}</span>
                   </li>
                 )}
                 {(p?.city || p?.country) && (
                   <li className="cv-sidebar__contact-item">
-                    <span className="cv-sidebar__contact-icon">📍</span>
+                    <span className="cv-sidebar__contact-icon"><Icon name="location" size={14} label="" /></span>
                     <span className="cv-sidebar__contact-val">{[p.city, p.country].filter(Boolean).join(", ")}</span>
                   </li>
                 )}
@@ -378,7 +379,7 @@ projects: rich.projects.map(mapProject),
                   )}
                   {p?.portfolioUrl && (
                     <a href={p.portfolioUrl} target="_blank" rel="noopener noreferrer" className="cv-sidebar__link">
-                      <span className="cv-sidebar__link-icon">🌐</span>Portfolio<span className="cv-sidebar__link-arrow">↗</span>
+                      <span className="cv-sidebar__link-icon"><Icon name="portfolio" size={14} label="" /></span>Portfolio<span className="cv-sidebar__link-arrow">↗</span>
                     </a>
                   )}
                 </div>
@@ -402,10 +403,10 @@ projects: rich.projects.map(mapProject),
                     <span className="cv-sidebar__app-lbl">Slot</span>
                     <span className={`cv-sidebar__priority cv-sidebar__priority--rank${app.prioritySlotRank}`}>
                       {app.prioritySlotRank === 1
-                        ? "👑 1st Priority"
+                        ? <><Icon name="trophy" size={12} label="" /> 1st Priority</>
                         : app.prioritySlotRank === 2
-                        ? "🥈 2nd Priority"
-                        : "⭐ 3rd Priority"}
+                        ? <><Icon name="badge-silver" size={12} label="" /> 2nd Priority</>
+                        : <><Icon name="badge-bronze" size={12} label="" /> 3rd Priority</>}
                     </span>
                   </div>
                 )}
@@ -439,7 +440,7 @@ projects: rich.projects.map(mapProject),
 
             {!rich.isLoading && !p && (
               <div className="cv-empty">
-                <div className="cv-empty__icon">👤</div>
+                <div className="cv-empty__icon"><Icon name="question-personal" size={40} label="" /></div>
                 <p className="cv-empty__title">Profile not available</p>
                 <p className="cv-empty__sub">This applicant hasn't completed their profile yet.</p>
               </div>
@@ -502,7 +503,7 @@ projects: rich.projects.map(mapProject),
                           <div className="cv-edu-item__body">
                             <div className="cv-edu-item__degree">{e.degree}</div>
                             <div className="cv-edu-item__field">{e.fieldOfStudy}</div>
-                            <div className="cv-edu-item__inst">🎓 {e.institutionName}</div>
+                            <div className="cv-edu-item__inst"><Icon name="education" size={14} label="" /> {e.institutionName}</div>
                             {e.description && <p className="cv-desc" style={{ marginTop: 6 }}>{e.description}</p>}
                           </div>
                         </div>
@@ -522,7 +523,7 @@ projects: rich.projects.map(mapProject),
                             <span className="cv-project-card__name">{proj.title}</span>
                             <div className="cv-project-card__links">
                               {proj.projectUrl && (
-                                <a href={proj.projectUrl} target="_blank" rel="noopener noreferrer" className="cv-ext-link">🌐 Live</a>
+                                <a href={proj.projectUrl} target="_blank" rel="noopener noreferrer" className="cv-ext-link"><Icon name="portfolio" size={12} label="" /> Live</a>
                               )}
                               {proj.githubUrl && (
                                 <a href={proj.githubUrl} target="_blank" rel="noopener noreferrer" className="cv-ext-link">⌥ Code</a>
@@ -556,7 +557,7 @@ projects: rich.projects.map(mapProject),
                     <div className="cv-cert-list">
                       {rich.certifications.map((c) => (
                         <div key={c.id} className="cv-cert-item">
-                          <span className="cv-cert-item__icon">📜</span>
+                          <span className="cv-cert-item__icon"><Icon name="badge" size={16} label="" /></span>
                           <div className="cv-cert-item__body">
                             <div className="cv-cert-item__name">{c.name}</div>
                             <div className="cv-cert-item__org">{c.issuingOrganization}</div>
@@ -588,17 +589,18 @@ const ApplicantCard: React.FC<{
   onStatusChange: (id: number, status: ApplicationStatus) => Promise<void>;
   isUpdating: boolean;
   isLocked: boolean;
+  isBeforeDeadline: boolean;
   onViewCV: () => void;
-}> = ({ app, onStatusChange, isUpdating, isLocked, onViewCV }) => {
+}> = ({ app, onStatusChange, isUpdating, isLocked, isBeforeDeadline, onViewCV }) => {
   const initials = getInitials(app.userFullName);
   const nextStatuses = NEXT_STATUSES[app.status] ?? [];
-  const canAct = nextStatuses.length > 0 && app.status !== "WITHDRAWN" && !isLocked;
+  const canAct = nextStatuses.length > 0 && app.status !== "WITHDRAWN" && !isLocked && !isBeforeDeadline;
 
   return (
-    <div className={`ja-row ${app.status === "WITHDRAWN" ? "ja-row--withdrawn" : ""} ${app.prioritySlotRank ? `ja-row--priority ja-row--priority-rank${app.prioritySlotRank}` : ""} ${isLocked ? "ja-row--locked" : ""}`}>
+    <div className={`ja-row ${app.status === "WITHDRAWN" ? "ja-row--withdrawn" : ""} ${app.prioritySlotRank ? `ja-row--priority ja-row--priority-rank${app.prioritySlotRank}` : ""} ${isLocked ? "ja-row--locked" : ""} ${isBeforeDeadline ? "ja-row--pre-deadline" : ""}`}>
       {app.prioritySlotRank && (
         <div className={`ja-row__priority-strip ja-row__priority-strip--rank${app.prioritySlotRank}`}>
-          <span>{app.prioritySlotRank === 1 ? "👑" : app.prioritySlotRank === 2 ? "🥈" : "⭐"}</span>
+          <span>{app.prioritySlotRank === 1 ? <Icon name="trophy" size={14} label="" /> : app.prioritySlotRank === 2 ? <Icon name="badge-silver" size={14} label="" /> : <Icon name="badge-bronze" size={14} label="" />}</span>
           <span>
             {app.prioritySlotRank === 1 ? "1st Priority" : app.prioritySlotRank === 2 ? "2nd Priority" : "3rd Priority"}
           </span>
@@ -609,37 +611,54 @@ const ApplicantCard: React.FC<{
             <span className="ja-row__priority-strip__perk">Must Review</span>
           )}
           <span className="ja-row__priority-strip__reviewed">
-            {app.status !== "PENDING" ? "✓ Reviewed" : "Pending review"}
+            {app.status !== "PENDING" ? <><Icon name="check" size={12} label="" /> Reviewed</> : "Pending review"}
           </span>
         </div>
       )}
       <div className="ja-row__inner">
-        <button className="ja-row__avatar" onClick={onViewCV} title="View CV">{initials}</button>
+        <button
+          className={`ja-row__avatar ${isBeforeDeadline ? "ja-row__avatar--locked" : ""}`}
+          onClick={onViewCV}
+          title={isBeforeDeadline ? "CV available after deadline" : "View CV"}
+          disabled={isBeforeDeadline}
+        >{initials}</button>
         <div className="ja-row__info">
-          <button className="ja-row__name" onClick={onViewCV}>{app.userFullName}</button>
+          <button
+            className="ja-row__name"
+            onClick={onViewCV}
+            disabled={isBeforeDeadline}
+          >{app.userFullName}</button>
           <span className="ja-row__date">Applied {fmtDate(app.appliedAt)}</span>
         </div>
         <StatusBadge status={app.status} size="md" />
         <div className="ja-row__actions">
-          {canAct && nextStatuses.map((s) => {
-            const isShortlist = s === "SHORTLISTED";
-            const isReject    = s === "REJECTED";
-            return (
-              <button
-                key={s}
-                className={`ja-row__quick-btn ${isShortlist ? "ja-row__quick-btn--shortlist" : isReject ? "ja-row__quick-btn--reject" : ""}`}
-                onClick={() => onStatusChange(app.id, s)}
-                disabled={isUpdating}
-                title={STATUS_CONFIG[s].label}
-              >
-                {isUpdating
-                  ? <span className="ja-spinner" />
-                  : isShortlist ? "✓" : "✕"
-                }
-              </button>
-            );
-          })}
-          <button className="ja-row__cv-btn" onClick={onViewCV}>View CV →</button>
+          {isBeforeDeadline ? (
+            <span className="ja-row__deadline-lock">
+              <Icon name="locked" size={12} label="" /> Available after deadline
+            </span>
+          ) : (
+            <>
+              {canAct && nextStatuses.map((s) => {
+                const isShortlist = s === "SHORTLISTED";
+                const isReject    = s === "REJECTED";
+                return (
+                  <button
+                    key={s}
+                    className={`ja-row__quick-btn ${isShortlist ? "ja-row__quick-btn--shortlist" : isReject ? "ja-row__quick-btn--reject" : ""}`}
+                    onClick={() => onStatusChange(app.id, s)}
+                    disabled={isUpdating}
+                    title={STATUS_CONFIG[s].label}
+                  >
+                    {isUpdating
+                      ? <span className="ja-spinner" />
+                      : isShortlist ? <Icon name="check" size={12} label="" /> : <Icon name="close" size={12} label="" />
+                    }
+                  </button>
+                );
+              })}
+              <button className="ja-row__cv-btn" onClick={onViewCV}>View CV →</button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -664,6 +683,12 @@ const JobApplicantsPage: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<ApplicationStatus | "ALL">("ALL");
   const [cvApp, setCvApp] = useState<ApplicationResponse | null>(null);
 
+  // Deadline gate: CV and actions are locked until the job deadline has passed
+  const isBeforeDeadline = useMemo(() => {
+    if (!job?.deadline) return false;
+    return new Date(job.deadline) > new Date();
+  }, [job?.deadline]);
+
   const { priorityApps, regularApps } = useMemo(() => {
     const sorted = [...applications].sort((a, b) => {
       // Priority applicants always come before regular ones
@@ -686,18 +711,19 @@ const JobApplicantsPage: React.FC = () => {
   const pendingPriorityCount = useMemo(() =>
     priorityApps.filter((a) => a.status === "PENDING").length, [priorityApps]);
 
-  // ── Rank-1 auto-open: when company first loads the page, automatically open
-  // the CV of the rank-1 priority applicant (if pending) so they can't be missed.
+  // ── Rank-1 auto-open: ONLY after deadline, automatically open the CV of the
+  // rank-1 priority applicant (if pending). Before deadline nothing opens.
   const autoOpenedRef = React.useRef(false);
   useEffect(() => {
     if (autoOpenedRef.current) return;
     if (isLoading) return;
+    if (isBeforeDeadline) return;          // ← deadline gate
     const rank1 = priorityApps.find((a) => a.prioritySlotRank === 1 && a.status === "PENDING");
     if (rank1) {
       autoOpenedRef.current = true;
       setCvApp(rank1);
     }
-  }, [isLoading, priorityApps]);
+  }, [isLoading, priorityApps, isBeforeDeadline]);
 
   const filtered = useMemo(() => {
     const all = [...priorityApps, ...regularApps];
@@ -753,8 +779,8 @@ const JobApplicantsPage: React.FC = () => {
           <div>
             <h1 className="ja-page-title">{job?.title ?? "Job Applicants"}</h1>
             <div className="ja-page-header__meta">
-              {job?.location && <span>📍 {job.location}</span>}
-              <span>👥 {applications.length} applicant{applications.length !== 1 ? "s" : ""}</span>
+              {job?.location && <span><Icon name="location" size={12} label="" /> {job.location}</span>}
+              <span><Icon name="question-personal" size={14} label="" /> {applications.length} applicant{applications.length !== 1 ? "s" : ""}</span>
               {priorityApps.length > 0 && <span className="ja-page-header__priority">⭐ {priorityApps.length} priority</span>}
             </div>
           </div>
@@ -787,12 +813,23 @@ const JobApplicantsPage: React.FC = () => {
       )}
 
       {(error || updateError) && (
-        <div className="ja-error-banner">⚠ {error || updateError}</div>
+        <div className="ja-error-banner"><Icon name="warning" size={14} label="" /> {error || updateError}</div>
+      )}
+
+      {/* Deadline gate banner */}
+      {isBeforeDeadline && job?.deadline && (
+        <div className="ja-deadline-notice">
+          <Icon name="locked" size={16} label="" />
+          <div>
+            <strong>Applications still open</strong> — CV details and status decisions are locked until the deadline passes.
+            <span className="ja-deadline-notice__date"> Deadline: {fmtDate(job.deadline)}</span>
+          </div>
+        </div>
       )}
 
       {priorityApps.length > 0 && !allPriorityDone && (
         <div className="ja-priority-notice">
-          <span>📌</span>
+          <Icon name="flag" size={16} label="" />
           <div>
             <strong>Platform Rule:</strong> Review all priority applicants before processing regular applications.
             <span className="ja-priority-notice__count"> {pendingPriorityCount} of {priorityApps.length} priority applicant{priorityApps.length !== 1 ? "s" : ""} still pending.</span>
@@ -801,14 +838,14 @@ const JobApplicantsPage: React.FC = () => {
       )}
       {priorityApps.length > 0 && allPriorityDone && (
         <div className="ja-priority-done-notice">
-          <span>✅</span>
+          <Icon name="success" size={16} label="" />
           <span>All priority applicants reviewed — regular applications are now unlocked.</span>
         </div>
       )}
 
       {applications.length === 0 && (
         <div className="ja-empty">
-          <div className="ja-empty__icon">📭</div>
+          <div className="ja-empty__icon"><Icon name="work" size={40} label="" /></div>
           <h3 className="ja-empty__title">No applicants yet</h3>
           <p className="ja-empty__sub">Applications will appear here once candidates apply.</p>
         </div>
@@ -841,7 +878,7 @@ const JobApplicantsPage: React.FC = () => {
             <span>⭐</span> Priority Applications
             <span className="ja-group__count">{priorityApps.length}</span>
             {allPriorityDone
-              ? <span className="ja-group__done-badge">All reviewed ✓</span>
+              ? <span className="ja-group__done-badge">All reviewed <Icon name="check" size={12} label="" /></span>
               : <span className="ja-group__pending-badge">{pendingPriorityCount} pending</span>
             }
           </div>
@@ -851,7 +888,8 @@ const JobApplicantsPage: React.FC = () => {
                 onStatusChange={handleStatusChange}
                 isUpdating={updatingId === app.id}
                 isLocked={false}
-                onViewCV={() => setCvApp(app)}
+                isBeforeDeadline={isBeforeDeadline}
+                onViewCV={() => { if (!isBeforeDeadline) setCvApp(app); }}
               />
             ))}
           </div>
@@ -862,10 +900,10 @@ const JobApplicantsPage: React.FC = () => {
       {filterStatus === "ALL" && regularApps.length > 0 && (
         <div className="ja-group">
           <div className="ja-group__label">
-            <span>👥</span> Regular Applications
+            <Icon name="question-personal" size={16} label="" /> Regular Applications
             <span className="ja-group__count">{regularApps.length}</span>
             {priorityApps.length > 0 && !allPriorityDone && (
-              <span className="ja-group__locked-note">🔒 Review priority first</span>
+              <span className="ja-group__locked-note"><Icon name="locked" size={12} label="" /> Review priority first</span>
             )}
           </div>
           <div className={`ja-list ${priorityApps.length > 0 && !allPriorityDone ? "ja-list--locked" : ""}`}>
@@ -874,13 +912,14 @@ const JobApplicantsPage: React.FC = () => {
                 onStatusChange={handleStatusChange}
                 isUpdating={updatingId === app.id}
                 isLocked={priorityApps.length > 0 && !allPriorityDone}
-                onViewCV={() => setCvApp(app)}
+                isBeforeDeadline={isBeforeDeadline}
+                onViewCV={() => { if (!isBeforeDeadline) setCvApp(app); }}
               />
             ))}
             {priorityApps.length > 0 && !allPriorityDone && (
               <div className="ja-list__lock-cover">
                 <div className="ja-lock-cover__inner">
-                  <span className="ja-lock-cover__icon">🔒</span>
+                  <span className="ja-lock-cover__icon"><Icon name="locked" size={32} label="" /></span>
                   <p className="ja-lock-cover__title">
                     {pendingPriorityCount} priority applicant{pendingPriorityCount !== 1 ? "s" : ""} still pending review
                   </p>
@@ -899,7 +938,7 @@ const JobApplicantsPage: React.FC = () => {
         <div className="ja-list">
           {filtered.length === 0 ? (
             <div className="ja-empty" style={{ padding: "48px 24px" }}>
-              <div className="ja-empty__icon">🔍</div>
+              <div className="ja-empty__icon"><Icon name="search" size={40} label="" /></div>
               <h3 className="ja-empty__title">No {STATUS_CONFIG[filterStatus as ApplicationStatus]?.label ?? filterStatus} applications</h3>
             </div>
           ) : filtered.map((app) => (
@@ -907,7 +946,8 @@ const JobApplicantsPage: React.FC = () => {
               onStatusChange={handleStatusChange}
               isUpdating={updatingId === app.id}
               isLocked={!app.prioritySlotRank && priorityApps.length > 0 && !allPriorityDone}
-              onViewCV={() => setCvApp(app)}
+              isBeforeDeadline={isBeforeDeadline}
+              onViewCV={() => { if (!isBeforeDeadline) setCvApp(app); }}
             />
           ))}
         </div>
@@ -1206,6 +1246,17 @@ const styles = `
   .cv-cert-item__name { font-size:14px; font-weight:var(--weight-semibold); color:var(--color-text-primary); }
   .cv-cert-item__org  { font-size:13px; color:var(--color-text-secondary); margin-top:2px; }
   .cv-cert-item__date { font-family:var(--font-mono); font-size:10px; color:var(--color-text-muted); margin-top:4px; }
+
+  /* ─── Deadline notice banner ─── */
+  .ja-deadline-notice { display:flex; align-items:flex-start; gap:12px; padding:14px 18px; background:rgba(245,158,11,.07); border:1px solid rgba(245,158,11,.25); border-radius:12px; font-size:13px; color:var(--color-text-secondary); line-height:1.5; }
+  .ja-deadline-notice strong { color:#F59E0B; }
+  .ja-deadline-notice__date { color:#F59E0B; font-family:var(--font-mono); font-size:12px; margin-left:4px; }
+
+  /* ─── Pre-deadline row state ─── */
+  .ja-row--pre-deadline .ja-row__avatar { cursor:not-allowed; opacity:.5; }
+  .ja-row--pre-deadline .ja-row__name { cursor:not-allowed; color:var(--color-text-secondary); }
+  .ja-row__avatar--locked { cursor:not-allowed !important; }
+  .ja-row__deadline-lock { display:inline-flex; align-items:center; gap:5px; font-family:var(--font-mono); font-size:11px; color:var(--color-text-muted); padding:5px 10px; border:1px solid var(--color-border-subtle); border-radius:8px; background:var(--color-bg-overlay); white-space:nowrap; }
 
   /* ─── Responsive ─── */
   @media (max-width:760px) {

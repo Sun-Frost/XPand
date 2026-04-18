@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import type { User } from "../../types";
+import { Icon } from "../ui/Icon";
+import { NavbarPageTitle } from "../ui/PageHeader";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -57,12 +59,6 @@ const Navbar: React.FC<NavbarProps> = ({
     ? `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase()
     : "?";
 
-  const mockNotifs = [
-    { id: 1, text: "You earned a Silver badge in React!", time: "2m ago", unread: true },
-    { id: 2, text: "New job match: Senior Frontend Dev", time: "1h ago", unread: true },
-    { id: 3, text: "Challenge completed: 3-day streak", time: "3h ago", unread: false },
-  ];
-  const unreadCount = mockNotifs.filter((n) => n.unread).length;
 
   return (
     <>
@@ -79,15 +75,10 @@ const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
 
-        {/* Centre search */}
-        <div className="navbar__centre">
-          <div className="navbar__search">
-            <SearchIcon />
-            <input type="search" className="navbar__search-input"
-              placeholder="Search skills, jobs, challenges…" aria-label="Search" />
-      
-          </div>
-        </div>
+       <div className="navbar__centre">
+        <NavbarPageTitle />
+      </div>
+ 
 
         {/* Right */}
         <div className="navbar__right">
@@ -104,7 +95,7 @@ const Navbar: React.FC<NavbarProps> = ({
           <button className="btn btn-ghost btn-icon navbar__icon-btn"
             onClick={onToggleTheme}
             aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}>
-            {isDarkMode ? "☀️" : "🌙"}
+            {isDarkMode ? <Icon name="sun" size={14} label="" /> : <Icon name="moon" size={14} label="" />}
           </button>
 
           {/* User menu */}
@@ -136,11 +127,10 @@ const Navbar: React.FC<NavbarProps> = ({
                 <div className="divider" style={{ margin: 0 }} />
                 <ul className="navbar__menu-list">
                   {[
-                    { label: "My Profile", path: "/profile", icon: "👤" },
-                    { label: "My Skills", path: "/skills", icon: "🎯" },
-                    { label: "Applications", path: "/jobs/applications", icon: "📋" },
-                    { label: "XP Store", path: "/store", icon: "🛒" },
-                    { label: "Settings", path: "/settings", icon: "⚙️" },
+                    { label: "My Profile", path: "/profile", icon: <Icon name="profile" size={14} label="" /> },
+                    { label: "My Skills", path: "/skills", icon: <Icon name="skills" size={14} label="" /> },
+                    { label: "Challenges", path: "/challenges", icon: <Icon name="challenges" size={14} label="" /> },
+                    { label: "XP Store", path: "/store", icon: <Icon name="store" size={14} label="" /> },
                   ].map((item) => (
                     <li key={item.path} role="menuitem">
                       <button className="navbar__menu-item" onClick={() => go(item.path)}>
@@ -154,7 +144,7 @@ const Navbar: React.FC<NavbarProps> = ({
                 <div className="navbar__menu-footer">
                   <button className="navbar__menu-item navbar__menu-item--danger"
                     onClick={handleSignOut}>
-                    <span className="navbar__menu-icon">🚪</span>
+                    <span className="navbar__menu-icon"><Icon name="logout" size={14} label="" /></span>
                     Sign Out
                   </button>
                 </div>

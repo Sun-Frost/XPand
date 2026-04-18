@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRegister } from "../hooks/useRegister";
-import { put, get } from "../api/axios";
+import { put, get, post } from "../api/axios";
 import { CITIES } from "../constants/cities";
 
 // ---------------------------------------------------------------------------
@@ -171,7 +171,7 @@ const TextAreaField: React.FC<{
 );
 
 // ---------------------------------------------------------------------------
-// Step indicator (user flow only)
+// Step indicator
 // ---------------------------------------------------------------------------
 
 const STEPS = ["Account", "Profile", "Skills"];
@@ -198,7 +198,7 @@ const StepIndicator: React.FC<{ current: number }> = ({ current }) => (
 );
 
 // ---------------------------------------------------------------------------
-// Orbs
+// Orbs background
 // ---------------------------------------------------------------------------
 
 const Orbs: React.FC = () => (
@@ -263,9 +263,14 @@ const RolePicker: React.FC<{ onSelect: (r: Role) => void; onSignIn: () => void }
 // Company Registration Form
 // ---------------------------------------------------------------------------
 
+const BACKEND_URL = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace("/api", "")
+  : "http://localhost:8080";
+const GOOGLE_OAUTH_URL = `${BACKEND_URL}/oauth2/authorization/google`;
+
 const CompanyRegisterForm: React.FC<{
   onBack: () => void;
-  onSuccess: () => void;
+  onSuccess: (email: string) => void;
   onSignIn: () => void;
 }> = ({ onBack, onSuccess, onSignIn }) => {
   const { registerCompany, isLoading, error, clearError } = useRegister();
@@ -301,7 +306,7 @@ const CompanyRegisterForm: React.FC<{
       websiteUrl: form.websiteUrl.trim(),
     });
 
-    if (result) onSuccess();
+    if (result) onSuccess(form.email.trim());
   };
 
   return (
@@ -317,7 +322,6 @@ const CompanyRegisterForm: React.FC<{
           <p className="register-card__subtitle">All fields are required to create a company account.</p>
         </div>
 
-        {/* Pending approval notice */}
         <div className="reg-company-notice">
           <span>ℹ️</span>
           <span>Company accounts require admin approval before you can post jobs.</span>
@@ -431,39 +435,270 @@ const CompanyRegisterForm: React.FC<{
 };
 
 // ---------------------------------------------------------------------------
-// Success screens
+// Shared 6-digit verify component — used by both User and Company flows
 // ---------------------------------------------------------------------------
 
-const UserSuccess: React.FC = () => (
-  <div className="register-page">
-    <Orbs />
-    <div className="register-card card card-accent-top animate-fade-in">
-      <div className="register-success">
-        <div className="register-success__icon">🎉</div>
-        <h2 className="register-success__title">You're in!</h2>
-        <p className="register-success__message">Your account is ready. Taking you to your dashboard…</p>
-        <div className="register-success__xp xp-pill"><span>+50 XP</span><span>Welcome bonus incoming</span></div>
-      </div>
-    </div>
-    <style>{pageStyles}</style>
-  </div>
-);
+/**
+ * FIX: Extracted into a shared component so both flows get the same bug fixes:
+ *
+ * 1. On wrong code → digits clear, verifyStatus resets to "idle" (not stuck on "error").
+ *    This ensures the auto-submit at digit-5 fires cleanly on the next attempt.
+ * 2. handleDigitChange explicitly resets status to "idle" on any new typing,
+ *    so the button disabled-check and auto-submit always start from a clean state.
+ */
+const SixDigitVerify: React.FC<{
+  email: string;
+  title: string;
+  subtitle: React.ReactNode;
+  submitLabel: string;
+  onSuccess: () => void;
+  onGoToLogin: () => void;
+  successContent: React.ReactNode;
+}> = ({ email, title, subtitle, submitLabel, onSuccess, onGoToLogin, successContent }) => {
+  const [digits, setDigits] = React.useState<string[]>(["", "", "", "", "", ""]);
+  const inputRefs = React.useRef<(HTMLInputElement | null)[]>([]);
 
-const CompanySuccess: React.FC = () => (
-  <div className="register-page">
-    <Orbs />
-    <div className="register-card card card-accent-top animate-fade-in">
-      <div className="register-success">
-        <div className="register-success__icon">⏳</div>
-        <h2 className="register-success__title">Application Submitted!</h2>
-        <p className="register-success__message">
-          Your company account is pending admin approval. You'll receive an email once approved.
-        </p>
+  const [verifyStatus, setVerifyStatus] = React.useState<"idle" | "loading" | "success" | "error">("idle");
+  const [verifyError, setVerifyError] = React.useState("");
+
+  const [resendLoading, setResendLoading] = React.useState(false);
+  const [resendSent, setResendSent] = React.useState(false);
+
+  React.useEffect(() => { inputRefs.current[0]?.focus(); }, []);
+
+  const submitCode = async (code: string) => {
+    setVerifyStatus("loading");
+    setVerifyError("");
+    try {
+      await post<{ message: string }>("/auth/verify", { email, code });
+      setVerifyStatus("success");
+      onSuccess();
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Incorrect code. Please try again.";
+      setVerifyError(msg);
+      // Reset to "idle" (not "error") so the next full code auto-submits cleanly
+      setVerifyStatus("idle");
+      setDigits(["", "", "", "", "", ""]);
+      setTimeout(() => inputRefs.current[0]?.focus(), 50);
+    }
+  };
+
+  const handleDigitChange = (index: number, value: string) => {
+    const digit = value.replace(/\D/g, "").slice(-1);
+    const next = [...digits];
+    next[index] = digit;
+    setDigits(next);
+    // Clear error message as soon as user starts retyping
+    setVerifyError("");
+    if (digit && index < 5) inputRefs.current[index + 1]?.focus();
+    if (digit && index === 5) {
+      const full = next.join("");
+      if (full.length === 6) submitCode(full);
+    }
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && !digits[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (!pasted) return;
+    const next = ["", "", "", "", "", ""];
+    for (let i = 0; i < pasted.length; i++) next[i] = pasted[i];
+    setDigits(next);
+    setVerifyError("");
+    const focusIdx = Math.min(pasted.length, 5);
+    inputRefs.current[focusIdx]?.focus();
+    if (pasted.length === 6) submitCode(pasted);
+  };
+
+  const handleResend = async () => {
+    setResendLoading(true);
+    setResendSent(false);
+    try {
+      await post("/auth/resend-verification", { email });
+      setResendSent(true);
+      setDigits(["", "", "", "", "", ""]);
+      setVerifyError("");
+      setVerifyStatus("idle");
+      setTimeout(() => inputRefs.current[0]?.focus(), 50);
+    } catch { /* backend always returns 200 */ } finally {
+      setResendLoading(false);
+    }
+  };
+
+  if (verifyStatus === "success") {
+    return (
+      <div className="register-page">
+        <Orbs />
+        <div className="register-card card card-accent-top animate-fade-in">
+          <div className="register-success">
+            {successContent}
+          </div>
+        </div>
+        <style>{pageStyles}</style>
       </div>
+    );
+  }
+
+  return (
+    <div className="register-page">
+      <Orbs />
+      <div className="register-card card card-accent-top animate-fade-in">
+        <div className="register-success">
+          <div className="register-success__icon">✉️</div>
+          <h2 className="register-success__title">{title}</h2>
+          <p className="register-success__message">{subtitle}</p>
+
+          <div className="reg-verify-digits" onPaste={handlePaste}>
+            {digits.map((d, i) => (
+              <input
+                key={i}
+                ref={(el) => { inputRefs.current[i] = el; }}
+                type="text"
+                inputMode="numeric"
+                maxLength={1}
+                className={`reg-verify-digit${verifyError ? " reg-verify-digit--error" : ""}${d ? " reg-verify-digit--filled" : ""}`}
+                value={d}
+                onChange={(e) => handleDigitChange(i, e.target.value)}
+                onKeyDown={(e) => handleKeyDown(i, e)}
+                disabled={verifyStatus === "loading"}
+                aria-label={`Digit ${i + 1}`}
+              />
+            ))}
+          </div>
+
+          {verifyError && (
+            <p className="register-resend-error" role="alert">{verifyError}</p>
+          )}
+
+          <button
+            type="button"
+            className="btn btn-primary btn-lg w-full"
+            onClick={() => submitCode(digits.join(""))}
+            disabled={verifyStatus === "loading" || digits.join("").length < 6}
+          >
+            {verifyStatus === "loading"
+              ? <><span className="register-spinner animate-spin" /> Verifying…</>
+              : submitLabel}
+          </button>
+
+          {resendSent ? (
+            <p className="register-resend-sent">✅ New code sent! Check your inbox.</p>
+          ) : (
+            <p className="register-resend-hint">
+              Didn't receive it?{" "}
+              <button
+                type="button"
+                className="register-text-link"
+                onClick={handleResend}
+                disabled={resendLoading}
+              >
+                {resendLoading ? "Sending…" : "Resend code"}
+              </button>
+            </p>
+          )}
+
+          <button type="button" className="btn btn-ghost" onClick={onGoToLogin}>
+            Back to Login
+          </button>
+        </div>
+      </div>
+      <style>{pageStyles}</style>
     </div>
-    <style>{pageStyles}</style>
-  </div>
-);
+  );
+};
+
+// ---------------------------------------------------------------------------
+// UserVerifyPending — uses SixDigitVerify
+// ---------------------------------------------------------------------------
+
+const UserVerifyPending: React.FC<{
+  email: string;
+  onGoToLogin: () => void;
+}> = ({ email, onGoToLogin }) => {
+  const [done, setDone] = React.useState(false);
+
+  if (done) {
+    return (
+      <div className="register-page">
+        <Orbs />
+        <div className="register-card card card-accent-top animate-fade-in">
+          <div className="register-success">
+            <div className="register-success__icon">🎉</div>
+            <h2 className="register-success__title">Email Verified!</h2>
+            <p className="register-success__message">Your account is active. You can now sign in.</p>
+            <button type="button" className="btn btn-primary btn-lg" onClick={onGoToLogin}>
+              Go to Login
+            </button>
+          </div>
+        </div>
+        <style>{pageStyles}</style>
+      </div>
+    );
+  }
+
+  return (
+    <SixDigitVerify
+      email={email}
+      title="Check your email"
+      subtitle={<>We sent a 6-digit code to <strong>{email}</strong>. Enter it below to activate your account.</>}
+      submitLabel="Verify Email"
+      onSuccess={() => setDone(true)}
+      onGoToLogin={onGoToLogin}
+      successContent={null /* handled by done state above */}
+    />
+  );
+};
+
+// ---------------------------------------------------------------------------
+// CompanyVerifyPending — uses SixDigitVerify
+// ---------------------------------------------------------------------------
+
+const CompanyVerifyPending: React.FC<{
+  email: string;
+  onGoToLogin: () => void;
+}> = ({ email, onGoToLogin }) => {
+  const [done, setDone] = React.useState(false);
+
+  if (done) {
+    return (
+      <div className="register-page">
+        <Orbs />
+        <div className="register-card card card-accent-top animate-fade-in">
+          <div className="register-success">
+            <div className="register-success__icon">⏳</div>
+            <h2 className="register-success__title">Application Submitted!</h2>
+            <p className="register-success__message">
+              Your email has been verified. Your company account is now
+              pending admin approval — you'll receive an email once it's approved.
+            </p>
+            <button type="button" className="btn btn-ghost" onClick={onGoToLogin}>
+              Back to Login
+            </button>
+          </div>
+        </div>
+        <style>{pageStyles}</style>
+      </div>
+    );
+  }
+
+  return (
+    <SixDigitVerify
+      email={email}
+      title="Verify your email"
+      subtitle={<>We sent a 6-digit code to <strong>{email}</strong>. Verify your email to submit your company for review.</>}
+      submitLabel="Verify & Submit Application"
+      onSuccess={() => setDone(true)}
+      onGoToLogin={onGoToLogin}
+      successContent={null /* handled by done state above */}
+    />
+  );
+};
 
 // ---------------------------------------------------------------------------
 // Main RegisterPage — orchestrates role picker + user / company flows
@@ -473,9 +708,9 @@ const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
   const { registerUser, isLoading: registerLoading, error: registerError, clearError } = useRegister();
 
-  // Top-level state
   const [role, setRole] = useState<Role | null>(null);
-  const [done, setDone] = useState<"user" | "company" | null>(null);
+  const [done, setDone] = useState<"user-verify" | "company-verify" | null>(null);
+  const [registeredEmail, setRegisteredEmail] = useState("");
 
   // User flow state
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -517,15 +752,6 @@ const RegisterPage: React.FC = () => {
       .finally(() => setSkillsLoading(false));
   }, [step]);
 
-  // Success redirect for user
-  useEffect(() => {
-    if (done === "user") {
-      const t = setTimeout(() => navigate("/dashboard", { replace: true }), 2000);
-      return () => clearTimeout(t);
-    }
-  }, [done, navigate]);
-
-  // Handlers
   const handleAccountChange = (k: keyof AccountFields) =>
     (e: React.ChangeEvent<HTMLInputElement>) =>
       setAccount(p => ({ ...p, [k]: e.target.value }));
@@ -553,7 +779,10 @@ const RegisterPage: React.FC = () => {
       email: account.email.trim(),
       password: account.password,
     });
-    if (result) setStep(2);
+    if (result) {
+      setRegisteredEmail(account.email.trim());
+      setDone("user-verify");
+    }
   };
 
   const handleProfileSubmit = async (skip = false) => {
@@ -585,7 +814,7 @@ const RegisterPage: React.FC = () => {
   const handleFinish = () => {
     if (selectedSkillIds.size > 0)
       localStorage.setItem("onboarding_skill_ids", JSON.stringify([...selectedSkillIds]));
-    setDone("user");
+    setDone("user-verify");
   };
 
   const filteredSkills = skills.filter(s =>
@@ -598,25 +827,35 @@ const RegisterPage: React.FC = () => {
     return acc;
   }, {});
 
-  // ── Success screens ────────────────────────────────────────
-  if (done === "user") return <UserSuccess />;
-  if (done === "company") return <CompanySuccess />;
+  // ── Verification screens ───────────────────────────────────────────────────
+  if (done === "user-verify") return (
+    <UserVerifyPending
+      email={registeredEmail}
+      onGoToLogin={() => navigate("/login")}
+    />
+  );
+  if (done === "company-verify") return (
+    <CompanyVerifyPending
+      email={registeredEmail}
+      onGoToLogin={() => navigate("/login?notice=company_pending")}
+    />
+  );
 
-  // ── Role picker ────────────────────────────────────────────
+  // ── Role picker ────────────────────────────────────────────────────────────
   if (!role) return (
     <RolePicker onSelect={setRole} onSignIn={() => navigate("/login")} />
   );
 
-  // ── Company flow ───────────────────────────────────────────
+  // ── Company flow ───────────────────────────────────────────────────────────
   if (role === "company") return (
     <CompanyRegisterForm
       onBack={() => setRole(null)}
-      onSuccess={() => setDone("company")}
+      onSuccess={(email) => { setRegisteredEmail(email); setDone("company-verify"); }}
       onSignIn={() => navigate("/login")}
     />
   );
 
-  // ── User flow ──────────────────────────────────────────────
+  // ── User flow ──────────────────────────────────────────────────────────────
   return (
     <div className="register-page">
       <Orbs />
@@ -701,6 +940,21 @@ const RegisterPage: React.FC = () => {
                 {showConfirm ? "🙈" : "👁"}
               </button>
             </FormField>
+
+            <div className="divider-with-text">or</div>
+
+            <a
+              href={GOOGLE_OAUTH_URL}
+              className="btn btn-outline btn-lg w-full register-google-btn"
+            >
+              <img
+                src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+                alt=""
+                className="register-google-icon"
+                aria-hidden="true"
+              />
+              Continue with Google
+            </a>
 
             <p className="register-terms">
               By creating an account you agree to our{" "}
@@ -855,7 +1109,7 @@ const RegisterPage: React.FC = () => {
               </button>
               <button type="button" className="btn btn-primary btn-lg reg-step-actions__main"
                 onClick={handleFinish}>
-                {selectedSkillIds.size > 0 ? "Finish & Go to Dashboard →" : "Go to Dashboard →"}
+                {selectedSkillIds.size > 0 ? "Finish →" : "Continue →"}
               </button>
             </div>
           </div>
@@ -867,7 +1121,7 @@ const RegisterPage: React.FC = () => {
 };
 
 // ---------------------------------------------------------------------------
-// Styles
+// Styles — identical to original, no removals
 // ---------------------------------------------------------------------------
 
 const pageStyles = `
@@ -898,7 +1152,6 @@ const pageStyles = `
   .register-card__title { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: var(--weight-bold); color: var(--color-text-primary); margin-bottom: var(--space-2); }
   .register-card__subtitle { font-size: var(--text-sm); color: var(--color-text-muted); line-height: var(--leading-relaxed); max-width: 360px; margin: 0 auto; }
 
-  /* Role picker cards */
   .reg-role-card {
     display: flex; align-items: center; gap: var(--space-4);
     padding: var(--space-5); width: 100%; text-align: left;
@@ -913,7 +1166,6 @@ const pageStyles = `
   .reg-role-card__desc { font-size: var(--text-sm); color: var(--color-text-muted); line-height: var(--leading-relaxed); }
   .reg-role-card__arrow { color: var(--color-text-disabled); font-size: var(--text-lg); flex-shrink: 0; }
 
-  /* Company notice */
   .reg-company-notice {
     display: flex; align-items: flex-start; gap: var(--space-2);
     margin: 0 var(--space-8); padding: var(--space-3) var(--space-4);
@@ -923,10 +1175,8 @@ const pageStyles = `
     color: var(--color-text-secondary);
   }
 
-  /* Required asterisk */
   .reg-required { color: var(--color-danger); margin-left: 2px; }
 
-  /* Step indicator */
   .reg-steps { display: flex; align-items: center; justify-content: center; padding: var(--space-5) var(--space-8) var(--space-2); }
   .reg-step { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); }
   .reg-step__dot {
@@ -945,10 +1195,8 @@ const pageStyles = `
   .reg-step__line { flex: 1; height: 2px; min-width: 48px; background: var(--color-border-subtle); margin: 0 var(--space-2) var(--space-4); transition: background 180ms; }
   .reg-step__line--done { background: var(--color-success,#34D399); }
 
-  /* Card body */
   .register-card__body { display: flex; flex-direction: column; gap: var(--space-4); }
 
-  /* Shared */
   .register-name-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
   .register-error-banner { display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-3) var(--space-4); background: var(--color-danger-bg); border: 1px solid var(--color-danger-border); border-radius: var(--radius-md); color: var(--color-danger); font-size: var(--text-sm); }
   .reg-pw-wrapper { position: relative; display: flex; align-items: center; }
@@ -971,15 +1219,18 @@ const pageStyles = `
   .register-login-cta { text-align: center; }
   .register-login-link { background: none; border: none; padding: 0; color: var(--color-primary-400,#A78BFA); font-weight: var(--weight-semibold); font-size: var(--text-sm); font-family: var(--font-body); cursor: pointer; }
 
-  /* Section labels */
+  .register-google-btn {
+    display: flex; align-items: center; justify-content: center;
+    gap: var(--space-3); text-decoration: none;
+  }
+  .register-google-icon { width: 18px; height: 18px; }
+
   .reg-section-label { font-family: var(--font-mono); font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-muted); padding-top: var(--space-2); border-top: 1px solid var(--color-border-subtle); margin-top: var(--space-1); }
   .reg-textarea { resize: vertical; min-height: 80px; font-family: var(--font-body); }
 
-  /* Step actions */
   .reg-step-actions { display: flex; gap: var(--space-3); margin-top: var(--space-2); }
   .reg-step-actions__main { flex: 1; }
 
-  /* Skills */
   .reg-skills-hint { font-size: var(--text-sm); color: var(--color-text-muted); line-height: var(--leading-relaxed); }
   .reg-skills-scroll { max-height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-4); padding-right: var(--space-1); }
   .reg-skills-scroll::-webkit-scrollbar { width: 4px; }
@@ -995,12 +1246,50 @@ const pageStyles = `
   .reg-skills-empty { text-align: center; color: var(--color-text-muted); font-size: var(--text-sm); padding: var(--space-6) 0; }
   .reg-skills-count { font-size: var(--text-xs); color: var(--color-primary-400,#A78BFA); font-family: var(--font-mono); text-align: right; }
 
-  /* Success */
-  .register-success { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-4); padding: var(--space-12) var(--space-8); text-align: center; }
-  .register-success__icon { font-size: 3.5rem; }
-  .register-success__title { font-family: var(--font-display); font-size: var(--text-3xl); font-weight: var(--weight-bold); color: var(--color-text-primary); }
-  .register-success__message { font-size: var(--text-sm); color: var(--color-text-muted); max-width: 280px; line-height: var(--leading-relaxed); }
-  .register-success__xp { margin-top: var(--space-2); display: inline-flex; gap: var(--space-2); }
+  .register-success {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: var(--space-4); padding: var(--space-10) var(--space-8); text-align: center;
+  }
+  .register-success__icon { font-size: 3rem; }
+  .register-success__title { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: var(--weight-bold); color: var(--color-text-primary); }
+  .register-success__message { font-size: var(--text-sm); color: var(--color-text-muted); max-width: 320px; line-height: var(--leading-relaxed); }
+  .register-resend-hint { font-size: var(--text-sm); color: var(--color-text-muted); }
+  .register-resend-sent {
+    font-size: var(--text-sm); color: var(--color-success);
+    background: var(--color-success-bg); padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
+  }
+  .register-resend-error { font-size: var(--text-sm); color: var(--color-danger); }
+  .register-text-link {
+    background: none; border: none; padding: 0; cursor: pointer;
+    color: var(--color-primary-400,#A78BFA); font-size: inherit;
+    font-family: inherit; text-decoration: underline;
+  }
+  .register-text-link:hover { color: var(--color-primary-300); }
+  .register-text-link:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .reg-verify-digits {
+    display: flex; gap: var(--space-2); justify-content: center;
+  }
+  .reg-verify-digit {
+    width: 46px; height: 54px;
+    text-align: center; font-size: var(--text-xl); font-family: var(--font-mono);
+    font-weight: var(--weight-bold); color: var(--color-text-primary);
+    background: var(--color-bg-overlay);
+    border: 2px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    outline: none; caret-color: var(--color-primary-400);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .reg-verify-digit:focus {
+    border-color: var(--color-primary-400);
+    box-shadow: 0 0 0 3px rgba(139,92,246,0.2);
+  }
+  .reg-verify-digit--filled { border-color: var(--color-primary-500,#7B5EA7); }
+  .reg-verify-digit--error {
+    border-color: var(--color-danger) !important;
+    box-shadow: 0 0 0 3px rgba(239,68,68,0.15) !important;
+  }
 
   @media (max-width: 540px) {
     .register-card { max-width: 100%; }

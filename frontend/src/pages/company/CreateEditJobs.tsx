@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import CompanyPageLayout from "../../components/company/companyPageLayout";
+import { Icon, type IconName } from "../../components/ui/Icon";
 import { useCompanyJobs } from "../../hooks/company/useCompany";
 import type { CreateJobPayload, JobSkillRequest, ImportanceLevel } from "../../hooks/company/useCompany";
 import { get } from "../../api/axios";
@@ -19,10 +20,10 @@ interface SkillOption {
 // Job type from JobType.java — FULL_TIME, PART_TIME, CONTRACT, REMOTE
 // (Not INTERNSHIP or FREELANCE — those don't exist in the backend enum)
 const JOB_TYPE_OPTIONS = [
-  { value: "FULL_TIME", label: "Full-Time", icon: "🏢" },
-  { value: "PART_TIME", label: "Part-Time", icon: "⏰" },
-  { value: "CONTRACT", label: "Contract", icon: "📋" },
-  { value: "REMOTE", label: "Remote", icon: "🌍" },
+  { value: "FULL_TIME", label: "Full-Time", icon: "job-type-full-time" as IconName },
+  { value: "PART_TIME", label: "Part-Time", icon: "job-type-part-time" as IconName },
+  { value: "CONTRACT", label: "Contract", icon: "job-type-contract" as IconName },
+  { value: "REMOTE", label: "Remote", icon: "job-type-remote" as IconName },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -66,7 +67,7 @@ const SkillRow: React.FC<{
             onClick={() => onAdd("MAJOR")}
             title="Required — must have badge to apply"
           >
-            ★ Required
+            Required
           </button>
           <button
             type="button"
@@ -77,7 +78,7 @@ const SkillRow: React.FC<{
             ◇ Optional
           </button>
         </div>
-        <button type="button" className="cj-remove-btn" onClick={onRemove} title="Remove skill">✕</button>
+        <button type="button" className="cj-remove-btn" onClick={onRemove} title="Remove skill"><Icon name="close" size={12} label="Remove" /></button>
       </div>
     ) : (
       <button type="button" className="cj-add-btn" onClick={() => onAdd("MAJOR")}>+ Add</button>
@@ -320,7 +321,7 @@ const CreateEditJobPage: React.FC = () => {
                           className={`cj-type-btn ${jobType === opt.value ? "cj-type-btn--active" : ""}`}
                           onClick={() => setJobType(jobType === opt.value ? "" : opt.value)}
                         >
-                          <span>{opt.icon}</span>
+                          <span><Icon name={opt.icon} size={16} label="" /></span>
                           <span>{opt.label}</span>
                         </button>
                       ))}
@@ -362,7 +363,7 @@ const CreateEditJobPage: React.FC = () => {
             {/* Submit error */}
             {submitError && (
               <div className="cj-error">
-                <span>⚠️</span>
+                <Icon name="warning" size={16} label="" />
                 <span>{submitError}</span>
               </div>
             )}
@@ -375,7 +376,7 @@ const CreateEditJobPage: React.FC = () => {
               <button type="submit" className="btn btn-xp" disabled={isSubmitting}>
                 {isSubmitting
                   ? (isEdit ? "Saving…" : "Posting…")
-                  : (isEdit ? "💾 Save Changes" : "🚀 Post Job")}
+                  : (isEdit ? <><Icon name="edit" size={14} label="" /> Save Changes</> : <><Icon name="apply" size={14} label="" /> Post Job</>)}
               </button>
             </div>
           </div>
@@ -389,7 +390,7 @@ const CreateEditJobPage: React.FC = () => {
                 <h2 className="cj-section-title">Required Skills</h2>
                 <div className="cj-skills-counts">
                   {majorCount > 0 && (
-                    <span className="badge badge-premium">★ {majorCount} Required</span>
+                    <span className="badge badge-premium"><Icon name="badge-gold" size={12} label="" /> {majorCount} Required</span>
                   )}
                   {minorCount > 0 && (
                     <span className="badge badge-muted">◇ {minorCount} Optional</span>
@@ -401,7 +402,7 @@ const CreateEditJobPage: React.FC = () => {
                   <div className="cj-skills-err">{validationErrors.skills}</div>
                 )}
                 <p className="cj-skills-hint">
-                  <strong>Required (★)</strong> — candidates must hold a badge.<br />
+                  <strong>Required</strong> — candidates must hold a badge.<br />
                   <strong>Optional (◇)</strong> — boosts their match score.
                 </p>
 
@@ -411,7 +412,7 @@ const CreateEditJobPage: React.FC = () => {
                     {selectedList.map(({ skill, importance }) => (
                       <div key={skill.id} className="cj-selected-chip">
                         <span className={`cj-selected-chip__imp ${importance === "MAJOR" ? "cj-imp--major" : "cj-imp--minor"}`}>
-                          {importance === "MAJOR" ? "★" : "◇"}
+                          {importance === "MAJOR" ? <Icon name="badge-gold" size={10} label="Required" /> : <Icon name="recommended" size={10} label="Optional" />}
                         </span>
                         <span className="cj-selected-chip__name">{skill.name}</span>
                         <button
@@ -428,7 +429,7 @@ const CreateEditJobPage: React.FC = () => {
                           onClick={() => removeSkill(skill.id)}
                           title="Remove"
                         >
-                          ✕
+                          <Icon name="close" size={12} label="Remove" />
                         </button>
                       </div>
                     ))}
@@ -451,7 +452,7 @@ const CreateEditJobPage: React.FC = () => {
               </div>
               <div className="card-body cj-skill-picker__body">
                 <div className="cj-skill-search-wrap">
-                  <span className="cj-skill-search-icon">🔍</span>
+                  <span className="cj-skill-search-icon"><Icon name="search" size={14} label="" /></span>
                   <input
                     className="input cj-skill-search"
                     type="text"
@@ -460,7 +461,7 @@ const CreateEditJobPage: React.FC = () => {
                     onChange={(e) => setSkillSearch(e.target.value)}
                   />
                   {skillSearch && (
-                    <button type="button" className="cj-skill-search-clear" onClick={() => setSkillSearch("")}>✕</button>
+                    <button type="button" className="cj-skill-search-clear" onClick={() => setSkillSearch("")}><Icon name="close" size={12} label="Clear" /></button>
                   )}
                 </div>
 

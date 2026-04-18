@@ -1,573 +1,937 @@
 /* ============================================================
-   DashboardPage.tsx  — XPand
-   "Your career OS. Every number earned, not given."
+   DashboardPage.tsx  — XPand  v6.0
+   "Career Arena Map"
+
+   SECTIONS (in render order):
+   1. ArenaHeader        — Identity Core (name, tier, XP status)
+   2. CareerMap          — Node-based career progression map (SVG)
+   3. CareerPath         — Linear bottom guide: next steps with rewards
    ============================================================ */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { createPortal } from "react-dom";
 import PageLayout from "../../components/user/PageLayout";
+import { Icon, type IconName } from "../../components/ui/Icon";
 import {
   useDashboard,
   type DashboardData,
-  type ActivityItem,
-  type MarketSkillItem,
-  type SkillBadgeSummary,
 } from "../../hooks/user/useDashboard";
 
-// ── Variants ──────────────────────────────────────────────────────────────────
+import "../../assets/css/Dashboardpage.css";
+
+/* ── Motion presets ──────────────────────────────────────────────────────── */
 
 const fadeUp = {
-  hidden: { opacity: 0, y: 16 },
-  show: { opacity: 1, y: 0, transition: { type: "spring" as const, stiffness: 300, damping: 28 } },
+  hidden: { opacity: 0, y: 22 },
+  show:   { opacity: 1, y: 0, transition: { type: "spring" as const, stiffness: 260, damping: 24 } },
 };
+
 const stagger = {
   hidden: {},
-  show: { transition: { staggerChildren: 0.06 } },
+  show:   { transition: { staggerChildren: 0.08 } },
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
-
-function getRankTitle(level: number): string {
-  if (level >= 20) return "Legend";
-  if (level >= 15) return "Master";
-  if (level >= 10) return "Expert";
-  if (level >= 7)  return "Advanced";
-  if (level >= 4)  return "Intermediate";
-  return "Novice";
-}
-
-function badgeTier(badge: string) {
-  if (badge === "GOLD")   return "gold";
-  if (badge === "SILVER") return "silver";
-  return "bronze";
-}
-
-function badgeEmoji(badge: string) {
-  if (badge === "GOLD")   return "🥇";
-  if (badge === "SILVER") return "🥈";
-  return "🥉";
-}
-
-function activityIcon(item: ActivityItem): string {
-  if (item.type === "XP_GAIN")  return "⚡";
-  if (item.type === "XP_SPEND") return "🛍️";
-  if (item.type === "BADGE")    return "🏅";
-  return "📋";
-}
-
-// ── Animated Counter ──────────────────────────────────────────────────────────
-
-const AnimCount: React.FC<{ value: number }> = ({ value }) => {
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    let cur = 0;
-    const step = Math.ceil(value / 36);
-    const id = setInterval(() => {
-      cur += step;
-      if (cur >= value) { setN(value); clearInterval(id); }
-      else setN(cur);
-    }, 18);
-    return () => clearInterval(id);
-  }, [value]);
-  return <>{n.toLocaleString()}</>;
+const scaleIn = {
+  hidden: { opacity: 0, scale: 0.85 },
+  show:   { opacity: 1, scale: 1, transition: { type: "spring" as const, stiffness: 300, damping: 26 } },
 };
 
-// ── XP Level Ring ─────────────────────────────────────────────────────────────
+/* ── Prestige tier system ─────────────────────────────────────────────────── */
 
-const LevelRing: React.FC<{ level: number; xpFor: number; xpTo: number }> = ({ level, xpFor, xpTo }) => {
-  const pct    = (xpFor + xpTo) > 0 ? xpFor / (xpFor + xpTo) : 0;
-  const R      = 44;
-  const circ   = 2 * Math.PI * R;
-  const offset = circ * (1 - pct);
+const PRESTIGE_TIERS = [
+  { name: "Prospect",  abbr: "PRSP", min: 0,     color: "#8899AA" },
+  { name: "Contender", abbr: "CNTR", min: 500,   color: "#9B7CFF" },
+  { name: "Proven",    abbr: "PRVN", min: 1500,  color: "#22D3EE" },
+  { name: "Elite",     abbr: "ELIT", min: 4000,  color: "#F5B731" },
+  { name: "Titan",     abbr: "TITN", min: 9000,  color: "#FF6B6B" },
+  { name: "Legend",    abbr: "LGND", min: 20000, color: "#FF9F43" },
+] as const;
 
-  return (
-    <svg width="108" height="108" viewBox="0 0 108 108" style={{ flexShrink: 0 }}>
-      <defs>
-        <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%"   stopColor="var(--color-gold)" />
-          <stop offset="100%" stopColor="var(--color-gold-light)" />
-        </linearGradient>
-      </defs>
-      {/* Track */}
-      <circle cx="54" cy="54" r={R} fill="none" stroke="var(--color-bg-active)" strokeWidth="7" />
-      {/* Fill */}
-      <circle
-        cx="54" cy="54" r={R}
-        fill="none"
-        stroke="url(#ringGrad)"
-        strokeWidth="7"
-        strokeLinecap="round"
-        strokeDasharray={circ}
-        strokeDashoffset={offset}
-        transform="rotate(-90 54 54)"
-        style={{ transition: "stroke-dashoffset 1.1s cubic-bezier(0.22,1,0.36,1)" }}
-      />
-      <text x="54" y="50" textAnchor="middle"
-        style={{ fill: "var(--color-text-primary)", fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 800 }}>
-        {level}
-      </text>
-      <text x="54" y="66" textAnchor="middle"
-        style={{ fill: "var(--color-text-muted)", fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.08em" }}>
-        {getRankTitle(level).toUpperCase()}
-      </text>
-    </svg>
+function getPrestigeTier(xp: number) {
+  for (let i = PRESTIGE_TIERS.length - 1; i >= 0; i--)
+    if (xp >= PRESTIGE_TIERS[i].min) return PRESTIGE_TIERS[i];
+  return PRESTIGE_TIERS[0];
+}
+
+function getNextPrestigeTier(xp: number) {
+  for (let i = 0; i < PRESTIGE_TIERS.length; i++)
+    if (xp < PRESTIGE_TIERS[i].min) return PRESTIGE_TIERS[i];
+  return null;
+}
+
+function getPrestigeProgress(xp: number): number {
+  const cur  = getPrestigeTier(xp);
+  const next = getNextPrestigeTier(xp);
+  if (!next) return 1;
+  const span = next.min - cur.min;
+  return span > 0 ? (xp - cur.min) / span : 1;
+}
+
+/* ── Visibility score engine ────────────────────────────────────────────── */
+
+function computeVisibilityScore(data: DashboardData): number {
+  const skillPts = Math.min(data.verifiedSkills * 8, 40);
+  const badgePts = Math.min(data.totalBadges * 5 + data.goldBadges * 5, 30);
+  const chalPts  = Math.min(data.completedChallenges * 4, 20);
+  const appPts   = Math.min(data.totalApplications * 2, 10);
+  return Math.round(skillPts + badgePts + chalPts + appPts);
+}
+
+/* ── Career path step builder ───────────────────────────────────────────── */
+
+interface PathStep {
+  id:        string;
+  label:     string;
+  reward:    string;
+  req:       string;
+  path:      string;
+  done:      boolean;
+  isNext:    boolean;
+}
+
+function buildCareerPath(data: DashboardData): PathStep[] {
+  const steps: PathStep[] = [
+    {
+      id:     "verify-skill",
+      label:  "Verify a Skill",
+      reward: "+100 XP",
+      req:    "Pass skill test",
+      path:   "/skills",
+      done:   data.verifiedSkills > 0,
+      isNext: false,
+    },
+    {
+      id:     "earn-gold",
+      label:  "Earn Gold Badge",
+      reward: "+200 XP",
+      req:    "1+ verified skill",
+      path:   "/skills",
+      done:   data.goldBadges > 0,
+      isNext: false,
+    },
+    {
+      id:     "complete-challenge",
+      label:  "Complete Challenge",
+      reward: "+40 XP",
+      req:    "Any skill",
+      path:   "/challenges",
+      done:   data.completedChallenges > 0,
+      isNext: false,
+    },
+    {
+      id:     "unlock-jobs",
+      label:  "Unlock Jobs",
+      reward: "Job Access",
+      req:    "3+ skills · 1 badge",
+      path:   "/jobs",
+      done:   data.verifiedSkills >= 3 && data.totalBadges >= 1,
+      isNext: false,
+    },
+    {
+      id:     "apply",
+      label:  "Apply & Get Hired",
+      reward: "Career",
+      req:    "Active job matches",
+      path:   "/jobs",
+      done:   data.acceptedApplications > 0,
+      isNext: false,
+    },
+  ];
+
+  // Mark the first incomplete step as "next"
+  let foundNext = false;
+  for (const step of steps) {
+    if (!step.done && !foundNext) {
+      step.isNext = true;
+      foundNext = true;
+    }
+  }
+
+  return steps;
+}
+
+/* ── Node type definitions ───────────────────────────────────────────────── */
+
+type NodeStatus = "completed" | "available" | "locked";
+type NodeType   = "skill" | "job" | "challenge" | "reputation";
+
+interface MapNode {
+  id:       string;
+  label:    string;
+  sublabel: string;
+  type:     NodeType;
+  status:   NodeStatus;
+  path:     string;
+  reward?:  string;
+  req?:     string;
+  impact?:  string;
+  // layout
+  angle:    number;  // degrees from top
+  ring:     1 | 2;  // distance ring
+}
+
+function buildMapNodes(data: DashboardData): MapNode[] {
+  const visScore = computeVisibilityScore(data);
+
+  return [
+    /* ── SKILLS BRANCH ── */
+    {
+      id: "skills-verified",
+      label: `${data.verifiedSkills} Skills`,
+      sublabel: "Verified",
+      type: "skill",
+      status: data.verifiedSkills > 0 ? "completed" : "available",
+      path: "/skills",
+      reward: "+100 XP each",
+      req: "Pass skill test",
+      impact: "Each skill unlocks more job matches",
+      angle: -60,
+      ring: 1,
+    },
+    {
+      id: "skills-tests",
+      label: "Skill Tests",
+      sublabel: "Available now",
+      type: "skill",
+      status: "available",
+      path: "/skills",
+      reward: "+80–200 XP",
+      req: "None",
+      impact: "Pass to earn badges and visibility",
+      angle: -85,
+      ring: 2,
+    },
+    {
+      id: "skills-locked",
+      label: "Advanced Skills",
+      sublabel: "Locked",
+      type: "skill",
+      status: data.verifiedSkills >= 3 ? "available" : "locked",
+      path: "/skills",
+      reward: "+300 XP",
+      req: "3+ verified skills",
+      impact: "Opens elite job listings",
+      angle: -38,
+      ring: 2,
+    },
+
+    /* ── JOBS BRANCH ── */
+    {
+      id: "jobs-available",
+      label: `${data.totalApplications > 0 ? data.totalApplications : "0"} Applied`,
+      sublabel: "Jobs",
+      type: "job",
+      status: data.verifiedSkills >= 2 ? (data.totalApplications > 0 ? "completed" : "available") : "locked",
+      path: "/jobs",
+      reward: "Career access",
+      req: "2+ skills",
+      impact: "Direct path to offers",
+      angle: 60,
+      ring: 1,
+    },
+    {
+      id: "jobs-locked",
+      label: "Premium Jobs",
+      sublabel: "Locked",
+      type: "job",
+      status: data.goldBadges > 0 ? "available" : "locked",
+      path: "/jobs",
+      reward: "Top offers",
+      req: "Gold Badge required",
+      impact: "2× higher-paying roles",
+      angle: 82,
+      ring: 2,
+    },
+    {
+      id: "jobs-matches",
+      label: "Job Matches",
+      sublabel: data.verifiedSkills >= 2 ? "Active" : "Needs skills",
+      type: "job",
+      status: data.verifiedSkills >= 2 ? "available" : "locked",
+      path: "/jobs",
+      reward: "Instant apply",
+      req: "Skill match",
+      impact: "Curated to your verified stack",
+      angle: 42,
+      ring: 2,
+    },
+
+    /* ── CHALLENGES BRANCH ── */
+    {
+      id: "challenges-active",
+      label: `${data.activeChallenges} Active`,
+      sublabel: "Challenges",
+      type: "challenge",
+      status: data.activeChallenges > 0 ? "available" : (data.completedChallenges > 0 ? "completed" : "available"),
+      path: "/challenges",
+      reward: `+${Math.max(data.activeChallenges, 1) * 40} XP`,
+      req: "None",
+      impact: "Proves skills under real pressure",
+      angle: 165,
+      ring: 1,
+    },
+    {
+      id: "challenges-completed",
+      label: `${data.completedChallenges} Done`,
+      sublabel: "Completed",
+      type: "challenge",
+      status: data.completedChallenges > 0 ? "completed" : "locked",
+      path: "/challenges",
+      reward: "XP + credibility",
+      req: "Attempt challenges",
+      impact: "Builds recruiter trust score",
+      angle: 148,
+      ring: 2,
+    },
+
+    /* ── REPUTATION BRANCH ── */
+    {
+      id: "rep-xp",
+      label: `${data.xpBalance.toLocaleString()} XP`,
+      sublabel: "Balance",
+      type: "reputation",
+      status: data.xpBalance > 100 ? "completed" : "available",
+      path: "/store",
+      reward: "Spendable",
+      req: "Earn via actions",
+      impact: "Unlocks mock interviews + boosts",
+      angle: -160,
+      ring: 1,
+    },
+    {
+      id: "rep-visibility",
+      label: `${visScore}/100`,
+      sublabel: "Visibility",
+      type: "reputation",
+      status: visScore >= 50 ? "completed" : visScore >= 20 ? "available" : "locked",
+      path: "/skills",
+      reward: "Recruiter reach",
+      req: "Skills + badges",
+      impact: "Score 50+ to appear in recruiter searches",
+      angle: -140,
+      ring: 2,
+    },
+    {
+      id: "rep-tier",
+      label: getPrestigeTier(data.xpBalance).name,
+      sublabel: "Prestige Tier",
+      type: "reputation",
+      status: data.xpBalance >= 500 ? "completed" : "available",
+      path: "/store",
+      reward: "Status + perks",
+      req: "Earn XP",
+      impact: "Higher tier = more job unlocks",
+      angle: -175,
+      ring: 2,
+    },
+  ];
+}
+
+/* ── XP burst ────────────────────────────────────────────────────────────── */
+
+interface XpBurst { id: number; x: number; y: number; amount: number; }
+
+const XpBurstLayer: React.FC<{ bursts: XpBurst[] }> = ({ bursts }) =>
+  createPortal(
+    <div className="xp-burst-portal" aria-hidden="true">
+      {bursts.map(b => (
+        <div key={b.id} className="xp-burst-float" style={{ left: b.x, top: b.y }}>
+          +{b.amount} XP
+        </div>
+      ))}
+    </div>,
+    document.body
   );
-};
 
-// ── Stat Tile ─────────────────────────────────────────────────────────────────
-// A tighter, more expressive stat than a plain stat-card.
+/* ═══════════════════════════════════════════════════════════
+   1. ARENA HEADER — Identity Core
+   ═══════════════════════════════════════════════════════════ */
 
-const StatTile: React.FC<{
-  icon: string; value: number; label: string;
-  accentVar: string; sub?: string; onClick?: () => void;
-}> = ({ icon, value, label, accentVar, sub, onClick }) => (
-  <motion.div
-    variants={fadeUp}
-    onClick={onClick}
-    whileHover={onClick ? { y: -3, transition: { duration: 0.15 } } : undefined}
-    style={{
-      position: "relative", overflow: "hidden",
-      background: "var(--color-bg-surface)",
-      border: "1px solid var(--color-border-subtle)",
-      borderRadius: "var(--radius-xl)",
-      padding: "var(--space-5) var(--space-4) var(--space-4)",
-      display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3,
-      cursor: onClick ? "pointer" : "default",
-      transition: "border-color 0.2s, box-shadow 0.2s",
-    }}
-    className={onClick ? "card card-interactive" : "card"}
-  >
-    {/* corner glow blob */}
-    <div style={{
-      position: "absolute", bottom: -18, right: -18,
-      width: 60, height: 60, borderRadius: "50%",
-      background: `var(${accentVar})`, opacity: 0.10, pointerEvents: "none",
-    }} />
-    {/* top micro-bar */}
-    <div style={{
-      position: "absolute", top: 0, left: 0,
-      width: "40%", height: 2, borderRadius: "var(--radius-xl) 0 0 0",
-      background: `var(${accentVar}-400, var(${accentVar}))`,
-    }} />
-    <span style={{ fontSize: 18, lineHeight: 1, marginBottom: 4 }}>{icon}</span>
-    <span style={{
-      fontFamily: "var(--font-display)", fontSize: "var(--text-2xl)",
-      fontWeight: 800, color: "var(--color-text-primary)", lineHeight: 1,
-      letterSpacing: "var(--tracking-tight)",
-    }}>
-      <AnimCount value={value} />
-    </span>
-    <span className="label">{label}</span>
-    {sub && <span className="caption mono" style={{ fontSize: 10, marginTop: 1 }}>{sub}</span>}
-  </motion.div>
-);
+const ArenaHeader: React.FC<{ data: DashboardData }> = ({ data }) => {
+  const tier     = getPrestigeTier(data.xpBalance);
+  const next     = getNextPrestigeTier(data.xpBalance);
+  const progress = getPrestigeProgress(data.xpBalance);
+  const xpToNext = next ? next.min - data.xpBalance : 0;
+  const visScore = computeVisibilityScore(data);
 
-// ── Panel ─────────────────────────────────────────────────────────────────────
+  const statusMessage = useMemo(() => {
+    if (next && xpToNext <= 200)
+      return { text: `You are ${xpToNext} XP away from ${next.name.toUpperCase()}`, cls: "status-urgent" };
+    if (data.verifiedSkills === 0)
+      return { text: "You are not yet visible to top jobs", cls: "status-danger" };
+    if (data.goldBadges === 0)
+      return { text: "Earn a Gold Badge to unlock premium job access", cls: "status-warn" };
+    if (visScore < 50)
+      return { text: `Visibility ${visScore}/100 — boost skills to reach recruiter radar`, cls: "status-warn" };
+    return { text: `Rank ${tier.name} · ${visScore}/100 visibility — keep climbing`, cls: "status-ok" };
+  }, [data, tier, next, xpToNext, visScore]);
 
-const Panel: React.FC<{
-  title: string; icon?: string;
-  accent?: "primary" | "gold" | "cyan" | "green";
-  sub?: string; link?: string; onLink?: () => void;
-  children: React.ReactNode;
-}> = ({ title, icon, accent = "primary", sub, link, onLink, children }) => (
-  <div className="card" style={{ display: "flex", flexDirection: "column" }}>
-    <div style={{
-      display: "flex", alignItems: "center", justifyContent: "space-between",
-      padding: "var(--space-4) var(--space-5) var(--space-3)",
-      borderBottom: "1px solid var(--color-border-subtle)",
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{
-          width: 3, height: 18, borderRadius: 2, flexShrink: 0,
-          background: `var(--color-${accent === "gold" ? "gold-light" : `${accent}-400`})`,
-        }} />
-        {icon && <span style={{ fontSize: 15 }}>{icon}</span>}
-        <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          <span style={{ fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--color-text-primary)" }}>{title}</span>
-          {sub && <span className="caption" style={{ fontSize: 10 }}>{sub}</span>}
-        </div>
-      </div>
-      {link && onLink && (
-        <button className="panel-link" onClick={onLink}>{link} →</button>
-      )}
-    </div>
-    <div style={{ padding: "var(--space-3) var(--space-4)" }}>
-      {children}
-    </div>
-  </div>
-);
+  const R      = 52;
+  const circ   = 2 * Math.PI * R;
+  const offset = circ * (1 - progress);
 
-// ── Market Bar ────────────────────────────────────────────────────────────────
-
-const MarketBar: React.FC<{ item: MarketSkillItem; max: number; navigate: (p: string) => void }> = ({ item, max, navigate }) => {
-  const pct = max > 0 ? (item.jobCount / max) * 100 : 0;
   return (
-    <motion.div
-      variants={fadeUp}
-      onClick={() => !item.userHasIt && navigate("/skills")}
-      style={{
-        padding: "9px 6px", borderRadius: "var(--radius-md)",
-        cursor: item.userHasIt ? "default" : "pointer",
-        transition: "background 0.15s",
-      }}
-      whileHover={!item.userHasIt ? { backgroundColor: "var(--color-bg-hover)" } : undefined}
-    >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-        <span style={{ fontSize: "var(--text-sm)", fontWeight: 500, color: "var(--color-text-primary)" }}>
-          {item.skillName}
-        </span>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {item.userHasIt
-            ? <span className="mono" style={{ fontSize: 10, color: "var(--color-green-400)" }}>✓ You have it</span>
-            : <span className="mono" style={{ fontSize: 10, color: "var(--color-primary-400)", fontWeight: 600 }}>Skill gap ↗</span>
-          }
-          <span className="caption mono">{item.jobCount} jobs</span>
+    <motion.div variants={fadeUp} className="arena-header">
+      {/* Left: Status + Identity */}
+      <div className="arena-id">
+        <div className={`arena-status-msg ${statusMessage.cls}`}>
+          <span className="arena-status-dot" />
+          {statusMessage.text}
+        </div>
+
+        <h1 className="arena-name">
+          {data.firstName}{" "}
+          <span className="arena-name-accent">{data.lastName}</span>
+        </h1>
+
+        {data.professionalTitle && (
+          <p className="arena-role">{data.professionalTitle}</p>
+        )}
+
+        <div className="arena-tags">
+          <span className="arena-tag arena-tag-tier" style={{ "--tier-color": tier.color } as React.CSSProperties}>
+            {tier.name}
+          </span>
+          <span className="arena-tag arena-tag-xp">
+            {data.xpBalance.toLocaleString()} XP
+          </span>
+          {data.country && (
+            <span className="arena-tag arena-tag-loc">
+              {data.country}
+            </span>
+          )}
         </div>
       </div>
-      <div className="progress-track" style={{ height: 5 }}>
-        <div
-          className={`progress-bar ${item.userHasIt ? "progress-bar-green" : ""}`}
-          style={{ width: `${pct}%` }}
-        />
+
+      {/* Center: Avatar + Ring */}
+      <div className="arena-av-hub">
+        <div className="arena-av-outer-ring" />
+        <svg className="arena-ring-svg" width="124" height="124" viewBox="0 0 124 124">
+          <defs>
+            <linearGradient id="arenaRingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%"   stopColor={tier.color} stopOpacity="0.8" />
+              <stop offset="100%" stopColor={tier.color} />
+            </linearGradient>
+          </defs>
+          <circle cx="62" cy="62" r={R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
+          <circle
+            cx="62" cy="62" r={R}
+            fill="none"
+            stroke={`url(#arenaRingGrad)`}
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeDasharray={circ}
+            strokeDashoffset={offset}
+            transform="rotate(-90 62 62)"
+            style={{ transition: "stroke-dashoffset 1.4s cubic-bezier(0.22,1,0.36,1)", filter: `drop-shadow(0 0 8px ${tier.color}66)` }}
+          />
+        </svg>
+        <div className="arena-av">
+          {data.profilePicture
+            ? <img src={data.profilePicture} alt="avatar" />
+            : <span>{data.firstName?.[0]?.toUpperCase() ?? "?"}</span>
+          }
+        </div>
+        <div className="arena-tier-badge" style={{ background: tier.color, color: "#0D0F17" }}>
+          {tier.abbr}
+        </div>
+      </div>
+
+      {/* Right: XP Stats */}
+      <div className="arena-xp-stats">
+        <div className="arena-xp-primary">
+          <span className="arena-xp-value">{data.xpBalance.toLocaleString()}</span>
+          <span className="arena-xp-label">Total XP</span>
+        </div>
+        <div className="arena-xp-row">
+          <span className="arena-xp-sub-label">This week</span>
+          <span className="arena-xp-sub-value">+{data.xpGainedThisWeek.toLocaleString()}</span>
+        </div>
+        <div className="arena-xp-progress-wrap">
+          <div className="arena-xp-progress-track">
+            <div
+              className="arena-xp-progress-fill"
+              style={{ width: `${Math.round(progress * 100)}%`, background: tier.color }}
+            />
+          </div>
+          <span className="arena-xp-next-hint">
+            {next ? `${xpToNext.toLocaleString()} XP → ${next.name}` : "Max Prestige"}
+          </span>
+        </div>
+        <div className="arena-vis-row">
+          <span className="arena-vis-label">Visibility</span>
+          <span
+            className="arena-vis-score"
+            style={{ color: visScore >= 50 ? "#2DD4A0" : visScore >= 30 ? "#F5B731" : "#F87171" }}
+          >
+            {visScore}/100
+          </span>
+        </div>
       </div>
     </motion.div>
   );
 };
 
-// ── Skill Row ─────────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════
+   2. CAREER MAP — Node-based SVG map
+   ═══════════════════════════════════════════════════════════ */
 
-const SkillRow: React.FC<{ skill: SkillBadgeSummary }> = ({ skill }) => (
-  <motion.div
-    variants={fadeUp}
-    style={{
-      display: "flex", alignItems: "center", gap: 10,
-      padding: "9px 6px", borderBottom: "1px solid var(--color-border-subtle)",
-    }}
-  >
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <span style={{ fontSize: "var(--text-sm)", fontWeight: 500, color: "var(--color-text-primary)", display: "block" }}>
-        {skill.skillName}
-      </span>
-      <span className="caption">{skill.category}</span>
-    </div>
-    <span className={`skill-badge ${badgeTier(skill.badge)}`} style={{ fontSize: 10 }}>
-      <span className="skill-badge-icon" style={{ fontSize: 14 }}>{badgeEmoji(skill.badge)}</span>
-      {skill.badge}
-    </span>
-  </motion.div>
-);
+const NODE_TYPE_COLORS: Record<NodeType, { primary: string; glow: string; bg: string }> = {
+  skill:      { primary: "#9B7CFF", glow: "rgba(155,124,255,0.4)", bg: "rgba(155,124,255,0.12)" },
+  job:        { primary: "#2DD4A0", glow: "rgba(45,212,160,0.4)",  bg: "rgba(45,212,160,0.10)" },
+  challenge:  { primary: "#F5B731", glow: "rgba(245,183,49,0.4)",  bg: "rgba(245,183,49,0.10)" },
+  reputation: { primary: "#22D3EE", glow: "rgba(34,211,238,0.4)",  bg: "rgba(34,211,238,0.10)" },
+};
 
-// ── Activity Row ──────────────────────────────────────────────────────────────
+const NODE_STATUS_OPACITY: Record<NodeStatus, number> = {
+  completed: 1,
+  available: 0.85,
+  locked: 0.30,
+};
 
-const ActivityRow: React.FC<{ item: ActivityItem }> = ({ item }) => (
-  <motion.div
-    variants={fadeUp}
-    style={{
-      display: "flex", alignItems: "flex-start", gap: 10,
-      padding: "9px 6px", borderBottom: "1px solid var(--color-border-subtle)",
-    }}
-  >
-    <div className="badge badge-muted" style={{
-      width: 28, height: 28, borderRadius: "var(--radius-md)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontSize: 13, flexShrink: 0,
-    }}>
-      {activityIcon(item)}
-    </div>
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <span style={{ fontSize: "var(--text-sm)", fontWeight: 500, color: "var(--color-text-secondary)", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {item.label}
-      </span>
-      <span className="caption mono" style={{ fontSize: 10 }}>{item.detail}</span>
-    </div>
-    <span className="caption mono" style={{ color: "var(--color-text-disabled)", flexShrink: 0, fontSize: 10 }}>
-      {timeAgo(item.timestamp)}
-    </span>
-  </motion.div>
-);
+interface TooltipData {
+  node:    MapNode;
+  x:       number;
+  y:       number;
+  visible: boolean;
+}
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
+const CareerMap: React.FC<{
+  data:     DashboardData;
+  navigate: (p: string) => void;
+}> = ({ data, navigate }) => {
+  const nodes = useMemo(() => buildMapNodes(data), [data]);
+  const [tooltip, setTooltip] = useState<TooltipData | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  // SVG dimensions
+  const W  = 700;
+  const H  = 520;
+  const CX = W / 2;
+  const CY = H / 2 + 10;
+  const R1 = 130; // inner ring
+  const R2 = 230; // outer ring
+
+  // Convert angle (degrees from top, clockwise) to x/y
+  const toXY = (angleDeg: number, r: number) => {
+    const rad = ((angleDeg - 90) * Math.PI) / 180;
+    return { x: CX + r * Math.cos(rad), y: CY + r * Math.sin(rad) };
+  };
+
+  const handleNodeClick = useCallback((node: MapNode, e: React.MouseEvent) => {
+    if (node.status === "locked") return;
+    navigate(node.path);
+  }, [navigate]);
+
+  const handleNodeHover = useCallback((node: MapNode, e: React.MouseEvent<SVGGElement>) => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const svgEl = e.currentTarget;
+    const svgRect = svgEl.getBoundingClientRect();
+    setTooltip({
+      node,
+      x: svgRect.left - rect.left + svgRect.width / 2,
+      y: svgRect.top  - rect.top,
+      visible: true,
+    });
+  }, []);
+
+  const clearTooltip = useCallback(() => setTooltip(null), []);
+
+  // Branch label positions (midpoint of each branch)
+  const branches: Array<{ label: string; type: NodeType; angle: number }> = [
+    { label: "Skills",     type: "skill",      angle: -60  },
+    { label: "Jobs",       type: "job",        angle: 60   },
+    { label: "Challenges", type: "challenge",  angle: 160  },
+    { label: "Reputation", type: "reputation", angle: -155 },
+  ];
+
+  const typeIcon: Record<NodeType, string> = {
+    skill: "⚡",
+    job: "💼",
+    challenge: "🎯",
+    reputation: "🏆",
+  };
+
+  return (
+    <motion.div variants={fadeUp} className="career-map-wrap">
+      <div className="career-map-label-row">
+        <span className="career-map-eyebrow">CAREER ARENA MAP</span>
+        <span className="career-map-hint">Hover nodes for details · Click to act</span>
+      </div>
+
+      <div className="career-map-svg-container" ref={svgRef as unknown as React.RefObject<HTMLDivElement>}>
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${W} ${H}`}
+          className="career-map-svg"
+          preserveAspectRatio="xMidYMid meet"
+          aria-label="Career Arena Map"
+        >
+          <defs>
+            {/* Branch gradients */}
+            {branches.map(b => {
+              const c = NODE_TYPE_COLORS[b.type];
+              return (
+                <linearGradient key={b.type} id={`branch-grad-${b.type}`} x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor={c.primary} stopOpacity="0.7" />
+                  <stop offset="100%" stopColor={c.primary} stopOpacity="0.15" />
+                </linearGradient>
+              );
+            })}
+
+            {/* Center glow */}
+            <radialGradient id="center-glow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%"  stopColor="rgba(155,124,255,0.25)" />
+              <stop offset="100%" stopColor="transparent" />
+            </radialGradient>
+
+            {/* Arena rings */}
+            <radialGradient id="arena-bg" cx="50%" cy="50%" r="50%">
+              <stop offset="0%"  stopColor="rgba(13,15,25,0.0)" />
+              <stop offset="100%" stopColor="rgba(13,15,25,0.0)" />
+            </radialGradient>
+          </defs>
+
+          {/* ── Background arena rings ── */}
+          <circle cx={CX} cy={CY} r={R1 + 20} fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="1" strokeDasharray="4 8" />
+          <circle cx={CX} cy={CY} r={R2 + 20} fill="none" stroke="rgba(255,255,255,0.02)" strokeWidth="1" strokeDasharray="3 10" />
+
+          {/* ── Branch lines from center to nodes ── */}
+          {nodes.map(node => {
+            const pos = toXY(node.angle, node.ring === 1 ? R1 : R2);
+            const c   = NODE_TYPE_COLORS[node.type];
+            const op  = NODE_STATUS_OPACITY[node.status];
+            return (
+              <line
+                key={`line-${node.id}`}
+                x1={CX} y1={CY}
+                x2={pos.x} y2={pos.y}
+                stroke={c.primary}
+                strokeWidth={node.ring === 1 ? 1.5 : 1}
+                strokeOpacity={op * 0.45}
+                strokeDasharray={node.status === "locked" ? "4 5" : undefined}
+              />
+            );
+          })}
+
+          {/* ── Ring-1 to Ring-2 connectors (within same type) ── */}
+          {branches.map(b => {
+            const ring1Nodes = nodes.filter(n => n.type === b.type && n.ring === 1);
+            const ring2Nodes = nodes.filter(n => n.type === b.type && n.ring === 2);
+            return ring1Nodes.map(r1n =>
+              ring2Nodes.map(r2n => {
+                const p1 = toXY(r1n.angle, R1);
+                const p2 = toXY(r2n.angle, R2);
+                const c  = NODE_TYPE_COLORS[b.type];
+                return (
+                  <line
+                    key={`conn-${r1n.id}-${r2n.id}`}
+                    x1={p1.x} y1={p1.y}
+                    x2={p2.x} y2={p2.y}
+                    stroke={c.primary}
+                    strokeWidth={0.8}
+                    strokeOpacity={0.20}
+                    strokeDasharray="3 6"
+                  />
+                );
+              })
+            );
+          })}
+
+          {/* ── Branch labels ── */}
+          {branches.map(b => {
+            const midR   = (R1 + R2) / 2;
+            const pos    = toXY(b.angle, midR - 10);
+            const c      = NODE_TYPE_COLORS[b.type];
+            const perpAngle = ((b.angle - 90) * Math.PI) / 180;
+            const perpX  = -Math.sin(perpAngle) * 18;
+            const perpY  =  Math.cos(perpAngle) * 18;
+            return (
+              <text
+                key={`blabel-${b.type}`}
+                x={pos.x + perpX}
+                y={pos.y + perpY}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fill={c.primary}
+                fontSize="10"
+                fontFamily="var(--font-mono)"
+                fontWeight="700"
+                letterSpacing="0.10em"
+                textDecoration="none"
+                opacity="0.55"
+                style={{ textTransform: "uppercase", pointerEvents: "none" }}
+              >
+                {typeIcon[b.type]} {b.label.toUpperCase()}
+              </text>
+            );
+          })}
+
+          {/* ── CENTER NODE — The User ── */}
+          <g>
+            {/* Center glow */}
+            <circle cx={CX} cy={CY} r={55} fill="url(#center-glow)" />
+            <circle cx={CX} cy={CY} r={42} fill="rgba(13,15,23,0.95)" stroke="rgba(155,124,255,0.35)" strokeWidth="2" />
+            <circle cx={CX} cy={CY} r={42} fill="none" stroke="rgba(155,124,255,0.12)" strokeWidth="10" />
+
+            {/* Pulsing aura */}
+            <circle cx={CX} cy={CY} r={46} fill="none" stroke="rgba(155,124,255,0.18)" strokeWidth="1.5">
+              <animate attributeName="r" values="44;52;44" dur="3s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.5;0.1;0.5" dur="3s" repeatCount="indefinite" />
+            </circle>
+
+            <text
+              x={CX} y={CY - 7}
+              textAnchor="middle"
+              fill="rgba(255,255,255,0.95)"
+              fontSize="11"
+              fontFamily="var(--font-display)"
+              fontWeight="800"
+              letterSpacing="-0.01em"
+              style={{ pointerEvents: "none" }}
+            >
+              YOU
+            </text>
+            <text
+              x={CX} y={CY + 8}
+              textAnchor="middle"
+              fill="rgba(255,255,255,0.35)"
+              fontSize="7"
+              fontFamily="var(--font-mono)"
+              letterSpacing="0.12em"
+              style={{ pointerEvents: "none" }}
+            >
+              ARENA
+            </text>
+          </g>
+
+          {/* ── NODES ── */}
+          {nodes.map(node => {
+            const pos    = toXY(node.angle, node.ring === 1 ? R1 : R2);
+            const c      = NODE_TYPE_COLORS[node.type];
+            const op     = NODE_STATUS_OPACITY[node.status];
+            const r      = node.ring === 1 ? 28 : 24;
+            const isLocked = node.status === "locked";
+            const isDone   = node.status === "completed";
+
+            return (
+              <g
+                key={node.id}
+                transform={`translate(${pos.x},${pos.y})`}
+                className={`map-node map-node-${node.status}`}
+                style={{ cursor: isLocked ? "not-allowed" : "pointer", opacity: op }}
+                onClick={e => handleNodeClick(node, e as unknown as React.MouseEvent)}
+                onMouseEnter={e => handleNodeHover(node, e as unknown as React.MouseEvent<SVGGElement>)}
+                onMouseLeave={clearTooltip}
+                role="button"
+                tabIndex={isLocked ? -1 : 0}
+                aria-label={`${node.label} — ${node.status}`}
+              >
+                {/* Glow */}
+                {!isLocked && (
+                  <circle r={r + 8} fill={c.glow} opacity="0.25">
+                    {isDone && (
+                      <animate attributeName="opacity" values="0.2;0.45;0.2" dur="2.5s" repeatCount="indefinite" />
+                    )}
+                  </circle>
+                )}
+
+                {/* Main circle */}
+                <circle
+                  r={r}
+                  fill={isDone ? c.bg : isLocked ? "rgba(255,255,255,0.04)" : c.bg}
+                  stroke={isDone ? c.primary : isLocked ? "rgba(255,255,255,0.10)" : c.primary}
+                  strokeWidth={isDone ? 2 : 1.5}
+                  strokeDasharray={isLocked ? "4 3" : undefined}
+                />
+
+                {/* Completion checkmark for done nodes */}
+                {isDone && (
+                  <text x={0} y={-8} textAnchor="middle" fill={c.primary} fontSize="9" style={{ pointerEvents: "none" }}>✓</text>
+                )}
+                {isLocked && (
+                  <text x={0} y={-6} textAnchor="middle" fill="rgba(255,255,255,0.25)" fontSize="10" style={{ pointerEvents: "none" }}>🔒</text>
+                )}
+
+                {/* Label */}
+                <text
+                  x={0}
+                  y={isDone || isLocked ? 4 : -2}
+                  textAnchor="middle"
+                  fill={isDone ? c.primary : isLocked ? "rgba(255,255,255,0.30)" : "rgba(255,255,255,0.90)"}
+                  fontSize={node.ring === 1 ? "9" : "8"}
+                  fontFamily="var(--font-display)"
+                  fontWeight="700"
+                  style={{ pointerEvents: "none" }}
+                >
+                  {node.label}
+                </text>
+                <text
+                  x={0}
+                  y={isDone || isLocked ? 13 : 8}
+                  textAnchor="middle"
+                  fill={isLocked ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.38)"}
+                  fontSize="6.5"
+                  fontFamily="var(--font-mono)"
+                  letterSpacing="0.05em"
+                  style={{ pointerEvents: "none", textTransform: "uppercase" }}
+                >
+                  {node.sublabel}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+
+        {/* ── Tooltip ── */}
+        <AnimatePresence>
+          {tooltip && (
+            <motion.div
+              className="map-tooltip"
+              initial={{ opacity: 0, y: 6, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 4, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              style={{
+                left: tooltip.x,
+                top:  tooltip.y - 10,
+                "--tt-c": NODE_TYPE_COLORS[tooltip.node.type].primary,
+              } as React.CSSProperties}
+            >
+              <div className="map-tt-header">
+                <span className="map-tt-label">{tooltip.node.label}</span>
+                <span className={`map-tt-status map-tt-${tooltip.node.status}`}>{tooltip.node.status}</span>
+              </div>
+              {tooltip.node.reward && (
+                <div className="map-tt-row">
+                  <span className="map-tt-key">Reward</span>
+                  <span className="map-tt-val map-tt-reward">{tooltip.node.reward}</span>
+                </div>
+              )}
+              {tooltip.node.req && (
+                <div className="map-tt-row">
+                  <span className="map-tt-key">Requires</span>
+                  <span className="map-tt-val">{tooltip.node.req}</span>
+                </div>
+              )}
+              {tooltip.node.impact && (
+                <div className="map-tt-impact">{tooltip.node.impact}</div>
+              )}
+              {tooltip.node.status !== "locked" && (
+                <div className="map-tt-cta">Click to open →</div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.div>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════
+   3. CAREER PATH — Linear next-step guide
+   ═══════════════════════════════════════════════════════════ */
+
+const CareerPath: React.FC<{
+  data:     DashboardData;
+  navigate: (p: string) => void;
+}> = ({ data, navigate }) => {
+  const steps = useMemo(() => buildCareerPath(data), [data]);
+
+  return (
+    <motion.div variants={fadeUp} className="career-path-wrap">
+      <div className="career-path-header">
+        <span className="career-path-eyebrow">YOUR NEXT MOVES</span>
+        <span className="career-path-hint">Follow this path to become hireable</span>
+      </div>
+
+      <div className="career-path-track">
+        {steps.map((step, i) => (
+          <React.Fragment key={step.id}>
+            {/* Step node */}
+            <button
+              className={`career-step ${step.done ? "step-done" : step.isNext ? "step-next" : "step-pending"}`}
+              onClick={() => !step.done && navigate(step.path)}
+              aria-label={step.label}
+              disabled={step.done}
+            >
+              <div className="step-icon">
+                {step.done ? "✓" : step.isNext ? "▶" : (i + 1).toString()}
+              </div>
+              <div className="step-body">
+                <span className="step-label">{step.label}</span>
+                <span className="step-reward">{step.reward}</span>
+                <span className="step-req">{step.req}</span>
+              </div>
+            </button>
+
+            {/* Connector arrow */}
+            {i < steps.length - 1 && (
+              <div className={`career-connector ${step.done ? "conn-done" : "conn-pending"}`}>
+                <svg width="36" height="16" viewBox="0 0 36 16" fill="none">
+                  <path d="M0 8 H28 M24 2 L34 8 L24 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+            )}
+          </React.Fragment>
+        ))}
+      </div>
+    </motion.div>
+  );
+};
+
+/* ── Skeleton ────────────────────────────────────────────────────────────── */
 
 const SkeletonDash: React.FC = () => (
-  <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
-    <div className="skeleton" style={{ height: 168, borderRadius: "var(--radius-2xl)" }} />
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12 }}>
-      {[1,2,3,4,5].map(i => <div key={i} className="skeleton" style={{ height: 108, borderRadius: "var(--radius-xl)" }} />)}
-    </div>
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 16 }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <div className="skeleton" style={{ height: 260, borderRadius: "var(--radius-xl)" }} />
-        <div className="skeleton" style={{ height: 240, borderRadius: "var(--radius-xl)" }} />
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <div className="skeleton" style={{ height: 200, borderRadius: "var(--radius-xl)" }} />
-        <div className="skeleton" style={{ height: 220, borderRadius: "var(--radius-xl)" }} />
-      </div>
-    </div>
+  <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div className="dash-skel" style={{ height: 148, borderRadius: 22 }} />
+    <div className="dash-skel" style={{ height: 520, borderRadius: 22 }} />
+    <div className="dash-skel" style={{ height: 120, borderRadius: 18 }} />
   </div>
 );
 
-// ── Live Dashboard ────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════
+   LIVE DASHBOARD
+   ═══════════════════════════════════════════════════════════ */
 
 const LiveDash: React.FC<{ data: DashboardData; navigate: (p: string) => void }> = ({ data, navigate }) => {
-  const hour     = new Date().getHours();
-  const greeting = hour < 12 ? "Morning" : hour < 18 ? "Afternoon" : "Evening";
-  const maxJobs  = data.topMarketSkills[0]?.jobCount ?? 1;
-  const xpPct    = Math.round((data.xpForCurrentLevel / Math.max(1, data.xpForCurrentLevel + data.xpToNextLevel)) * 100);
+  const [xpBursts, setXpBursts] = useState<XpBurst[]>([]);
+  const burstId = useRef(0);
+
+  const triggerXpBurst = useCallback((x: number, y: number, amt: number) => {
+    if (amt <= 0) return;
+    const id = ++burstId.current;
+    setXpBursts(prev => [...prev, { id, x, y, amount: amt }]);
+    setTimeout(() => setXpBursts(prev => prev.filter(b => b.id !== id)), 1500);
+  }, []);
 
   return (
     <motion.div
-      style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}
-      variants={stagger} initial="hidden" animate="show"
+      className="dash-root"
+      variants={stagger}
+      initial="hidden"
+      animate="show"
     >
+      {/* 1. Identity Core */}
+      <ArenaHeader data={data} />
 
-      {/* ══════════════════════════════════════════════════════
-          HERO — Identity card. This is who you are on XPand.
-          ══════════════════════════════════════════════════════ */}
-      <motion.div
-        variants={fadeUp}
-        className="card"
-        style={{
-          padding: "28px 32px",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          gap: 24, flexWrap: "wrap", position: "relative", overflow: "hidden",
-          borderColor: "var(--color-border-default)",
-        }}
-      >
-        {/* Ambient light — primary top-left, cyan bottom-right */}
-        <div style={{
-          position: "absolute", inset: 0, pointerEvents: "none",
-          background: "radial-gradient(ellipse 55% 45% at -5% -5%, var(--color-primary-glow) 0%, transparent 65%), radial-gradient(ellipse 40% 40% at 105% 105%, var(--color-cyan-glow) 0%, transparent 65%)",
-        }} />
-        {/* Subtle top-edge accent */}
-        <div style={{
-          position: "absolute", top: 0, left: 0, right: 0, height: 2, pointerEvents: "none",
-          background: "var(--gradient-brand)",
-        }} />
+      {/* 2. Career Map */}
+      <CareerMap data={data} navigate={navigate} />
 
-        {/* Avatar + identity */}
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-5)", flex: 1, minWidth: 0, position: "relative", zIndex: 1 }}>
-          <div style={{ position: "relative", flexShrink: 0 }}>
-            <div style={{
-              width: 68, height: 68, borderRadius: "var(--radius-full)",
-              background: "var(--gradient-primary)",
-              border: "2px solid rgba(155,124,255,0.35)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 26, fontWeight: 800, color: "#fff",
-              fontFamily: "var(--font-display)",
-              overflow: "hidden",
-            }}>
-              {data.profilePicture
-                ? <img src={data.profilePicture} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                : <span>{data.firstName?.[0]?.toUpperCase() ?? "?"}</span>
-              }
-            </div>
-            {/* Level badge */}
-            <div style={{
-              position: "absolute", bottom: -3, right: -6,
-              background: "var(--gradient-xp, var(--gradient-gold))",
-              color: "#0D0F17", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800,
-              padding: "2px 7px", borderRadius: "var(--radius-full)",
-              border: "1.5px solid var(--color-bg-surface)",
-              letterSpacing: "0.04em",
-            }}>
-              LV.{data.level}
-            </div>
-          </div>
+      {/* 3. Career Path */}
+      <CareerPath data={data} navigate={navigate} />
 
-          <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-            <p className="caption" style={{ marginBottom: 2, letterSpacing: "0.04em" }}>
-              {greeting}, welcome back
-            </p>
-            <h1 style={{
-              fontFamily: "var(--font-display)", fontSize: "var(--text-2xl)", fontWeight: 800,
-              color: "var(--color-text-primary)", letterSpacing: "var(--tracking-tight)",
-              lineHeight: 1.1, margin: 0, marginBottom: 6,
-            }}>
-              {data.firstName}{" "}
-              <span style={{ color: "var(--color-primary-400)" }}>{data.lastName}</span>
-            </h1>
-            {data.professionalTitle && (
-              <p className="caption" style={{ marginBottom: 8 }}>{data.professionalTitle}</p>
-            )}
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              <span className="badge badge-gold">⚡ {data.xpBalance.toLocaleString()} XP</span>
-              <span className="badge badge-primary">{getRankTitle(data.level)}</span>
-              {data.country && <span className="badge badge-cyan">📍 {data.country}</span>}
-            </div>
-          </div>
-        </div>
-
-        {/* XP Ring + progress */}
-        <div style={{
-          display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-2)",
-          position: "relative", zIndex: 1, flexShrink: 0,
-        }}>
-          <LevelRing level={data.level} xpFor={data.xpForCurrentLevel} xpTo={data.xpToNextLevel} />
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-            <span className="mono" style={{ fontSize: 10, color: "var(--color-gold-light)", letterSpacing: "0.04em" }}>
-              +{data.xpGainedThisWeek.toLocaleString()} XP this week
-            </span>
-            <div className="progress-track" style={{ width: 108, height: 4 }}>
-              <div className="progress-bar progress-bar-gold" style={{ width: `${xpPct}%` }} />
-            </div>
-            <span className="caption" style={{ fontSize: 10 }}>
-              {data.xpToNextLevel.toLocaleString()} XP to Level {data.level + 1}
-            </span>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* ══════════════════════════════════════════════════════
-          STAT TILES — 5 numbers that define your standing
-          ══════════════════════════════════════════════════════ */}
-      <motion.div
-        variants={stagger}
-        style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12 }}
-      >
-        <StatTile icon="🥇" value={data.goldBadges}        label="Gold Badges"     accentVar="--color-gold"          onClick={() => navigate("/skills")} />
-        <StatTile icon="🏅" value={data.totalBadges}       label="Total Badges"    accentVar="--color-primary"       sub={`${data.silverBadges}s · ${data.bronzeBadges}b`} />
-        <StatTile icon="🔬" value={data.verifiedSkills}    label="Verified Skills" accentVar="--color-cyan"          onClick={() => navigate("/skills")} />
-        <StatTile icon="💼" value={data.totalApplications} label="Applications"    accentVar="--color-green"         sub={`${data.acceptedApplications} accepted`} onClick={() => navigate("/applications")} />
-        <StatTile icon="⚔️" value={data.activeChallenges}  label="Active Quests"   accentVar="--color-primary"       sub={`${data.completedChallenges} done`} onClick={() => navigate("/challenges")} />
-      </motion.div>
-
-      {/* ══════════════════════════════════════════════════════
-          BODY — Two-column content grid
-          ══════════════════════════════════════════════════════ */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 16 }}>
-
-        {/* ── LEFT COLUMN ──────────────────────────────────── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-
-          {/* Market Intelligence */}
-          <motion.div variants={fadeUp}>
-            <Panel
-              title="Market Intelligence" icon="📡" accent="primary"
-              sub="Skills employers are hiring for right now"
-            >
-              {data.topMarketSkills.length === 0 ? (
-                <p className="caption" style={{ padding: "8px 6px" }}>No active job signals yet.</p>
-              ) : (
-                <motion.div variants={stagger}>
-                  {data.topMarketSkills.map(item => (
-                    <MarketBar key={item.skillName} item={item} max={maxJobs} navigate={navigate} />
-                  ))}
-                </motion.div>
-              )}
-              {data.recommendedSkills.length > 0 && (
-                <div style={{
-                  display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
-                  padding: "12px 6px 4px", borderTop: "1px solid var(--color-border-subtle)", marginTop: 4,
-                }}>
-                  <span className="caption" style={{ flexShrink: 0 }}>🎯 Earn next:</span>
-                  {data.recommendedSkills.map(s => (
-                    <button
-                      key={s}
-                      className="badge badge-primary"
-                      style={{ cursor: "pointer" }}
-                      onClick={() => navigate("/skills")}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </Panel>
-          </motion.div>
-
-          {/* My Skill Badges */}
-          <motion.div variants={fadeUp}>
-            <Panel
-              title="My Skill Badges" icon="🏅" accent="cyan"
-              link="All badges" onLink={() => navigate("/skills")}
-            >
-              {data.topSkills.length === 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "8px 6px" }}>
-                  <p className="caption">No verified skills yet — your first badge changes everything.</p>
-                  <button className="btn btn-primary btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => navigate("/skills")}>
-                    Start verifying ↗
-                  </button>
-                </div>
-              ) : (
-                <motion.div variants={stagger}>
-                  {data.topSkills.map(s => <SkillRow key={s.skillId} skill={s} />)}
-                </motion.div>
-              )}
-            </Panel>
-          </motion.div>
-        </div>
-
-        {/* ── RIGHT COLUMN ─────────────────────────────────── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-
-          {/* Quick Actions */}
-          <motion.div variants={fadeUp}>
-            <Panel title="Quick Actions" icon="⚡" accent="gold">
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                {[
-                  { icon: "🔬", label: "Verify Skill",   sub: "Take a test",   path: "/skills",     accent: "var(--color-primary-glow)" },
-                  { icon: "💼", label: "Browse Jobs",    sub: "See matches",   path: "/jobs",       accent: "var(--color-green-glow)" },
-                  { icon: "⚔️", label: "View Quests",   sub: "Earn XP",       path: "/challenges", accent: "var(--color-cyan-glow)" },
-                  { icon: "🛍️", label: "XP Store",      sub: "Spend wisely",  path: "/store",      accent: "var(--color-gold-glow)" },
-                ].map(a => (
-                  <button
-                    key={a.path}
-                    className="card card-interactive"
-                    style={{
-                      display: "flex", flexDirection: "column", alignItems: "flex-start",
-                      gap: 4, padding: "14px 12px", cursor: "pointer",
-                      border: "1px solid var(--color-border-subtle)",
-                      background: "none", textAlign: "left",
-                    }}
-                    onClick={() => navigate(a.path)}
-                  >
-                    <span style={{ fontSize: 18 }}>{a.icon}</span>
-                    <span style={{ fontSize: "var(--text-xs)", fontWeight: 600, color: "var(--color-text-secondary)" }}>{a.label}</span>
-                    <span className="caption" style={{ fontSize: 10 }}>{a.sub}</span>
-                  </button>
-                ))}
-              </div>
-            </Panel>
-          </motion.div>
-
-          {/* Recent Activity */}
-          <motion.div variants={fadeUp}>
-            <Panel
-              title="Recent Activity" icon="🕐" accent="green"
-              sub={data.recentActivity.length > 0 ? `${data.recentActivity.length} events` : undefined}
-            >
-              {data.recentActivity.length === 0 ? (
-                <p className="caption" style={{ padding: "8px 6px" }}>
-                  No activity yet — earn your first XP to start the log.
-                </p>
-              ) : (
-                <motion.div variants={stagger}>
-                  {data.recentActivity.map((item, i) => (
-                    <ActivityRow key={i} item={item} />
-                  ))}
-                </motion.div>
-              )}
-            </Panel>
-          </motion.div>
-        </div>
-      </div>
+      <XpBurstLayer bursts={xpBursts} />
     </motion.div>
   );
 };
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════
+   PAGE EXPORT
+   ═══════════════════════════════════════════════════════════ */
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -580,7 +944,9 @@ const DashboardPage: React.FC = () => {
           <div className="empty-state-icon">⚠️</div>
           <h3>Couldn't load your dashboard</h3>
           <p>{error}</p>
-          <button className="btn btn-primary btn-sm mt-4" onClick={refetch}>Retry</button>
+          <button className="btn btn-primary btn-sm" style={{ marginTop: 16 }} onClick={refetch}>
+            Retry
+          </button>
         </div>
       </PageLayout>
     );
@@ -588,7 +954,9 @@ const DashboardPage: React.FC = () => {
 
   return (
     <PageLayout pageTitle="Dashboard">
-      {isLoading ? <SkeletonDash /> : <LiveDash data={data!} navigate={navigate} />}
+      <div className="dash-scene">
+        {isLoading ? <SkeletonDash /> : <LiveDash data={data!} navigate={navigate} />}
+      </div>
     </PageLayout>
   );
 };

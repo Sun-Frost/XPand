@@ -140,11 +140,20 @@ const PageLayout = ({
       {/*
         Offset wrapper: pads top to clear the fixed navbar and bottom
         to clear the fixed BottomDock so page content is never hidden.
+
+        NOTE: overflow must NOT be hidden here — PageHeader uses
+        position:sticky and requires an ancestor that scrolls
+        (i.e. the viewport or a scrollable container). Setting
+        overflow:hidden on any ancestor between sticky child and
+        the scroll container would break sticky behaviour.
       */}
-      <div style={hideNav ? undefined : {
-        paddingTop: "var(--layout-navbar-height)",
-        paddingBottom: "var(--layout-bottom-height)",
-      }}>
+      <div
+        style={hideNav ? undefined : {
+          paddingTop: "var(--layout-navbar-height)",
+          paddingBottom: "var(--layout-bottom-height)",
+          // Intentionally no overflow:hidden — sticky PageHeader needs this
+        }}
+      >
         <motion.main
           className="pagelayout-content"
           style={maxWidth ? { maxWidth } : undefined}

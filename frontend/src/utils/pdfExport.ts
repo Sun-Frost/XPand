@@ -1,6 +1,7 @@
 /* ============================================================
-   pdfExport.ts — XPand PDF Export Utility  v2.0
-   Uses html2pdf.js for clean, professional PDF generation.
+   pdfExport.ts — XPand PDF Export Utility  v3.0
+   Uses jsPDF for clean text-based PDF generation.
+   No DOM screenshots — no layout issues.
    ============================================================ */
 
 export interface PdfOptions {
@@ -9,136 +10,211 @@ export interface PdfOptions {
   subtitle?: string;
 }
 
-/** Dynamically loads html2pdf.js if not already present. */
-async function loadHtml2Pdf(): Promise<typeof window.html2pdf> {
-  if (typeof window !== "undefined" && (window as unknown as Record<string, unknown>).html2pdf) {
-    return (window as unknown as Record<string, unknown>).html2pdf as typeof window.html2pdf;
-  }
+// ── jsPDF loader ────────────────────────────────────────────
+
+async function loadJsPdf(): Promise<any> {
+  const win = window as any;
+  if (win.jspdf?.jsPDF) return win.jspdf.jsPDF;
   return new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-    script.onload = () => resolve((window as unknown as Record<string, unknown>).html2pdf as typeof window.html2pdf);
-    script.onerror = () => reject(new Error("Failed to load html2pdf.js"));
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+    script.onload = () => resolve((window as any).jspdf.jsPDF);
+    script.onerror = () => reject(new Error("Failed to load jsPDF"));
     document.head.appendChild(script);
   });
 }
 
-/** Wraps content in a styled PDF shell that matches XPand branding. */
-function buildPdfWrapper(innerHtml: string, title: string, subtitle?: string): { container: HTMLElement; wrapper: HTMLElement } {
-  // Position off-screen BELOW the viewport (not to the left) so html2canvas
-  // renders the element starting at x:0, preventing left-side clipping.
-  const container = document.createElement("div");
-  container.style.cssText = `
-    position: fixed;
-    top: 0;
-    left: 0;
-    z-index: -1;
-    opacity: 0;
-    width: 794px;
-    background: #ffffff;
-    overflow: visible;
-  `;
+// ── Core text writer ────────────────────────────────────────
 
-  const wrapper = document.createElement("div");
-  wrapper.style.width = "794px";
-  wrapper.style.maxWidth = "794px";
-  wrapper.style.margin = "0 auto";
-  wrapper.style.cssText = `
-    font-family: 'Inter', 'Segoe UI', sans-serif;
-    background: #ffffff;
-    color: #1a1a2e;
-    padding: 48px;
-    width: 794px;
-    box-sizing: border-box;
-  `;
+const PAGE_W = 210;       // A4 mm
+const PAGE_H = 297;
+const MARGIN = 18;
+const CONTENT_W = PAGE_W - MARGIN * 2;
 
-  wrapper.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:20px;border-bottom:3px solid #7B5EA7;margin-bottom:32px;">
-      <div>
-        <div style="font-family:'Syne','Orbitron',sans-serif;font-size:22px;font-weight:800;color:#7B5EA7;letter-spacing:.05em;text-transform:uppercase;">XPand</div>
-        <div style="font-size:11px;color:#64748b;letter-spacing:.08em;text-transform:uppercase;margin-top:2px;">Level Up Your Skill Set</div>
-      </div>
-      <div style="text-align:right;">
-        <div style="font-size:11px;color:#94a3b8;">Generated</div>
-        <div style="font-size:12px;color:#475569;font-weight:600;">${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</div>
-      </div>
-    </div>
-    <div style="margin-bottom:28px;">
-      <h1 style="font-size:26px;font-weight:800;color:#1e1b4b;margin:0 0 6px;font-family:'Syne',sans-serif;">${title}</h1>
-      ${subtitle ? `<p style="font-size:13px;color:#64748b;margin:0;">${subtitle}</p>` : ""}
-    </div>
-    <div>${innerHtml}</div>
-    <div style="margin-top:48px;padding-top:16px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;">
-      <span>XPand · Confidential</span>
-      <span>xpand.app</span>
-    </div>
-  `;
-
-  container.appendChild(wrapper);
-  document.body.appendChild(container);
-  return { container, wrapper };
+interface DocState {
+  doc: any;
+  y: number;
 }
 
-/** Core export: renders innerHtml as a styled PDF. */
-export async function exportToPdf(innerHtml: string, options: PdfOptions): Promise<void> {
-  await document.fonts.ready;
-  const html2pdf = await loadHtml2Pdf();
-  const { container, wrapper } = buildPdfWrapper(innerHtml, options.title ?? options.filename, options.subtitle);
-  const pdfOptions = {
-    margin: 0,
-    filename: `${options.filename}.pdf`,
-    image: { type: "jpeg", quality: 0.97 },
-    html2canvas: { scale: 2, useCORS: true, logging: false },
-    jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-    pagebreak: { mode: ["css", "legacy"] },
-  };
-  try {
-    await html2pdf().set(pdfOptions).from(wrapper).save();
-  } finally {
-    document.body.removeChild(container);
+function addPage(state: DocState) {
+  state.doc.addPage();
+  state.y = MARGIN + 6;
+}
+
+function ensureSpace(state: DocState, needed: number) {
+  if (state.y + needed > PAGE_H - MARGIN) addPage(state);
+}
+
+/** Wraps text to fit within maxWidth (mm) and returns lines. */
+function wrapText(doc: any, text: string, maxWidth: number): string[] {
+  return doc.splitTextToSize(text, maxWidth);
+}
+
+/** Write a block of wrapped text. Returns new y. */
+function writeText(
+  state: DocState,
+  text: string,
+  opts: { size?: number; bold?: boolean; color?: [number, number, number]; indent?: number; lineGap?: number }
+) {
+  const { size = 10, bold = false, color = [40, 40, 40], indent = 0, lineGap = 1.4 } = opts;
+  state.doc.setFontSize(size);
+  state.doc.setFont("helvetica", bold ? "bold" : "normal");
+  state.doc.setTextColor(...color);
+  const lines = wrapText(state.doc, text, CONTENT_W - indent);
+  const lineH = size * 0.3528 * lineGap; // pt → mm approx
+  ensureSpace(state, lines.length * lineH + 2);
+  state.doc.text(lines, MARGIN + indent, state.y);
+  state.y += lines.length * lineH + 2;
+}
+
+function writeDivider(state: DocState, light = false) {
+  ensureSpace(state, 4);
+  state.doc.setDrawColor(light ? 210 : 180, light ? 210 : 180, light ? 210 : 180);
+  state.doc.setLineWidth(0.3);
+  state.doc.line(MARGIN, state.y, PAGE_W - MARGIN, state.y);
+  state.y += 3;
+}
+
+function writeHeader(state: DocState, title: string, subtitle?: string, generatedAt?: string) {
+  // Top bar
+  state.doc.setFillColor(245, 245, 250);
+  state.doc.rect(0, 0, PAGE_W, 28, "F");
+
+  state.doc.setFontSize(16);
+  state.doc.setFont("helvetica", "bold");
+  state.doc.setTextColor(30, 30, 60);
+  state.doc.text("XPAND", MARGIN, 14);
+
+  state.doc.setFontSize(8);
+  state.doc.setFont("helvetica", "normal");
+  state.doc.setTextColor(120, 120, 140);
+  state.doc.text("Level Up Your Skill Set", MARGIN, 19);
+
+  if (generatedAt) {
+    state.doc.setFontSize(8);
+    state.doc.setTextColor(140, 140, 160);
+    state.doc.text(generatedAt, PAGE_W - MARGIN, 16, { align: "right" });
+  }
+
+  state.y = 34;
+
+  // Document title
+  writeText(state, title, { size: 18, bold: true, color: [30, 27, 75] });
+  if (subtitle) {
+    writeText(state, subtitle, { size: 9, color: [100, 116, 139] });
+  }
+  state.y += 3;
+  writeDivider(state);
+}
+
+function writeFooter(doc: any, pageNum: number) {
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(160, 160, 180);
+  doc.text(`XPand · Confidential`, MARGIN, PAGE_H - 8);
+  doc.text(`xpand.app  ·  Page ${pageNum}`, PAGE_W - MARGIN, PAGE_H - 8, { align: "right" });
+}
+
+function writeSectionTitle(state: DocState, title: string) {
+  state.y += 3;
+  ensureSpace(state, 10);
+  writeText(state, title.toUpperCase(), { size: 8, bold: true, color: [100, 80, 160] });
+  writeDivider(state, true);
+}
+
+/** Parse and write Gemini/AI markdown prose into the doc. */
+function writeProse(state: DocState, text: string) {
+  const lines = text.split("\n");
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) { state.y += 2; continue; }
+
+    // Heading ## or ###
+    const hm = line.match(/^(#{1,4})\s+(.+)$/);
+    if (hm) {
+      const lvl = hm[1].length;
+      const content = hm[2].replace(/\*\*/g, "");
+      state.y += lvl <= 2 ? 3 : 1;
+      writeText(state, content, {
+        size: lvl === 1 ? 13 : lvl === 2 ? 11 : 10,
+        bold: true,
+        color: lvl <= 2 ? [60, 40, 120] : [50, 65, 85],
+      });
+      if (lvl <= 2) writeDivider(state, true);
+      continue;
+    }
+
+    // Bold-only line
+    const bm = line.match(/^\*\*([^*]+)\*\*:?\s*$/);
+    if (bm) {
+      state.y += 2;
+      writeText(state, bm[1], { size: 10, bold: true, color: [60, 40, 120] });
+      continue;
+    }
+
+    // Numbered list
+    const nm = line.match(/^(\d+)\.\s+(.+)$/);
+    if (nm) {
+      const content = nm[2].replace(/\*\*/g, "");
+      writeText(state, `${nm[1]}.  ${content}`, { size: 10, indent: 4, color: [50, 65, 85] });
+      continue;
+    }
+
+    // Bullet list
+    const bl = line.match(/^[-•*]\s+(.+)$/);
+    if (bl) {
+      const content = bl[1].replace(/\*\*/g, "");
+      writeText(state, `•  ${content}`, { size: 10, indent: 4, color: [50, 65, 85] });
+      continue;
+    }
+
+    // Score line
+    if (/score[:\s]+\d+/i.test(line)) {
+      state.y += 1;
+      writeText(state, line.replace(/\*\*/g, ""), { size: 10, bold: true, color: [37, 99, 235] });
+      state.y += 1;
+      continue;
+    }
+
+    // Paragraph — strip bold markers
+    const plain = line.replace(/\*\*([^*]+)\*\*/g, "$1");
+    writeText(state, plain, { size: 10, color: [60, 75, 95] });
   }
 }
 
-/* ── Formatting helpers ─────────────────────────────────────── */
+// ── Core export ─────────────────────────────────────────────
 
-export function pdfSection(title: string, content: string): string {
-  return `
-    <div style="margin-bottom:28px;page-break-inside:avoid;">
-      <h2 style="font-size:13px;font-weight:700;color:#7B5EA7;text-transform:uppercase;letter-spacing:.1em;margin:0 0 12px;padding-bottom:6px;border-bottom:1px solid #e2e8f0;">${title}</h2>
-      ${content}
-    </div>
-  `;
+export async function exportToPdf(
+  _innerHtml: string,  // kept for signature compat but not used
+  options: PdfOptions & { _proseText?: string; _structuredSections?: Array<{ title: string; text: string }> }
+): Promise<void> {
+  const JsPDF = await loadJsPdf();
+  const doc = new JsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  const state: DocState = { doc, y: MARGIN };
+  const dateStr = `Generated ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`;
+
+  writeHeader(state, options.title ?? options.filename, options.subtitle, dateStr);
+
+  if (options._structuredSections) {
+    for (const section of options._structuredSections) {
+      writeSectionTitle(state, section.title);
+      writeProse(state, section.text);
+    }
+  } else if (options._proseText) {
+    writeProse(state, options._proseText);
+  }
+
+  // Add footers to all pages
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    writeFooter(doc, i);
+  }
+
+  doc.save(`${options.filename}.pdf`);
 }
 
-export function pdfTable(headers: string[], rows: string[][]): string {
-  const thead = `<tr>${headers.map((h) => `<th style="background:#f8f5ff;color:#4c1d95;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:10px 12px;text-align:left;border-bottom:2px solid #7B5EA7;">${h}</th>`).join("")}</tr>`;
-  const tbody = rows.map((row, ri) => `
-    <tr style="background:${ri % 2 === 0 ? "#fff" : "#fafafa"};">
-      ${row.map((cell) => `<td style="font-size:12px;color:#334155;padding:9px 12px;border-bottom:1px solid #f1f5f9;vertical-align:top;">${cell}</td>`).join("")}
-    </tr>`).join("");
-  return `<table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-family:inherit;"><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
-}
-
-export function pdfBadge(text: string, color = "#7B5EA7"): string {
-  return `<span style="display:inline-block;padding:2px 8px;border-radius:20px;background:${color}18;color:${color};font-size:10px;font-weight:700;letter-spacing:.04em;border:1px solid ${color}44;margin:1px;">${text}</span>`;
-}
-
-export function pdfStatBox(items: { label: string; value: string | number; color?: string }[]): string {
-  return `
-    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
-      ${items.map((item) => `
-        <div style="flex:1;min-width:120px;background:${item.color ? item.color + "12" : "#f8f5ff"};border:1px solid ${item.color ? item.color + "33" : "#e9d8fd"};border-radius:10px;padding:14px 16px;text-align:center;">
-          <div style="font-size:22px;font-weight:800;color:${item.color ?? "#7B5EA7"};font-family:'JetBrains Mono',monospace;line-height:1;margin-bottom:4px;">${item.value}</div>
-          <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.07em;">${item.label}</div>
-        </div>`).join("")}
-    </div>`;
-}
-
-export function pdfProseBlock(text: string): string {
-  return `<p style="font-size:13px;color:#334155;line-height:1.8;margin:0 0 12px;white-space:pre-wrap;">${text}</p>`;
-}
-
-/* ── NEW: Readiness Report PDF builder ─────────────────────── */
+// ── Readiness Report ────────────────────────────────────────
 
 export async function exportReadinessReportPdf(opts: {
   reportContent: string;
@@ -146,56 +222,34 @@ export async function exportReadinessReportPdf(opts: {
   score: number | null;
   itemName: string;
 }): Promise<void> {
-  const scoreColor = (n: number) => n >= 80 ? "#16a34a" : n >= 60 ? "#2563eb" : n >= 40 ? "#d97706" : "#dc2626";
-  const scoreLabel = (n: number) => n >= 80 ? "Job Ready" : n >= 60 ? "Nearly There" : n >= 40 ? "In Progress" : "Early Stage";
+  const JsPDF = await loadJsPdf();
+  const doc = new JsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  const state: DocState = { doc, y: MARGIN };
+  const dateStr = `Generated ${new Date(opts.generatedAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`;
 
-  const scoreHtml = opts.score !== null ? `
-    <div style="display:flex;align-items:center;gap:24px;padding:20px 24px;background:#f8f5ff;border:1px solid #e9d8fd;border-radius:14px;margin-bottom:24px;">
-      <div style="text-align:center;flex-shrink:0;">
-        <div style="font-size:48px;font-weight:800;color:${scoreColor(opts.score)};font-family:'JetBrains Mono',monospace;line-height:1;">${opts.score}</div>
-        <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.1em;">/ 100</div>
-      </div>
-      <div>
-        <div style="font-size:18px;font-weight:700;color:${scoreColor(opts.score)};">${scoreLabel(opts.score)}</div>
-        <div style="font-size:13px;color:#64748b;margin-top:4px;">Career Readiness Score</div>
-        <div style="font-size:11px;color:#94a3b8;margin-top:4px;">Generated ${new Date(opts.generatedAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</div>
-      </div>
-    </div>
-  ` : "";
+  writeHeader(state, opts.itemName ?? "Career Readiness Report", "AI-powered analysis of your verified skills, market fit, and career trajectory.", dateStr);
 
-  // Convert prose to clean PDF HTML
-  const lines = opts.reportContent.split("\n");
-  let contentHtml = "";
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line) { contentHtml += `<div style="height:8px;"></div>`; continue; }
-    const hm = line.match(/^(#{1,4})\s+(.+)$/);
-    if (hm) {
-      const lvl = hm[1].length;
-      const sizes: Record<number, string> = { 1: "20px", 2: "16px", 3: "13px", 4: "12px" };
-      contentHtml += `<h3 style="font-size:${sizes[lvl] ?? "13px"};font-weight:700;color:${lvl <= 2 ? "#4c1d95" : "#334155"};margin:16px 0 6px;${lvl === 2 ? "border-bottom:1px solid #e2e8f0;padding-bottom:6px;" : ""}">${hm[2].replace(/\*\*/g, "")}</h3>`;
-      continue;
-    }
-    const bm = line.match(/^\*\*([^*]+)\*\*:?\s*$/);
-    if (bm) { contentHtml += `<h3 style="font-size:13px;font-weight:700;color:#4c1d95;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.05em;">${bm[1]}</h3>`; continue; }
-    const nm = line.match(/^(\d+)\.\s+(.+)$/);
-    if (nm) { contentHtml += `<div style="display:flex;gap:10px;margin:4px 0;"><span style="font-size:12px;font-weight:700;color:#7B5EA7;min-width:20px;">${nm[1]}.</span><p style="font-size:13px;color:#334155;line-height:1.7;margin:0;">${nm[2].replace(/\*\*/g, "")}</p></div>`; continue; }
-    const bl = line.match(/^[-•*]\s+(.+)$/);
-    if (bl) { contentHtml += `<div style="display:flex;gap:10px;margin:4px 0;"><span style="color:#7B5EA7;font-weight:700;flex-shrink:0;padding-top:1px;">•</span><p style="font-size:13px;color:#334155;line-height:1.7;margin:0;">${bl[1].replace(/\*\*/g, "")}</p></div>`; continue; }
-    const sc = line.match(/score[:\s]+(\d+)\s*(?:\/\s*100)?/i);
-    if (sc) { contentHtml += `<div style="padding:8px 14px;background:#eff6ff;border-left:3px solid #3b82f6;border-radius:0 8px 8px 0;margin:8px 0;font-size:13px;font-weight:700;color:#1d4ed8;">📊 ${line.replace(/\*\*/g, "")}</div>`; continue; }
-    contentHtml += `<p style="font-size:13px;color:#475569;line-height:1.75;margin:4px 0;">${line.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")}</p>`;
+  // Score line
+  if (opts.score !== null) {
+    const scoreLabel = opts.score >= 80 ? "Job Ready" : opts.score >= 60 ? "Nearly There" : opts.score >= 40 ? "In Progress" : "Early Stage";
+    writeText(state, `Readiness Score:  ${opts.score} / 100  —  ${scoreLabel}`, { size: 13, bold: true, color: [30, 80, 160] });
+    state.y += 4;
+    writeDivider(state, true);
   }
 
-  const innerHtml = scoreHtml + pdfSection("Report Analysis", contentHtml);
-  await exportToPdf(innerHtml, {
-    filename: `xpand-readiness-report-${new Date().toISOString().slice(0, 10)}`,
-    title: opts.itemName ?? "Career Readiness Report",
-    subtitle: "AI-powered analysis of your verified skills, market fit, and career trajectory.",
-  });
+  writeSectionTitle(state, "Report Analysis");
+  writeProse(state, opts.reportContent);
+
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    writeFooter(doc, i);
+  }
+
+  doc.save(`xpand-readiness-report-${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
-/* ── NEW: Mock Interview PDF builder ───────────────────────── */
+// ── Mock Interview ───────────────────────────────────────────
 
 export async function exportMockInterviewPdf(opts: {
   aiFeedbackText: string;
@@ -213,200 +267,125 @@ export async function exportMockInterviewPdf(opts: {
   createdAt: string;
   itemName: string;
 }): Promise<void> {
-  let html = "";
+  const JsPDF = await loadJsPdf();
+  const doc = new JsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  const state: DocState = { doc, y: MARGIN };
+  const dateStr = `Session completed ${new Date(opts.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`;
 
-  // Session meta banner
-  html += `
-    <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:12px;padding:16px 20px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;">
-      <div>
-        <div style="font-size:11px;font-weight:700;letter-spacing:.12em;color:#7c3aed;text-transform:uppercase;margin-bottom:4px;">AI Mock Interview · Session Complete</div>
-        <div style="font-size:13px;color:#475569;">Completed ${new Date(opts.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</div>
-      </div>
-      <div style="font-size:24px;">🎙️</div>
-    </div>`;
+  writeHeader(state, opts.itemName ?? "AI Mock Interview Feedback", "Personalised interview performance analysis.", dateStr);
 
-  // Answer records journey table
-  if (opts.answerRecords && opts.answerRecords.length > 0) {
-    const qualityColor = (q: string) => q === "strong" ? "#16a34a" : q === "moderate" ? "#d97706" : "#dc2626";
-    const rows = opts.answerRecords.map((rec, i) => [
-      `Q${i + 1}`,
-      rec.questionType === "technical" ? "⚙️ Technical" : "🙋 Personal",
-      rec.mode === "strict" ? "⚡ Bad Cop" : "🤝 Good Cop",
-      rec.sentiment.label,
-      `<span style="font-weight:700;color:${qualityColor(rec.answerQuality)};">${rec.answerQuality}</span>`,
-    ]);
-    html += pdfSection("Interview Journey", pdfTable(["Q", "Type", "Mode", "Sentiment", "Quality"], rows));
-  }
-
-  // Adaptive summary
+  // Session summary
   if (opts.sessionSummary) {
-    html += pdfSection("🏆 Adaptive Performance Summary (Claude AI)", `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:16px;">${opts.sessionSummary.replace(/\n/g, "<br/>")}</div>`);
+    writeSectionTitle(state, "Adaptive Performance Summary");
+    writeProse(state, opts.sessionSummary);
   }
 
   // AI Feedback
-  const feedbackLines = opts.aiFeedbackText.split("\n");
-  let feedbackHtml = "";
-  for (const raw of feedbackLines) {
-    const line = raw.trim();
-    if (!line) { feedbackHtml += `<div style="height:6px;"></div>`; continue; }
-    const hm = line.match(/^(#{1,4})\s+(.+)$/);
-    if (hm) { feedbackHtml += `<h3 style="font-size:${hm[1].length <= 2 ? "15px" : "13px"};font-weight:700;color:#4c1d95;margin:12px 0 5px;">${hm[2].replace(/\*\*/g, "")}</h3>`; continue; }
-    const bl = line.match(/^[-•*]\s+(.+)$/);
-    if (bl) { feedbackHtml += `<div style="display:flex;gap:8px;margin:3px 0;"><span style="color:#7B5EA7;">•</span><p style="font-size:13px;color:#334155;line-height:1.7;margin:0;">${bl[1].replace(/\*\*/g, "")}</p></div>`; continue; }
-    feedbackHtml += `<p style="font-size:13px;color:#475569;line-height:1.75;margin:4px 0;">${line.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")}</p>`;
-  }
-  html += pdfSection("🤖 AI Feedback (Gemini)", feedbackHtml);
+  writeSectionTitle(state, "AI Feedback");
+  writeProse(state, opts.aiFeedbackText);
 
-  // Q&A Records
+  // Q&A records
   if (opts.answerRecords && opts.answerRecords.length > 0) {
-    const qaHtml = opts.answerRecords.map((rec, i) => `
-      <div style="margin-bottom:16px;padding:14px;background:#fafafa;border:1px solid #e2e8f0;border-radius:10px;page-break-inside:avoid;">
-        <div style="font-size:10px;font-weight:700;color:#7B5EA7;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
-          Q${i + 1} · ${rec.questionType === "technical" ? "⚙️ Technical" : "🙋 Personal"} · ${rec.answerQuality} answer
-        </div>
-        <p style="font-size:13px;font-weight:600;color:#1e293b;margin:0 0 8px;font-style:italic;">${rec.question}</p>
-        <p style="font-size:12px;color:#475569;line-height:1.65;margin:0;">${rec.answer}</p>
-      </div>`).join("");
-    html += pdfSection("📋 All Questions & Answers", qaHtml);
+    writeSectionTitle(state, "Questions & Answers");
+    for (let i = 0; i < opts.answerRecords.length; i++) {
+      const rec = opts.answerRecords[i];
+      state.y += 2;
+      ensureSpace(state, 20);
+      writeText(state, `Q${i + 1}  [${rec.questionType}  ·  ${rec.answerQuality} answer  ·  ${rec.sentiment.label}]`, { size: 8, bold: true, color: [100, 80, 160] });
+      writeText(state, rec.question, { size: 10, bold: true, color: [30, 40, 60], indent: 2 });
+      writeText(state, rec.answer, { size: 10, color: [70, 85, 105], indent: 4 });
+    }
   }
 
-  await exportToPdf(html, {
-    filename: `xpand-mock-interview-${new Date().toISOString().slice(0, 10)}`,
-    title: opts.itemName ?? "AI Mock Interview Feedback",
-    subtitle: "Personalised interview performance analysis powered by Gemini AI.",
-  });
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    writeFooter(doc, i);
+  }
+
+  doc.save(`xpand-mock-interview-${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
-/* ── NEW: Applicant CV PDF builder ─────────────────────────── */
+// ── Unused helpers kept for backward compat ─────────────────
+// (pdfSection, pdfTable, etc. are no longer used but kept so
+//  any existing import doesn't break at compile time)
+
+export function pdfSection(_title: string, _content: string): string { return ""; }
+export function pdfTable(_headers: string[], _rows: string[][]): string { return ""; }
+export function pdfBadge(text: string): string { return text; }
+export function pdfStatBox(_items: { label: string; value: string | number; color?: string }[]): string { return ""; }
+export function pdfProseBlock(text: string): string { return text; }
+
+// ── CV & Market Insights exports (unchanged signatures) ──────
+// These are less frequently used; they now also go through jsPDF text.
 
 export async function exportApplicantCvPdf(opts: {
-  app: {
-    userFullName: string;
-    jobTitle: string;
-    appliedAt: string;
-    status: string;
-    prioritySlotRank: number | null;
-  };
-  profile: {
-    professionalTitle?: string;
-    aboutMe?: string;
-    email?: string;
-    phoneNumber?: string;
-    city?: string;
-    country?: string;
-    xpBalance: number;
-    linkedinUrl?: string;
-    githubUrl?: string;
-    portfolioUrl?: string;
-  } | null;
+  app: { userFullName: string; jobTitle: string; appliedAt: string; status: string; prioritySlotRank: number | null };
+  profile: { professionalTitle?: string; aboutMe?: string; email?: string; phoneNumber?: string; city?: string; country?: string; xpBalance: number; linkedinUrl?: string; githubUrl?: string; portfolioUrl?: string; } | null;
   workExperience: Array<{ jobTitle: string; companyName: string; location?: string; startDate: string; endDate?: string; description?: string }>;
-  education: Array<{ degree: string; fieldOfStudy: string; institutionName: string; startDate: string; endDate?: string; description?: string }>;
+  education: Array<{ degree: string; fieldOfStudy: string; institutionName: string; startDate: string; endDate?: string }>;
   certifications: Array<{ name: string; issuingOrganization: string; issueDate: string; expirationDate?: string }>;
-  projects: Array<{ title: string; description?: string; technologiesUsed?: string; startDate?: string; endDate?: string; projectUrl?: string; githubUrl?: string }>;
+  projects: Array<{ title: string; description?: string; technologiesUsed?: string }>;
 }): Promise<void> {
+  const JsPDF = await loadJsPdf();
+  const doc = new JsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  const state: DocState = { doc, y: MARGIN };
   const fmtMY = (d: string) => new Date(d.length === 10 ? `${d}T00:00:00` : d).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
   const fmtY = (d: string) => new Date(d.length === 10 ? `${d}T00:00:00` : d).getFullYear().toString();
-
-  const xpLevel = (xp: number) => xp >= 10000 ? { title: "Elite", color: "#d97706" } : xp >= 5000 ? { title: "Expert", color: "#7c3aed" } : xp >= 2000 ? { title: "Advanced", color: "#0891b2" } : xp >= 500 ? { title: "Intermediate", color: "#16a34a" } : { title: "Beginner", color: "#64748b" };
-
-  let html = "";
   const p = opts.profile;
 
-  // Header card
-  const lvl = p ? xpLevel(p.xpBalance) : null;
-  html += `
-    <div style="display:flex;gap:20px;align-items:flex-start;padding:20px 24px;background:#f8f5ff;border:1px solid #e9d8fd;border-radius:14px;margin-bottom:24px;">
-      <div style="width:56px;height:56px;border-radius:50%;background:#7B5EA7;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px;font-weight:700;color:#fff;">${opts.app.userFullName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}</div>
-      <div style="flex:1;">
-        <div style="font-size:20px;font-weight:800;color:#1e1b4b;">${opts.app.userFullName}</div>
-        ${p?.professionalTitle ? `<div style="font-size:14px;color:#475569;margin-top:2px;">${p.professionalTitle}</div>` : ""}
-        ${lvl && p ? `<div style="margin-top:6px;display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;color:${lvl.color};border:1px solid ${lvl.color};background:${lvl.color}18;">${lvl.title} · ${p.xpBalance.toLocaleString()} XP</div>` : ""}
-      </div>
-      <div style="text-align:right;flex-shrink:0;">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:4px;">Applied for</div>
-        <div style="font-size:14px;font-weight:600;color:#1e293b;">${opts.app.jobTitle}</div>
-        <div style="font-size:11px;color:#64748b;margin-top:3px;">
-          ${new Date(opts.app.appliedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-          ${opts.app.prioritySlotRank ? ` · ⭐ Priority #${opts.app.prioritySlotRank}` : ""}
-        </div>
-        <div style="margin-top:6px;display:inline-block;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:700;background:#e0e7ff;color:#4338ca;">${opts.app.status}</div>
-      </div>
-    </div>`;
+  writeHeader(state, `CV — ${opts.app.userFullName}`, `Applied for: ${opts.app.jobTitle}  ·  Status: ${opts.app.status}`,
+    `Applied ${new Date(opts.app.appliedAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`);
 
-  // Contact info
-  if (p && (p.email || p.phoneNumber || p.city || p.country)) {
-    const contacts = [
-      p.email ? `✉ ${p.email}` : "",
-      p.phoneNumber ? `📞 ${p.phoneNumber}` : "",
-      (p.city || p.country) ? `📍 ${[p.city, p.country].filter(Boolean).join(", ")}` : "",
-    ].filter(Boolean);
-    html += pdfSection("Contact", `<div style="display:flex;flex-wrap:wrap;gap:12px;">${contacts.map((c) => `<span style="font-size:12px;color:#334155;padding:4px 12px;background:#f1f5f9;border-radius:6px;">${c}</span>`).join("")}</div>`);
+  if (p?.professionalTitle) writeText(state, p.professionalTitle, { size: 11, bold: true, color: [60, 60, 100] });
+  if (p?.aboutMe) { state.y += 2; writeText(state, p.aboutMe, { size: 10, color: [70, 85, 105] }); }
+
+  const contacts = [p?.email, p?.phoneNumber, [p?.city, p?.country].filter(Boolean).join(", ")].filter(Boolean) as string[];
+  if (contacts.length) { state.y += 2; writeText(state, contacts.join("   "), { size: 9, color: [100, 116, 139] }); }
+
+  if (opts.workExperience.length) {
+    writeSectionTitle(state, "Work Experience");
+    for (const w of opts.workExperience) {
+      state.y += 1;
+      writeText(state, `${w.jobTitle}  ·  ${w.companyName}${w.location ? ` — ${w.location}` : ""}`, { size: 10, bold: true, color: [30, 40, 60] });
+      writeText(state, `${fmtMY(w.startDate)} — ${w.endDate ? fmtMY(w.endDate) : "Present"}`, { size: 9, color: [100, 116, 139] });
+      if (w.description) writeText(state, w.description, { size: 10, indent: 4, color: [70, 85, 105] });
+    }
   }
 
-  // About
-  if (p?.aboutMe) {
-    html += pdfSection("About", `<p style="font-size:13px;color:#334155;line-height:1.75;">${p.aboutMe}</p>`);
+  if (opts.education.length) {
+    writeSectionTitle(state, "Education");
+    for (const e of opts.education) {
+      state.y += 1;
+      writeText(state, `${e.degree} in ${e.fieldOfStudy}  ·  ${e.institutionName}`, { size: 10, bold: true, color: [30, 40, 60] });
+      writeText(state, `${fmtY(e.startDate)} — ${e.endDate ? fmtY(e.endDate) : "Present"}`, { size: 9, color: [100, 116, 139] });
+    }
   }
 
-  // Work Experience
-  if (opts.workExperience.length > 0) {
-    const rows = opts.workExperience.map((w) => [
-      `<strong>${w.jobTitle}</strong><br/><span style="color:#64748b;">${w.companyName}${w.location ? ` · ${w.location}` : ""}</span>`,
-      `${fmtMY(w.startDate)} — ${w.endDate ? fmtMY(w.endDate) : "Present"}`,
-      w.description ?? "—",
-    ]);
-    html += pdfSection("Work Experience", pdfTable(["Role & Company", "Period", "Description"], rows));
+  if (opts.certifications.length) {
+    writeSectionTitle(state, "Certifications");
+    for (const c of opts.certifications) {
+      writeText(state, `${c.name}  ·  ${c.issuingOrganization}  ·  ${fmtMY(c.issueDate)}`, { size: 10, color: [50, 65, 85] });
+    }
   }
 
-  // Education
-  if (opts.education.length > 0) {
-    const rows = opts.education.map((e) => [
-      `<strong>${e.degree}</strong><br/><span style="color:#64748b;">${e.fieldOfStudy}</span>`,
-      e.institutionName,
-      `${fmtY(e.startDate)} — ${e.endDate ? fmtY(e.endDate) : "Present"}`,
-    ]);
-    html += pdfSection("Education", pdfTable(["Degree", "Institution", "Years"], rows));
+  if (opts.projects.length) {
+    writeSectionTitle(state, "Projects");
+    for (const proj of opts.projects) {
+      state.y += 1;
+      writeText(state, proj.title, { size: 10, bold: true, color: [30, 40, 60] });
+      if (proj.description) writeText(state, proj.description, { size: 10, indent: 4, color: [70, 85, 105] });
+      if (proj.technologiesUsed) writeText(state, `Tech: ${proj.technologiesUsed}`, { size: 9, indent: 4, color: [100, 116, 139] });
+    }
   }
 
-  // Certifications
-  if (opts.certifications.length > 0) {
-    const rows = opts.certifications.map((c) => [
-      c.name,
-      c.issuingOrganization,
-      fmtMY(c.issueDate),
-      c.expirationDate ? fmtMY(c.expirationDate) : "No expiry",
-    ]);
-    html += pdfSection("Certifications", pdfTable(["Name", "Issuer", "Issued", "Expires"], rows));
-  }
+  const links = [p?.linkedinUrl && `LinkedIn: ${p.linkedinUrl}`, p?.githubUrl && `GitHub: ${p.githubUrl}`, p?.portfolioUrl && `Portfolio: ${p.portfolioUrl}`].filter(Boolean) as string[];
+  if (links.length) { writeSectionTitle(state, "Links"); for (const l of links) writeText(state, l, { size: 10, color: [60, 80, 180] }); }
 
-  // Projects
-  if (opts.projects.length > 0) {
-    const rows = opts.projects.map((proj) => [
-      `<strong>${proj.title}</strong>`,
-      proj.description ?? "—",
-      proj.technologiesUsed ? proj.technologiesUsed.split(",").map((t) => t.trim()).join(", ") : "—",
-    ]);
-    html += pdfSection("Projects", pdfTable(["Project", "Description", "Technologies"], rows));
-  }
-
-  // Links
-  if (p && (p.linkedinUrl || p.githubUrl || p.portfolioUrl)) {
-    const links = [
-      p.linkedinUrl ? `<a href="${p.linkedinUrl}" style="color:#7B5EA7;">LinkedIn ↗</a>` : "",
-      p.githubUrl ? `<a href="${p.githubUrl}" style="color:#7B5EA7;">GitHub ↗</a>` : "",
-      p.portfolioUrl ? `<a href="${p.portfolioUrl}" style="color:#7B5EA7;">Portfolio ↗</a>` : "",
-    ].filter(Boolean);
-    html += pdfSection("Links", `<div style="display:flex;gap:16px;font-size:13px;">${links.join("")}</div>`);
-  }
-
-  await exportToPdf(html, {
-    filename: `xpand-cv-${opts.app.userFullName.toLowerCase().replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}`,
-    title: `CV — ${opts.app.userFullName}`,
-    subtitle: `Applied for: ${opts.app.jobTitle} · Status: ${opts.app.status}`,
-  });
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) { doc.setPage(i); writeFooter(doc, i); }
+  doc.save(`xpand-cv-${opts.app.userFullName.toLowerCase().replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.pdf`);
 }
-
-/* ── NEW: Market Insights PDF builder ──────────────────────── */
 
 export async function exportMarketInsightsPdf(opts: {
   totalActiveJobs: number;
@@ -415,70 +394,45 @@ export async function exportMarketInsightsPdf(opts: {
   jobTypeBreakdown: Record<string, number>;
   locationBreakdown: Record<string, number>;
 }): Promise<void> {
-  const totalJobsForType = Object.values(opts.jobTypeBreakdown).reduce((a, b) => a + b, 0);
-  const pct = (val: number, total: number) => total > 0 ? Math.round((val / total) * 100) : 0;
+  const JsPDF = await loadJsPdf();
+  const doc = new JsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  const state: DocState = { doc, y: MARGIN };
+  const dateStr = `Generated ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`;
+  const pct = (v: number, t: number) => t > 0 ? `${Math.round((v / t) * 100)}%` : "0%";
+
+  writeHeader(state, "Market Insights Report", `Real-time talent market data from ${opts.totalActiveJobs} active job postings.`, dateStr);
+  writeText(state, `Active Jobs: ${opts.totalActiveJobs}  ·  Skills tracked: ${opts.skillDemand.length}`, { size: 11, bold: true, color: [30, 40, 60] });
+  state.y += 3;
+
+  if (opts.topSkills.length) {
+    writeSectionTitle(state, "Top Skills in Demand");
+    opts.topSkills.slice(0, 10).forEach((s, i) => writeText(state, `#${i + 1}  ${s.skillName}  —  ${s.jobCount} jobs`, { size: 10, color: [50, 65, 85] }));
+  }
+
+  if (opts.skillDemand.length) {
+    writeSectionTitle(state, "Full Skill Demand (top 20)");
+    opts.skillDemand.slice(0, 20).forEach((s, i) => writeText(state, `#${i + 1}  ${s.skillName}  —  ${s.jobCount} jobs  (${s.majorCount} major req, ${pct(s.majorCount, s.jobCount)} major)`, { size: 9, color: [60, 75, 95] }));
+  }
+
+  const jobTypes = Object.entries(opts.jobTypeBreakdown).sort((a, b) => b[1] - a[1]);
+  if (jobTypes.length) {
+    writeSectionTitle(state, "Job Type Breakdown");
+    const total = jobTypes.reduce((a, b) => a + b[1], 0);
+    jobTypes.forEach(([type, count]) => writeText(state, `${type.replace(/_/g, " ")}  —  ${count}  (${pct(count, total)})`, { size: 10, color: [50, 65, 85] }));
+  }
+
   const topLocations = Object.entries(opts.locationBreakdown).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  const uniqueSkills = opts.skillDemand.length;
-  const majorSkills = opts.skillDemand.filter((s) => s.majorCount > 0).length;
-  const jobTypes = Object.keys(opts.jobTypeBreakdown).length;
-
-  let html = "";
-
-  // Summary stats
-  html += pdfStatBox([
-    { label: "Active Jobs", value: opts.totalActiveJobs, color: "#10b981" },
-    { label: "Skills in Demand", value: uniqueSkills, color: "#8b5cf6" },
-    { label: "Major Skill Req.", value: majorSkills, color: "#f59e0b" },
-    { label: "Job Types", value: jobTypes, color: "#3b82f6" },
-  ]);
-
-  // Top skills
-  if (opts.topSkills.length > 0) {
-    const medals = ["🥇", "🥈", "🥉", "", "", ""];
-    const rows = opts.topSkills.slice(0, 6).map((s, i) => [`${medals[i] || `#${i + 1}`}`, s.skillName, String(s.jobCount)]);
-    html += pdfSection("🔥 Hot Skills — Most In Demand", pdfTable(["Rank", "Skill", "Jobs"], rows));
+  if (topLocations.length) {
+    writeSectionTitle(state, "Top Locations");
+    topLocations.forEach(([loc, count]) => writeText(state, `${loc}  —  ${count} jobs  (${pct(count, opts.totalActiveJobs)})`, { size: 10, color: [50, 65, 85] }));
   }
 
-  // Full skill demand table (top 20)
-  if (opts.skillDemand.length > 0) {
-    const rows = opts.skillDemand.slice(0, 20).map((s, i) => [
-      `#${i + 1}`,
-      s.skillName,
-      String(s.jobCount),
-      String(s.majorCount),
-      `${pct(s.majorCount, s.jobCount)}%`,
-    ]);
-    html += pdfSection("🎯 Skill Demand — Top 20 (from active job postings)", pdfTable(["Rank", "Skill", "Total Jobs", "Major Req.", "Major %"], rows));
-  }
-
-  // Job type breakdown
-  if (Object.keys(opts.jobTypeBreakdown).length > 0) {
-    const rows = Object.entries(opts.jobTypeBreakdown).sort((a, b) => b[1] - a[1]).map(([type, count]) => [
-      type.replace(/_/g, " "),
-      String(count),
-      `${pct(count, totalJobsForType)}%`,
-    ]);
-    html += pdfSection("📋 Job Type Breakdown", pdfTable(["Type", "Count", "Share"], rows));
-  }
-
-  // Location breakdown
-  if (topLocations.length > 0) {
-    const rows = topLocations.map(([loc, count]) => [
-      loc,
-      String(count),
-      `${pct(count, opts.totalActiveJobs)}%`,
-    ]);
-    html += pdfSection("📍 Top Locations", pdfTable(["Location", "Jobs", "Share"], rows));
-  }
-
-  await exportToPdf(html, {
-    filename: `xpand-market-insights-${new Date().toISOString().slice(0, 10)}`,
-    title: "Market Insights Report",
-    subtitle: `Real-time talent market data from ${opts.totalActiveJobs} active job postings on XPand. Generated ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}.`,
-  });
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) { doc.setPage(i); writeFooter(doc, i); }
+  doc.save(`xpand-market-insights-${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
-// Declare html2pdf on window for TypeScript
+// TypeScript global declaration (html2pdf no longer needed but kept to avoid breaking old imports)
 declare global {
   interface Window {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

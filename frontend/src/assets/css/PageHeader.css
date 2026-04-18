@@ -1,0 +1,217 @@
+/* ============================================================
+   PageHeader.css — XPand Premium Scroll Header
+   Uses position:fixed for bulletproof sticky behaviour.
+   Title always centered. No dependency on ancestor overflow.
+   ============================================================ */
+
+/* ── Keyframes ─────────────────────────────────────────────── */
+@keyframes ph-glow-pulse {
+  0%, 100% {
+    text-shadow:
+      0 0 24px rgba(155, 124, 255, 0.30),
+      0 0 48px rgba(155, 124, 255, 0.12);
+  }
+  50% {
+    text-shadow:
+      0 0 36px rgba(155, 124, 255, 0.55),
+      0 0 72px rgba(155, 124, 255, 0.25),
+      0 0 100px rgba(34, 211, 238, 0.12);
+  }
+}
+
+@keyframes ph-subtitle-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ph-title-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes ph-shimmer {
+  from { background-position: -200% center; }
+  to   { background-position:  200% center; }
+}
+
+/* ── Fixed wrapper — sits above everything, always visible ── */
+.ph-wrapper {
+  /* Fixed: immune to ancestor overflow/transform/scroll issues */
+  position: fixed;
+  /* Sits just below the Navbar (--layout-navbar-height = 58-60px) */
+  top: var(--layout-navbar-height, 58px);
+  left: 0;
+  right: 0;
+  z-index: 90; /* below Navbar (z:100+) but above page content */
+
+  transition:
+    padding-top     0.38s cubic-bezier(0.4, 0, 0.2, 1),
+    padding-bottom  0.38s cubic-bezier(0.4, 0, 0.2, 1),
+    background      0.38s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow      0.38s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Expanded state (page at top) ───────────────────────────── */
+.ph-wrapper--expanded {
+  padding-top: 2rem;
+  padding-bottom: 1.75rem;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* ── Collapsed state (scrolled) ─────────────────────────────── */
+.ph-wrapper--collapsed {
+  padding-top: 0.6rem;
+  padding-bottom: 0.6rem;
+  background: rgba(13, 15, 23, 0.86);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.055),
+    0 6px 28px rgba(0, 0, 0, 0.50);
+}
+
+[data-theme="light"] .ph-wrapper--collapsed {
+  background: rgba(250, 251, 254, 0.92);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.07),
+    0 6px 28px rgba(0, 0, 0, 0.09);
+}
+
+/* Gradient accent line at bottom edge when collapsed */
+.ph-wrapper--collapsed::after {
+  content: "";
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(155, 124, 255, 0.0)  10%,
+    rgba(155, 124, 255, 0.45) 35%,
+    rgba(34,  211, 238, 0.45) 65%,
+    rgba(155, 124, 255, 0.0)  90%,
+    transparent 100%
+  );
+}
+
+/* ── Inner — always centered ────────────────────────────────── */
+.ph-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding-left: var(--space-6, 1.5rem);
+  padding-right: var(--space-6, 1.5rem);
+}
+
+/* ── Title button ────────────────────────────────────────────── */
+.ph-title {
+  display: block;
+  width: 100%;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  border: none;
+  background: none;
+  padding: 0;
+
+  font-family: var(--font-display, "Plus Jakarta Sans", sans-serif);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+
+  /* Gradient text */
+  background: linear-gradient(
+    135deg,
+    var(--color-primary-300, #BDA8FF) 0%,
+    var(--color-primary-400, #9B7CFF) 30%,
+    var(--color-cyan-300,    #67E8F9) 60%,
+    var(--color-primary-400, #9B7CFF) 85%,
+    var(--color-primary-300, #BDA8FF) 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+
+  transition:
+    font-size 0.38s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity   0.20s ease,
+    filter    0.20s ease;
+}
+
+/* Expanded */
+.ph-wrapper--expanded .ph-title {
+  font-size: clamp(2rem, 5vw, 3rem);
+  animation:
+    ph-title-in   0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+    ph-shimmer    5s   linear 0.6s infinite,
+    ph-glow-pulse 3.5s ease-in-out 0.6s infinite;
+}
+
+/* Collapsed */
+.ph-wrapper--collapsed .ph-title {
+  font-size: clamp(1rem, 2.5vw, 1.3rem);
+  animation: ph-shimmer 5s linear infinite;
+}
+
+.ph-title:hover  { opacity: 0.86; filter: brightness(1.10); }
+.ph-title:active { opacity: 0.70; }
+
+/* ── Subtitle ────────────────────────────────────────────────── */
+.ph-subtitle {
+  font-family: var(--font-display, "Plus Jakarta Sans", sans-serif);
+  font-size: clamp(0.80rem, 1.8vw, 0.93rem);
+  font-weight: 400;
+  color: var(--color-text-secondary, #8D95A8);
+  line-height: 1.55;
+  max-width: 520px;
+  text-align: center;
+  overflow: hidden;
+
+  transition:
+    opacity     0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    max-height  0.32s cubic-bezier(0.4, 0, 0.2, 1),
+    margin-top  0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ph-wrapper--expanded .ph-subtitle {
+  opacity: 1;
+  max-height: 80px;
+  margin-top: 0.5rem;
+  animation: ph-subtitle-in 0.50s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s both;
+}
+
+.ph-wrapper--collapsed .ph-subtitle {
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  pointer-events: none;
+}
+
+/* ── Spacer — reserves space in the document flow so content
+   doesn't slide under the fixed header ───────────────────────── */
+.ph-spacer {
+  width: 100%;
+  /* Transitions in sync with the header padding changes */
+  transition: height 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .ph-wrapper--expanded {
+    padding-top: 1.4rem;
+    padding-bottom: 1.3rem;
+  }
+  .ph-wrapper--expanded .ph-title {
+    font-size: clamp(1.7rem, 8vw, 2.25rem);
+  }
+  .ph-wrapper--collapsed .ph-title {
+    font-size: 1.05rem;
+  }
+}

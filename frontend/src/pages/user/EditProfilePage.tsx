@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import PageLayout from "../../components/user/PageLayout";
+import { Icon, type IconName } from "../../components/ui/Icon";
 import { useProfile } from "../../hooks/user/useProfile";
 import type { UpdateProfilePayload as ProfileUpdatePayload, UserProfile } from "../../hooks/user/useProfile";
 import { CITIES } from "../../constants/cities";
@@ -73,22 +74,22 @@ interface InputFieldProps {
   type?: string;
   autoComplete?: string;
   maxLength?: number;
-  prefix?: string;
+  prefixIcon?: IconName;
   hint?: string;
   onChange: (v: string) => void;
 }
 
 const InputField: React.FC<InputFieldProps> = ({
   id, label, value, error, disabled, placeholder, type = "text",
-  autoComplete, maxLength, prefix, hint, onChange,
+  autoComplete, maxLength, prefixIcon, hint, onChange,
 }) => (
   <div className="input-group">
     <label htmlFor={id} className="input-label">{label}</label>
-    <div className={prefix ? "ep-prefix-wrap" : undefined}>
-      {prefix && <span className="ep-prefix">{prefix}</span>}
+    <div className={prefixIcon ? "ep-prefix-wrap" : undefined}>
+      {prefixIcon && <span className="ep-prefix"><Icon name={prefixIcon} size={16} label="" /></span>}
       <input
         id={id} type={type}
-        className={`input${prefix ? " ep-prefix-input" : ""}${error ? " input-error" : ""}`}
+        className={`input${prefixIcon ? " ep-prefix-input" : ""}${error ? " input-error" : ""}`}
         value={value} placeholder={placeholder}
         disabled={disabled} autoComplete={autoComplete}
         maxLength={maxLength}
@@ -165,7 +166,7 @@ const AvatarUpload: React.FC<AvatarUploadProps> = ({ user, isSaving, onUpload })
             onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
             aria-label="Upload profile photo"
           >
-            <span className="ep-avatar-drop-zone__icon">📷</span>
+            <span className="ep-avatar-drop-zone__icon"><Icon name="camera" size={28} label="" /></span>
             <p className="ep-avatar-drop-zone__primary">
               {isDragging ? "Drop to upload" : "Click or drag & drop"}
             </p>
@@ -252,7 +253,7 @@ const EditProfilePage: React.FC = () => {
     return (
       <PageLayout pageTitle="Edit Profile">  {/* FIXED: removed user={null} */}
         <div className="empty-state">
-          <div className="empty-state-icon">⚠️</div>
+          <div className="empty-state-icon"><Icon name="warning" size={32} label="" /></div>
           <h3>Failed to load profile</h3>
           <p>{error}</p>
           <button className="btn btn-primary btn-sm mt-4" onClick={refetch}>Retry</button>
@@ -316,12 +317,12 @@ const EditProfilePage: React.FC = () => {
       {/* ── Global save feedback ─────────────────────────── */}
       {saveSuccess && (
         <div className="ep-toast ep-toast--success animate-fade-in" role="status">
-          ✅ Profile saved successfully!
+          <Icon name="success" size={14} label="" /> Profile saved successfully!
         </div>
       )}
       {saveError && (
         <div className="ep-toast ep-toast--error animate-fade-in" role="alert">
-          ⚠️ {saveError}
+          <Icon name="warning" size={14} label="" /> {saveError}
         </div>
       )}
 
@@ -421,17 +422,17 @@ const EditProfilePage: React.FC = () => {
               <InputField id="linkedinUrl" label="LinkedIn" value={fields.linkedinUrl ?? ""}
                 error={fieldErrors.linkedinUrl} disabled={isSaving}
                 placeholder="https://linkedin.com/in/yourname"
-                prefix="💼" hint="Full URL including https://"
+                prefixIcon="work" hint="Full URL including https://"
                 onChange={set("linkedinUrl")} />
               <InputField id="githubUrl" label="GitHub" value={fields.githubUrl ?? ""}
                 error={fieldErrors.githubUrl} disabled={isSaving}
                 placeholder="https://github.com/yourname"
-                prefix="🐙" hint="Full URL including https://"
+                prefixIcon="github" hint="Full URL including https://"
                 onChange={set("githubUrl")} />
               <InputField id="portfolioUrl" label="Portfolio" value={fields.portfolioUrl ?? ""}
                 error={fieldErrors.portfolioUrl} disabled={isSaving}
                 placeholder="https://yoursite.com"
-                prefix="🌐" hint="Full URL including https://"
+                prefixIcon="portfolio" hint="Full URL including https://"
                 onChange={set("portfolioUrl")} />
             </div>
           </div>
@@ -452,11 +453,11 @@ const EditProfilePage: React.FC = () => {
               </div>
               <div className="ep-readonly-row">
                 <span className="ep-readonly-row__label label">XP Balance</span>
-                <span className="ep-readonly-row__value xp-pill">⚡ {user.xpBalance.toLocaleString()}</span>
+                <span className="ep-readonly-row__value xp-pill"><Icon name="xp" size={12} label="" /> {user.xpBalance.toLocaleString()}</span>
               </div>
               <button type="button" className="btn btn-ghost btn-xs ep-security-link mt-2"
                 onClick={() => navigate("/settings/security")}>
-                🔐 Change password →
+                <Icon name="password" size={14} label="" /> Change password →
               </button>
             </div>
           </div>

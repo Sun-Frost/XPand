@@ -1,3 +1,5 @@
 # Root ignores
 desktop.ini
 node_modules
+frontend.zip
+xpand/

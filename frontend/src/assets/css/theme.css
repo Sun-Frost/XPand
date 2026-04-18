@@ -266,11 +266,11 @@ a { color: inherit; text-decoration: none; }
   --color-cyan-glow:      rgba(6,182,212,0.16);
   --color-cyan-glow-strong: rgba(6,182,212,0.28);
 
-  --color-green-700:      #044F40;
-  --color-green-600:      #057A5E;
-  --color-green-500:      #0B9E78;
-  --color-green-400:      #10C289;
-  --color-green-300:      #2DD4A0;
+  --color-green-700:      #0f4940;
+  --color-green-600:      #1c7265;
+  --color-green-500:      #1e8d7c;
+  --color-green-400:      #23a28f;
+  --color-green-300:      #2cc6af;
   --color-green-glow:     rgba(11,158,120,0.14);
 
   /* Badge tiers stay vivid in light — they're earned marks */

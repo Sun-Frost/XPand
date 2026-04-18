@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { Icon, type IconName } from "../../components/ui/Icon";
 import type { TestResultData, QuestionDTO } from "../../hooks/user/useSkillTest";
 import type { BadgeLevel } from "../../hooks/user/useSkills";
 
@@ -8,12 +9,12 @@ import type { BadgeLevel } from "../../hooks/user/useSkills";
 // ---------------------------------------------------------------------------
 
 const BADGE_CONFIG: Record<BadgeLevel, {
-  label: string; emoji: string; cls: string;
+  label: string; icon: IconName; cls: string;
   color: string; bg: string; border: string;
   glow: string; gradient: string; message: string;
 }> = {
   BRONZE: {
-    label: "Bronze", emoji: "🥉", cls: "bronze",
+    label: "Bronze", icon: "badge-bronze" as IconName, cls: "bronze",
     color: "var(--color-bronze-light)",
     bg: "var(--color-bronze-bg)",
     border: "var(--color-bronze-border)",
@@ -22,7 +23,7 @@ const BADGE_CONFIG: Record<BadgeLevel, {
     message: "Good start! Keep practising to reach Silver.",
   },
   SILVER: {
-    label: "Silver", emoji: "🥈", cls: "silver",
+    label: "Silver", icon: "badge-silver" as IconName, cls: "silver",
     color: "var(--color-silver-light)",
     bg: "var(--color-silver-bg)",
     border: "var(--color-silver-border)",
@@ -31,7 +32,7 @@ const BADGE_CONFIG: Record<BadgeLevel, {
     message: "Great performance! Push for Gold with 90%+.",
   },
   GOLD: {
-    label: "Gold", emoji: "🥇", cls: "gold",
+    label: "Gold", icon: "badge-gold" as IconName, cls: "gold",
     color: "var(--color-gold-light,#FCD34D)",
     bg: "var(--color-gold-bg)",
     border: "var(--color-gold-border)",
@@ -123,7 +124,7 @@ const XpFloater: React.FC<{ xp: number }> = ({ xp }) => {
     return () => clearTimeout(t);
   }, []);
   if (!visible || !xp) return null;
-  return <div className="xp-gain result-xp-float" style={{ position: "relative" }}>+{xp.toLocaleString()} XP ⚡</div>;
+  return <div className="xp-gain result-xp-float" style={{ position: "relative" }}><Icon name="xp" size={14} label="" /> +{xp.toLocaleString()} XP</div>;
 };
 
 // ---------------------------------------------------------------------------
@@ -154,7 +155,7 @@ const QuestionReview: React.FC<{
         </div>
         {isCorrect !== undefined && (
           <span className={`review-item__result-badge badge ${isCorrect ? "badge-verified" : "badge-danger"}`}>
-            {isCorrect ? "✓ Correct" : "✕ Incorrect"}
+            {isCorrect ? <><Icon name="check" size={12} label="" /> Correct</> : <><Icon name="close" size={12} label="" /> Incorrect</>}
           </span>
         )}
         {isCorrect === undefined && userAnswer && (
@@ -186,7 +187,7 @@ const QuestionReview: React.FC<{
               <span className="review-opt__text">{optText}</span>
               <span className="review-opt__indicator">
                 {correctAnswer
-                  ? isCorrectOpt ? "✓" : isUser && !isCorrect ? "✕" : ""
+                  ? isCorrectOpt ? <Icon name="check" size={12} label="" /> : isUser && !isCorrect ? <Icon name="close" size={12} label="" /> : ""
                   : isUser ? "●" : ""}
               </span>
             </div>
@@ -196,7 +197,7 @@ const QuestionReview: React.FC<{
 
       {isCorrect === false && !userAnswer && (
         <p className="review-item__skipped label">
-          ⚠ Skipped{correctAnswer ? ` — correct answer was ${correctAnswer}` : ""}
+          <Icon name="warning" size={12} label="" /> Skipped{correctAnswer ? ` — correct answer was ${correctAnswer}` : ""}
         </p>
       )}
     </div>
@@ -223,7 +224,7 @@ const TestResultPage: React.FC = () => {
     return (
       <div className="page-content">
         <div className="empty-state">
-          <div className="empty-state-icon">🎯</div>
+          <div className="empty-state-icon"><Icon name="cat-default" size={32} label="" /></div>
           <h3>No result found</h3>
           <p>Please take a skill test first.</p>
           <button className="btn btn-primary btn-sm mt-4" onClick={() => navigate("/skills")}>
@@ -285,7 +286,7 @@ const TestResultPage: React.FC = () => {
               <div className="result-badge-display" ref={badgeRef}>
                 <div className="result-badge-icon"
                   style={{ background: badge.bg, borderColor: badge.border, boxShadow: badge.glow }}>
-                  {badge.emoji}
+                  <Icon name={badge.icon} size={36} label={badge.label} />
                 </div>
                 <div className="result-badge-info">
                   <h2 className="result-badge-name" style={{ color: badge.color }}>{badge.label} Badge</h2>
@@ -294,7 +295,7 @@ const TestResultPage: React.FC = () => {
               </div>
             ) : (
               <div className="result-fail-display">
-                <div className="result-fail-icon">😔</div>
+                <div className="result-fail-icon"><Icon name="result-fail" size={48} label="" /></div>
                 <div>
                   <h2 className="result-fail-title">Not quite yet</h2>
                   <p className="result-fail-message">
@@ -307,7 +308,7 @@ const TestResultPage: React.FC = () => {
             {xpEarned > 0 && (
               <div className="result-xp-reward">
                 <div className="xp-display">
-                  <span className="xp-icon">⚡</span>
+                  <span className="xp-icon"><Icon name="xp" size={16} label="" /></span>
                   <span className="xp-amount">+<AnimatedNumber target={xpEarned} /></span>
                   <span className="result-xp-reward__unit font-display">XP Earned</span>
                 </div>
@@ -320,16 +321,16 @@ const TestResultPage: React.FC = () => {
           <div className="result-hero__thresholds">
             <p className="label result-hero__thresholds-title">Badge Thresholds</p>
             {[
-              { pts: 18, label: "Bronze", cls: "bronze", emoji: "🥉" },
-              { pts: 24, label: "Silver", cls: "silver", emoji: "🥈" },
-              { pts: 28, label: "Gold", cls: "gold", emoji: "🥇" },
-            ].map(({ pts, label, cls, emoji }) => {
+              { pts: 18, label: "Bronze", cls: "bronze", icon: "badge-bronze" as IconName },
+              { pts: 24, label: "Silver", cls: "silver", icon: "badge-silver" as IconName },
+              { pts: 28, label: "Gold", cls: "gold", icon: "badge-gold" as IconName },
+            ].map(({ pts, label, cls, icon }) => {
               const isEarned = score >= pts;
               return (
                 <div key={cls} className={`result-threshold result-threshold--${cls} ${isEarned ? "result-threshold--earned" : ""}`}>
                   <span className="result-threshold__pct">{pts}+ pts</span>
-                  <span className="result-threshold__label">{emoji} {label}</span>
-                  {isEarned && <span className="result-threshold__check">✓</span>}
+                  <span className="result-threshold__label"><Icon name={icon} size={14} label="" /> {label}</span>
+                  {isEarned && <span className="result-threshold__check"><Icon name="check" size={12} label="" /></span>}
                 </div>
               );
             })}
@@ -350,10 +351,10 @@ const TestResultPage: React.FC = () => {
             </button>
           )}
           {passed && (
-            <button className="btn btn-ghost" onClick={() => navigate("/jobs")}>💼 Browse Jobs</button>
+            <button className="btn btn-ghost" onClick={() => navigate("/jobs")}><Icon name="work" size={14} label="" /> Browse Jobs</button>
           )}
           <button className="btn btn-xp" onClick={() => navigate(`/skills/test/${skillId}`, { state: { skillName, skillCategory } })}>
-            {passed ? "⚡ Retake for Higher Badge" : "⚡ Try Again"}
+            {passed ? <><Icon name="xp" size={14} label="" /> Retake for Higher Badge</> : <><Icon name="xp" size={14} label="" /> Try Again</>}
           </button>
         </div>
       </div>

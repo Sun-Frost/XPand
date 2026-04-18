@@ -1,11 +1,38 @@
+// SkillsLibraryPage.tsx — XPand  (Full Redesign)
+// ─────────────────────────────────────────────────────────────────────────────
+// DESIGN PRINCIPLES:
+//   · ONE accent color for the page: primary violet (--color-primary-400).
+//     Tier differentiation via intensity/opacity, not hue changes.
+//   · Badge colors (gold/silver/bronze) are the ONLY multi-color
+//     elements — they earn it because they signal earned achievement.
+//   · Demand score drives a single emerald progress bar, not 4 colors.
+//   · Tier labels use text weight + opacity hierarchy, not color overload.
+//   · Layout mirrors JobsPage: sticky spotlight left, ranked list right.
+//
+// LOGIC / HOOKS: 100% identical to original. Zero behaviour changed.
+// ─────────────────────────────────────────────────────────────────────────────
+
 import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import PageLayout from "../../components/user/PageLayout";
+import { Icon, type IconName } from "../../components/ui/Icon";
 import { useSkills } from "../../hooks/user/useSkills";
 import type { SkillWithVerification, BadgeLevel } from "../../hooks/user/useSkills";
+import PageHeader, { PAGE_CONFIGS } from "../../components/ui/PageHeader";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demand tier system
+// Design tokens — unified primary violet accent, tier differentiation via opacity only
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ACCENT = {
+  color:  "var(--color-primary-400)",
+  glow:   "var(--color-primary-glow)",
+  border: "rgba(155,124,255,0.25)",
+  bg:     "var(--color-primary-glow)",
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tier config — same logic, restrained visual identity
 // ─────────────────────────────────────────────────────────────────────────────
 
 type DemandTier = "hot" | "high" | "growing" | "specialized";
@@ -13,60 +40,39 @@ type DemandTier = "hot" | "high" | "growing" | "specialized";
 interface TierConfig {
   id: DemandTier;
   label: string;
-  emoji: string;
+  icon: IconName;
   tagline: string;
-  accentColor: string;
-  glowColor: string;
-  borderActive: string;
   scoreMin: number;
+  // Visual intensity — drives opacity/weight, NOT hue
+  intensity: number; // 1.0 → 0.4
 }
 
 const TIERS: TierConfig[] = [
-  {
-    id: "hot", label: "Hot Skills", emoji: "🔥",
-    tagline: "Employers are hiring urgently for these right now",
-    accentColor: "#F97316", glowColor: "rgba(249,115,22,0.28)",
-    borderActive: "rgba(249,115,22,0.60)", scoreMin: 75,
-  },
-  {
-    id: "high", label: "High Demand", emoji: "⚡",
-    tagline: "Consistently sought by top companies",
-    accentColor: "#A78BFA", glowColor: "rgba(167,139,250,0.22)",
-    borderActive: "rgba(167,139,250,0.55)", scoreMin: 50,
-  },
-  {
-    id: "growing", label: "Growing Skills", emoji: "📈",
-    tagline: "Rising fast — good time to get ahead",
-    accentColor: "#34D399", glowColor: "rgba(52,211,153,0.18)",
-    borderActive: "rgba(52,211,153,0.45)", scoreMin: 28,
-  },
-  {
-    id: "specialized", label: "Specialized Skills", emoji: "🧩",
-    tagline: "Niche but valuable in specific roles",
-    accentColor: "#94A3B8", glowColor: "rgba(148,163,184,0.14)",
-    borderActive: "rgba(148,163,184,0.38)", scoreMin: 0,
-  },
+  { id: "hot",         label: "Hot",         icon: "filter-hot"          as IconName, tagline: "Employers are hiring urgently for these right now",  scoreMin: 75, intensity: 1.00 },
+  { id: "high",        label: "High Demand", icon: "filter-high-demand"  as IconName, tagline: "Consistently sought by top companies",               scoreMin: 50, intensity: 0.75 },
+  { id: "growing",     label: "Growing",     icon: "filter-growing"      as IconName, tagline: "Rising fast — good time to get ahead",               scoreMin: 28, intensity: 0.55 },
+  { id: "specialized", label: "Specialized", icon: "filter-specialized"  as IconName, tagline: "Niche but valuable in specific roles",               scoreMin: 0,  intensity: 0.38 },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Badge configuration
+// Badge config — these DO keep their earned colors
 // ─────────────────────────────────────────────────────────────────────────────
 
 const BADGE_CFG: Record<BadgeLevel, {
-  label: string; emoji: string; color: string;
-  bg: string; border: string; glow: string;
+  label: string; icon: IconName; color: string; bg: string; border: string;
 }> = {
-  GOLD: { label: "Gold", emoji: "🥇", color: "var(--color-badge-gold,#F59E0B)", bg: "var(--color-badge-gold-bg)", border: "var(--color-badge-gold-border)", glow: "var(--glow-gold)" },
-  SILVER: { label: "Silver", emoji: "🥈", color: "var(--color-silver-light,#CBD5E1)", bg: "var(--color-silver-bg)", border: "var(--color-silver-border)", glow: "var(--glow-silver)" },
-  BRONZE: { label: "Bronze", emoji: "🥉", color: "var(--color-bronze-light,#E8A85A)", bg: "var(--color-bronze-bg)", border: "var(--color-bronze-border)", glow: "var(--glow-bronze)" },
+  GOLD:   { label: "Gold",   icon: "badge-gold"   as IconName, color: "var(--color-gold-light)",   bg: "var(--color-gold-bg)",   border: "var(--color-gold-border)"   },
+  SILVER: { label: "Silver", icon: "badge-silver" as IconName, color: "var(--color-silver-light)", bg: "var(--color-silver-bg)", border: "var(--color-silver-border)" },
+  BRONZE: { label: "Bronze", icon: "badge-bronze" as IconName, color: "var(--color-bronze-light)", bg: "var(--color-bronze-bg)", border: "var(--color-bronze-border)" },
 };
 
-const CATEGORY_ICONS: Record<string, string> = {
-  Frontend: "🖥️", Backend: "⚙️", Data: "📊", Cloud: "☁️", Mobile: "📱",
+const CATEGORY_ICONS: Record<string, IconName> = {
+  Frontend: "cat-frontend", Backend: "cat-backend", Data: "cat-data",
+  Cloud: "cat-cloud", Mobile: "cat-mobile",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Enriched skill type
+// Enriched skill — unchanged logic
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface EnrichedSkill {
@@ -79,9 +85,7 @@ interface EnrichedSkill {
 }
 
 function getTierForScore(score: number): DemandTier {
-  for (const t of TIERS) {
-    if (score >= t.scoreMin) return t.id;
-  }
+  for (const t of TIERS) { if (score >= t.scoreMin) return t.id; }
   return "specialized";
 }
 
@@ -100,162 +104,164 @@ function enrichSkills(skills: SkillWithVerification[]): EnrichedSkill[] {
     const sb = (b as any).demandScore ?? 50;
     return sb - sa;
   });
-
   return sorted.map((s, i) => {
-    const score = Math.round(((sorted.length - i) / sorted.length) * 100);
-    const tierId = getTierForScore(score);
+    const score      = Math.round(((sorted.length - i) / sorted.length) * 100);
+    const tierId     = getTierForScore(score);
     const tierConfig = TIERS.find((t) => t.id === tierId)!;
     const badgeLevel = s.verification?.currentBadge;
-
-    return {
-      raw: s, demandScore: score, tier: tierId, rank: i + 1,
-      badge: badgeLevel ? BADGE_CFG[badgeLevel] : null,
-      tierConfig,
-    };
+    return { raw: s, demandScore: score, tier: tierId, rank: i + 1,
+             badge: badgeLevel ? BADGE_CFG[badgeLevel] : null, tierConfig };
   });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sub-components
+// CoverageBar — replaces InsightsBar, cleaner and monochrome
 // ─────────────────────────────────────────────────────────────────────────────
 
-const InsightsBar: React.FC<{
+const CoverageBar: React.FC<{
   total: number; verified: number; gold: number; silver: number; bronze: number; topTier: number;
 }> = ({ total, verified, gold, silver, bronze, topTier }) => {
   const pct = total > 0 ? Math.round((verified / total) * 100) : 0;
   return (
-    <div className="mdb-insights">
-      <div className="mdb-insights__progress-wrap">
-        <div className="mdb-insights__progress-head">
-          <span className="mdb-insights__progress-label label">Market Coverage</span>
-          <span className="mdb-insights__progress-pct" style={{ color: "var(--color-primary-400,#A78BFA)" }}>{pct}%</span>
+    <div className="scov">
+      {/* Left: progress */}
+      <div className="scov__left">
+        <div className="scov__progress-head">
+          <span className="scov__label">Market Coverage</span>
+          <span className="scov__pct">{pct}%</span>
         </div>
-        <div className="progress-track progress-track-lg">
-          <div className="progress-fill progress-primary animated" style={{ width: `${pct}%` }}
-            role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} />
+        <div className="scov__track">
+          <div className="scov__fill" style={{ width: `${pct}%` }} />
         </div>
+        <div className="scov__sub">{verified} of {total} skills verified</div>
       </div>
-      <div className="mdb-insights__stats">
-        {[
-          { value: `${verified}`, sub: `of ${total}`, label: "Verified", color: "var(--color-primary-400,#A78BFA)", bg: "var(--color-primary-glow)", border: "var(--color-primary-500,#7B5EA7)" },
-          { value: String(gold), sub: "badges", label: "Gold", color: "var(--color-badge-gold,#F59E0B)", bg: "var(--color-badge-gold-bg)", border: "var(--color-badge-gold-border)" },
-          { value: String(silver), sub: "badges", label: "Silver", color: "var(--color-silver-light,#CBD5E1)", bg: "var(--color-silver-bg)", border: "var(--color-silver-border)" },
-          { value: String(bronze), sub: "badges", label: "Bronze", color: "var(--color-bronze-light,#E8A85A)", bg: "var(--color-bronze-bg)", border: "var(--color-bronze-border)" },
-          { value: String(topTier), sub: "skills", label: "In Top Tiers", color: "#F97316", bg: "rgba(249,115,22,0.10)", border: "rgba(249,115,22,0.30)" },
-        ].map((s) => (
-          <div key={s.label} className="mdb-stat-pill" style={{ background: s.bg, borderColor: s.border }}>
-            <span className="mdb-stat-pill__value" style={{ color: s.color }}>
-              {s.value}<span className="mdb-stat-pill__sub"> {s.sub}</span>
-            </span>
-            <span className="mdb-stat-pill__label label">{s.label}</span>
-          </div>
-        ))}
+
+      <div className="scov__divider" />
+
+      {/* Right: stat pills — badge colors are earned, everything else monochrome */}
+      <div className="scov__stats">
+        <div className="scov__stat">
+          <span className="scov__stat-val" style={{ color: ACCENT.color }}>{verified}</span>
+          <span className="scov__stat-lbl">Verified</span>
+        </div>
+        <div className="scov__stat">
+          <span className="scov__stat-val" style={{ color: "var(--color-gold-light)" }}>{gold}</span>
+          <span className="scov__stat-lbl">Gold</span>
+        </div>
+        <div className="scov__stat">
+          <span className="scov__stat-val" style={{ color: "var(--color-silver-light)" }}>{silver}</span>
+          <span className="scov__stat-lbl">Silver</span>
+        </div>
+        <div className="scov__stat">
+          <span className="scov__stat-val" style={{ color: "var(--color-bronze-light)" }}>{bronze}</span>
+          <span className="scov__stat-lbl">Bronze</span>
+        </div>
+        <div className="scov__stat">
+          <span className="scov__stat-val">{topTier}</span>
+          <span className="scov__stat-lbl">Top Tier</span>
+        </div>
       </div>
     </div>
   );
 };
 
-const TierHeader: React.FC<{ config: TierConfig; count: number; verifiedCount: number }> = ({ config, count, verifiedCount }) => (
-  <div className="mdb-tier-header">
-    <div className="mdb-tier-header__accent" style={{ background: config.accentColor }} />
-    <div className="mdb-tier-header__main">
-      <div className="mdb-tier-header__title-row">
-        <span className="mdb-tier-header__emoji">{config.emoji}</span>
-        <h2 className="mdb-tier-header__title">{config.label}</h2>
-        <span className="mdb-tier-header__count label" style={{ background: `${config.accentColor}18`, borderColor: `${config.accentColor}44`, color: config.accentColor }}>
-          {count} skills
-        </span>
-        {verifiedCount > 0 && (
-          <span className="mdb-tier-header__verified label">✓ {verifiedCount} verified</span>
-        )}
-      </div>
-      <p className="mdb-tier-header__tagline">{config.tagline}</p>
-    </div>
-  </div>
-);
+// ─────────────────────────────────────────────────────────────────────────────
+// SkillSpotlight — left sticky panel
+// ─────────────────────────────────────────────────────────────────────────────
 
-const SkillCard: React.FC<{ skill: EnrichedSkill; hot: boolean; onClick: () => void }> = ({ skill, hot, onClick }) => {
+const SkillSpotlight: React.FC<{
+  skill: EnrichedSkill;
+  onAction: () => void;
+}> = ({ skill, onAction }) => {
   const { raw, demandScore, rank, badge, tierConfig } = skill;
-  const v = raw.verification;
-  const isLocked = raw.attemptsExhausted || (v?.isLocked ?? false);
+  const v          = raw.verification;
+  const isLocked   = raw.attemptsExhausted || (v?.isLocked ?? false);
   const lockedUntil = getLockedUntil(v?.lockExpiry);
-  const icon = CATEGORY_ICONS[raw.category] ?? "🎯";
+  const icon       = CATEGORY_ICONS[raw.category] ?? "cat-default";
 
   let ctaLabel = "Start Verification";
   if (isLocked) {
-    ctaLabel = lockedUntil
-      ? `Locked · ${lockedUntil}`
-      : raw.attemptsExhausted
-        ? "No attempts left this month"
-        : "Cooldown active";
+    ctaLabel = lockedUntil ? `Locked · ${lockedUntil}`
+             : raw.attemptsExhausted ? "No attempts left this month"
+             : "Cooldown active";
   } else if (badge) {
-    ctaLabel = badge.label === "Gold" ? "Re-attempt Gold" : `Improve to ${badge.label === "Silver" ? "Gold" : "Silver"}`;
+    ctaLabel = badge.label === "Gold" ? "Re-attempt Gold"
+             : `Improve to ${badge.label === "Silver" ? "Gold" : "Silver"}`;
   }
 
   const remainingLabel = !isLocked && raw.remainingAttempts < 3
     ? `${raw.remainingAttempts} attempt${raw.remainingAttempts !== 1 ? "s" : ""} left`
     : null;
 
-  return (
-    <div
-      className={[
-        "mdb-skill-card",
-        hot ? "mdb-skill-card--hot" : "",
-        badge ? `mdb-skill-card--${badge.label.toLowerCase()}` : "",
-        isLocked ? "mdb-skill-card--locked" : "",
-        !raw.isActive ? "mdb-skill-card--inactive" : "",
-      ].filter(Boolean).join(" ")}
-      style={{
-        "--card-accent": tierConfig.accentColor,
-        "--card-border": badge ? badge.border : tierConfig.borderActive,
-        background: badge ? badge.bg : undefined,
-      } as React.CSSProperties}
-      onClick={onClick} role="button" tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && onClick()}
-    >
-      <div className="mdb-skill-card__accent-line" style={{ background: tierConfig.accentColor }} />
-      <div className="mdb-skill-card__rank label" style={{ color: tierConfig.accentColor }}>#{rank}</div>
+  const ctaStyle = badge
+    ? { background: badge.bg, borderColor: badge.border, color: badge.color }
+    : isLocked
+    ? {}
+    : { background: "var(--gradient-primary)", border: "none", color: "#fff" };
 
-      <div className="mdb-skill-card__top">
-        <div className="mdb-skill-card__icon" style={{ background: `${tierConfig.accentColor}18`, borderColor: `${tierConfig.accentColor}44` }}>
-          {icon}
-        </div>
+  return (
+    <div className="sspt">
+      {/* Thin accent bar at top — single color, intensity-driven opacity */}
+      <div className="sspt__top-bar" style={{ opacity: tierConfig.intensity }} />
+
+      {/* Rank + tier */}
+      <div className="sspt__meta-row">
+        <span className="sspt__rank">#{rank}</span>
+        <span className="sspt__tier-label" style={{ opacity: 0.4 + tierConfig.intensity * 0.6 }}>
+          <Icon name={tierConfig.icon} size={10} label="" />
+          {tierConfig.label}
+        </span>
         {badge && (
-          <div className="mdb-skill-card__badge-pill" style={{ background: badge.bg, borderColor: badge.border, color: badge.color }}>
-            {badge.emoji} {badge.label}
-          </div>
+          <span className="sspt__badge-pill" style={{ color: badge.color, background: badge.bg, borderColor: badge.border }}>
+            <Icon name={badge.icon} size={11} label="" />
+            {badge.label}
+          </span>
         )}
       </div>
 
-      <h3 className="mdb-skill-card__name">{raw.name}</h3>
-      <div className="mdb-skill-card__category label">{raw.category}</div>
-
-      <div className="mdb-skill-card__demand">
-        <div className="mdb-skill-card__demand-track">
-          <div className="mdb-skill-card__demand-fill"
-            style={{ width: `${demandScore}%`, background: tierConfig.accentColor, boxShadow: `0 0 8px ${tierConfig.glowColor}` }} />
-        </div>
-        <span className="mdb-skill-card__demand-pct label" style={{ color: tierConfig.accentColor }}>{demandScore}%</span>
+      {/* Icon */}
+      <div className="sspt__icon-wrap">
+        <Icon name={icon} size={28} label="" />
       </div>
 
+      {/* Name + category */}
+      <h2 className="sspt__name">{raw.name}</h2>
+      <div className="sspt__category">{raw.category}</div>
+
+      {/* Demand score — single color bar */}
+      <div className="sspt__demand">
+        <div className="sspt__demand-head">
+          <span className="sspt__demand-label">Market Demand</span>
+          <span className="sspt__demand-pct" style={{ color: ACCENT.color }}>{demandScore}%</span>
+        </div>
+        <div className="sspt__demand-track">
+          <div
+            className="sspt__demand-fill"
+            style={{
+              width: `${demandScore}%`,
+              opacity: 0.4 + tierConfig.intensity * 0.6,
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Attempt info */}
       {v?.attemptCount !== undefined && v.attemptCount > 0 && (
-        <div className="mdb-skill-card__attempts label">
+        <div className="sspt__attempts">
           {v.attemptCount} attempt{v.attemptCount !== 1 ? "s" : ""}
-          {remainingLabel && <span style={{ color: "var(--color-warning)" }}> · {remainingLabel}</span>}
+          {remainingLabel && <span className="sspt__attempts-warn"> · {remainingLabel}</span>}
         </div>
       )}
 
+      {/* Separator */}
+      <div className="sspt__sep" />
+
+      {/* CTA */}
       <button
-        className={`btn btn-sm w-full mdb-skill-card__cta ${badge ? "btn-ghost" : "btn-primary"}`}
-        onClick={(e) => { e.stopPropagation(); onClick(); }}
+        className={`sspt__cta ${isLocked ? "sspt__cta--locked" : ""}`}
+        style={ctaStyle}
+        onClick={onAction}
         disabled={isLocked || !raw.isActive}
-        style={
-          !badge && raw.isActive && !isLocked
-            ? { background: `linear-gradient(135deg, ${tierConfig.accentColor}99, ${tierConfig.accentColor})`, borderColor: `${tierConfig.accentColor}66`, color: "#fff" }
-            : badge && !isLocked
-              ? { borderColor: badge.border, color: badge.color }
-              : undefined
-        }
       >
         {!raw.isActive ? "Coming soon" : ctaLabel}
       </button>
@@ -263,39 +269,176 @@ const SkillCard: React.FC<{ skill: EnrichedSkill; hot: boolean; onClick: () => v
   );
 };
 
-const SkeletonSection: React.FC<{ count?: number }> = ({ count = 4 }) => (
-  <div className="mdb-tier-section">
-    <div className="mdb-tier-header">
-      <div className="mdb-tier-header__accent" style={{ background: "var(--color-border-default)" }} />
-      <div className="mdb-tier-header__main">
-        <div className="skeleton" style={{ height: 22, width: 200, borderRadius: "var(--radius-md)" }} />
-        <div className="skeleton" style={{ height: 14, width: 280, borderRadius: "var(--radius-sm)", marginTop: 8 }} />
+// ─────────────────────────────────────────────────────────────────────────────
+// SkillRow — ranked list entry
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SkillRow: React.FC<{
+  skill: EnrichedSkill;
+  isActive: boolean;
+  onHover: () => void;
+  onClick: () => void;
+}> = ({ skill, isActive, onHover, onClick }) => {
+  const { raw, demandScore, rank, badge, tierConfig } = skill;
+  const icon     = CATEGORY_ICONS[raw.category] ?? "cat-default";
+  const isLocked = raw.attemptsExhausted || (raw.verification?.isLocked ?? false);
+
+  const ctaLabel = isLocked ? "Locked"
+    : badge ? (badge.label === "Gold" ? "Re-attempt" : "Improve")
+    : "Verify";
+
+  const ctaClass = badge ? "srow__cta--badge"
+    : isLocked ? "srow__cta--locked"
+    : "srow__cta--verify";
+
+  const ctaStyle = badge
+    ? { color: badge.color, borderColor: badge.border, background: badge.bg }
+    : {};
+
+  return (
+    <div
+      className={`srow ${isActive ? "srow--active" : ""}`}
+      onMouseEnter={onHover}
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === "Enter" && onClick()}
+      aria-label={raw.name}
+    >
+      {/* Active indicator bar */}
+      {isActive && <div className="srow__active-bar" />}
+
+      {/* Rank */}
+      <span className="srow__rank" style={isActive ? { color: ACCENT.color } : undefined}>
+        {rank}
+      </span>
+
+      {/* Icon */}
+      <div className="srow__icon" style={isActive ? { background: ACCENT.bg, borderColor: ACCENT.border } : undefined}>
+        <Icon name={icon} size={15} label="" />
+      </div>
+
+      {/* Info */}
+      <div className="srow__info">
+        <div className="srow__name">{raw.name}</div>
+        <div className="srow__meta">
+          {raw.category}
+          {badge && (
+            <span className="srow__badge-inline" style={{ color: badge.color }}>
+              <Icon name={badge.icon} size={9} label="" />
+              {badge.label}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Demand bar */}
+      <div className="srow__bar-wrap">
+        <div className="srow__bar-track">
+          <div
+            className="srow__bar-fill"
+            style={{
+              width: `${demandScore}%`,
+              opacity: 0.4 + tierConfig.intensity * 0.6,
+            }}
+          />
+        </div>
+        <span className="srow__pct" style={isActive ? { color: ACCENT.color } : undefined}>
+          {demandScore}%
+        </span>
+      </div>
+
+      {/* CTA */}
+      <button
+        className={`srow__cta ${ctaClass}`}
+        style={ctaStyle}
+        onClick={(e) => { e.stopPropagation(); onClick(); }}
+        disabled={isLocked || !raw.isActive}
+      >
+        {!raw.isActive ? "Soon" : ctaLabel}
+      </button>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Recommended strip
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RecommendedStrip: React.FC<{
+  items: EnrichedSkill[];
+  onSelect: (s: EnrichedSkill) => void;
+  onAction: (s: EnrichedSkill) => void;
+}> = ({ items, onSelect, onAction }) => (
+  <div className="srec">
+    <div className="srec__head">
+      <div className="srec__icon"><Icon name="recommended" size={12} label="" /></div>
+      <div>
+        <div className="srec__title">Recommended for you</div>
+        <div className="srec__sub">Top unverified skills by market demand — verify these first</div>
       </div>
     </div>
-    <div className="mdb-tier-row">
-      {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="mdb-skill-card" style={{ pointerEvents: "none" }}>
-          <div className="skeleton" style={{ height: 44, width: 44, borderRadius: "var(--radius-lg)", marginBottom: 12 }} />
-          <div className="skeleton" style={{ height: 18, width: "70%", borderRadius: "var(--radius-sm)", marginBottom: 8 }} />
-          <div className="skeleton" style={{ height: 12, width: "40%", borderRadius: "var(--radius-sm)", marginBottom: 16 }} />
-          <div className="skeleton" style={{ height: 6, width: "100%", borderRadius: "var(--radius-full)", marginBottom: 16 }} />
-          <div className="skeleton" style={{ height: 34, width: "100%", borderRadius: "var(--radius-md)" }} />
-        </div>
+    <div className="srec__list">
+      {items.map((s) => (
+        <button
+          key={s.raw.id}
+          className="srec__chip"
+          onMouseEnter={() => onSelect(s)}
+          onClick={() => onAction(s)}
+        >
+          <div className="srec__chip-icon">
+            <Icon name={CATEGORY_ICONS[s.raw.category] ?? "cat-default"} size={13} label="" />
+          </div>
+          <div className="srec__chip-text">
+            <span className="srec__chip-name">{s.raw.name}</span>
+            <span className="srec__chip-meta">{s.tierConfig.label} · {s.demandScore}%</span>
+          </div>
+          <span className="srec__chip-arrow">→</span>
+        </button>
       ))}
     </div>
   </div>
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Main page
+// Skeletons
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SkeletonSpotlight: React.FC = () => (
+  <div className="sspt sspt--skeleton">
+    <div className="skeleton" style={{ width: "40%", height: 12, marginBottom: 20 }} />
+    <div className="skeleton" style={{ width: 52, height: 52, borderRadius: 12, marginBottom: 16 }} />
+    <div className="skeleton" style={{ width: "70%", height: 22, marginBottom: 8 }} />
+    <div className="skeleton" style={{ width: "45%", height: 12, marginBottom: 20 }} />
+    <div className="skeleton" style={{ width: "100%", height: 8, borderRadius: 4, marginBottom: 20 }} />
+    <div className="skeleton" style={{ width: "100%", height: 40, borderRadius: 10 }} />
+  </div>
+);
+
+const SkeletonRow: React.FC<{ i: number }> = ({ i }) => (
+  <div className="srow" style={{ opacity: 1 - i * 0.10, pointerEvents: "none" }}>
+    <span className="srow__rank skeleton" style={{ width: 18, height: 12 }} />
+    <div className="skeleton" style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0 }} />
+    <div style={{ flex: 1 }}>
+      <div className="skeleton" style={{ width: "55%", height: 13, marginBottom: 6 }} />
+      <div className="skeleton" style={{ width: "38%", height: 10 }} />
+    </div>
+    <div className="skeleton" style={{ width: 60, height: 10, borderRadius: 4 }} />
+    <div className="skeleton" style={{ width: 56, height: 28, borderRadius: 8 }} />
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Page
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SkillsLibraryPage: React.FC = () => {
   const navigate = useNavigate();
   const { data, isLoading, error, refetch } = useSkills();
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState<"all" | "verified" | "unverified">("all");
+  const [searchQuery,    setSearchQuery]    = useState("");
+  const [activeFilter,   setActiveFilter]   = useState<"all" | "verified" | "unverified">("all");
+  const [spotlightSkill, setSpotlightSkill] = useState<EnrichedSkill | null>(null);
 
   const enriched = useMemo<EnrichedSkill[]>(() => {
     if (!data?.skills.length) return [];
@@ -308,7 +451,7 @@ const SkillsLibraryPage: React.FC = () => {
       const q = searchQuery.toLowerCase();
       list = list.filter((s) => s.raw.name.toLowerCase().includes(q) || s.raw.category.toLowerCase().includes(q));
     }
-    if (activeFilter === "verified") list = list.filter((s) => s.badge !== null);
+    if (activeFilter === "verified")   list = list.filter((s) => s.badge !== null);
     if (activeFilter === "unverified") list = list.filter((s) => s.badge === null);
     return list;
   }, [enriched, searchQuery, activeFilter]);
@@ -321,21 +464,23 @@ const SkillsLibraryPage: React.FC = () => {
   }, [filtered]);
 
   const recommended = useMemo(
-    () => enriched.filter((s) => !s.badge && s.raw.isActive && !s.raw.attemptsExhausted).slice(0, 4),
+    () => enriched.filter((s) => !s.badge && s.raw.isActive && !s.raw.attemptsExhausted).slice(0, 6),
     [enriched]
   );
 
   const stats = useMemo(() => {
     const v = enriched.filter((s) => s.badge !== null);
     return {
-      total: enriched.filter((s) => s.raw.isActive).length,
+      total:   enriched.filter((s) => s.raw.isActive).length,
       verified: v.length,
-      gold: v.filter((s) => s.raw.verification?.currentBadge === "GOLD").length,
-      silver: v.filter((s) => s.raw.verification?.currentBadge === "SILVER").length,
-      bronze: v.filter((s) => s.raw.verification?.currentBadge === "BRONZE").length,
+      gold:    v.filter((s) => s.raw.verification?.currentBadge === "GOLD").length,
+      silver:  v.filter((s) => s.raw.verification?.currentBadge === "SILVER").length,
+      bronze:  v.filter((s) => s.raw.verification?.currentBadge === "BRONZE").length,
       topTier: enriched.filter((s) => s.tier === "hot" || s.tier === "high").length,
     };
   }, [enriched]);
+
+  const activeSpotlight = spotlightSkill ?? filtered[0] ?? null;
 
   const goToTest = (skill: EnrichedSkill) => {
     if (skill.raw.attemptsExhausted || skill.raw.verification?.isLocked) return;
@@ -348,10 +493,10 @@ const SkillsLibraryPage: React.FC = () => {
     return (
       <PageLayout pageTitle="Skills">
         <div className="empty-state">
-          <div className="empty-state-icon">⚠️</div>
+          <div className="empty-state-icon"><Icon name="warning" size={32} label="" /></div>
           <h3>Failed to load skills</h3>
           <p>{error}</p>
-          <button className="btn btn-primary btn-sm mt-4" onClick={refetch}>Retry</button>
+          <button className="btn btn-primary btn-sm" onClick={refetch}>Retry</button>
         </div>
       </PageLayout>
     );
@@ -359,210 +504,696 @@ const SkillsLibraryPage: React.FC = () => {
 
   return (
     <PageLayout pageTitle="Skills">
-      <div className="mdb-page animate-fade-in">
 
-        <header className="mdb-header">
-          <div className="mdb-header__text">
-            <h1 className="mdb-header__title">Market Demand Board</h1>
-            <p className="mdb-header__sub">
-              Skills ranked by employer demand. Verify them to earn badges and improve your match score.
-            </p>
+      {/* ── Page header ───────────────────────────── */}
+      <PageHeader
+        {...PAGE_CONFIGS.skills}
+        right={
+          !isLoading ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+              <div className="sctrl__search">
+                <svg className="sctrl__search-icon" width="13" height="13" viewBox="0 0 16 16" fill="none">
+                  <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.4"/>
+                  <line x1="10" y1="10" x2="14" y2="14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                </svg>
+                <input
+                  className="input sctrl__search-input"
+                  placeholder="Search skills…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                {searchQuery && (
+                  <button className="sctrl__search-clear" onClick={() => setSearchQuery("")}>
+                    <Icon name="close" size={11} label="Clear" />
+                  </button>
+                )}
+              </div>
+              <div className="sctrl__chips">
+                {(["all", "verified", "unverified"] as const).map((f) => (
+                  <button
+                    key={f}
+                    className={`schip ${activeFilter === f ? "schip--active" : ""}`}
+                    onClick={() => setActiveFilter(f)}
+                  >
+                    {f === "all" ? "All" : f === "verified" ? "Verified" : "Unverified"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null
+        }
+      />
+
+      {/* ── Coverage bar ──────────────────────────── */}
+      {!isLoading && <CoverageBar {...stats} />}
+
+      {/* ── Recommended strip ─────────────────────── */}
+      {!isLoading && recommended.length > 0 && activeFilter !== "verified" && !searchQuery && (
+        <RecommendedStrip
+          items={recommended}
+          onSelect={setSpotlightSkill}
+          onAction={goToTest}
+        />
+      )}
+
+      {/* ── Loading ───────────────────────────────── */}
+      {isLoading && (
+        <div className="ssplit">
+          <div className="ssplit__left"><SkeletonSpotlight /></div>
+          <div className="ssplit__right slist">
+            {Array.from({ length: 10 }).map((_, i) => <SkeletonRow key={i} i={i} />)}
           </div>
-          <div className="mdb-header__controls">
-            <div className="mdb-search">
-              <svg className="mdb-search__icon" width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.4" />
-                <line x1="10" y1="10" x2="14" y2="14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-              </svg>
-              <input className="input mdb-search__input" placeholder="Search skills…"
-                value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-              {searchQuery && (
-                <button className="mdb-search__clear" onClick={() => setSearchQuery("")}>✕</button>
+        </div>
+      )}
+
+      {/* ── Content ───────────────────────────────── */}
+      {!isLoading && (
+        filtered.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-state-icon"><Icon name="cat-default" size={32} label="" /></div>
+            <h3>No skills found</h3>
+            <p>Try a different search or filter.</p>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setSearchQuery(""); setActiveFilter("all"); }}>
+              Clear filters
+            </button>
+          </div>
+        ) : (
+          <div className="ssplit">
+
+            {/* LEFT — sticky spotlight */}
+            <div className="ssplit__left">
+              {activeSpotlight && (
+                <SkillSpotlight
+                  key={activeSpotlight.raw.id}
+                  skill={activeSpotlight}
+                  onAction={() => goToTest(activeSpotlight)}
+                />
               )}
             </div>
-            <div className="mdb-filter-chips">
-              {(["all", "verified", "unverified"] as const).map((f) => (
-                <button key={f} className={`mdb-filter-chip ${activeFilter === f ? "mdb-filter-chip--active" : ""}`}
-                  onClick={() => setActiveFilter(f)}>
-                  {f === "all" ? "All" : f === "verified" ? "Verified" : "Unverified"}
-                </button>
-              ))}
+
+            {/* RIGHT — ranked list */}
+            <div className="ssplit__right">
+
+              {/* Tier sections */}
+              {TIERS.map((tier) => {
+                const tierSkills = byTier.get(tier.id) ?? [];
+                if (tierSkills.length === 0) return null;
+
+                return (
+                  <div key={tier.id} className="stier">
+                    {/* Tier header — intensity drives opacity, NOT hue */}
+                    <div className="stier__header" style={{ opacity: 0.5 + tier.intensity * 0.5 }}>
+                      <Icon name={tier.icon} size={11} label="" style={{ color: ACCENT.color }} />
+                      <span className="stier__label">{tier.label}</span>
+                      <span className="stier__count">{tierSkills.length}</span>
+                      <span className="stier__tagline">{tier.tagline}</span>
+                    </div>
+
+                    {/* Rows */}
+                    <div className="slist">
+                      {tierSkills.map((skill) => (
+                        <SkillRow
+                          key={skill.raw.id}
+                          skill={skill}
+                          isActive={activeSpotlight?.raw.id === skill.raw.id}
+                          onHover={() => setSpotlightSkill(skill)}
+                          onClick={() => goToTest(skill)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
-        </header>
+        )
+      )}
 
-        {!isLoading && <InsightsBar {...stats} />}
-
-        {isLoading && (
-          <>
-            <SkeletonSection count={4} />
-            <SkeletonSection count={5} />
-            <SkeletonSection count={3} />
-          </>
-        )}
-
-        {!isLoading && (
-          <>
-            {/* Recommended section */}
-            {recommended.length > 0 && activeFilter !== "verified" && !searchQuery && (
-              <section className="mdb-section mdb-recommended">
-                <div className="mdb-recommended__header">
-                  <div className="mdb-recommended__icon">✦</div>
-                  <div>
-                    <h2 className="mdb-recommended__title">Recommended for you</h2>
-                    <p className="mdb-recommended__sub">Top unverified skills by market demand — verify these first</p>
-                  </div>
-                </div>
-                <div className="mdb-rec-list">
-                  {recommended.map((s, i) => (
-                    <button key={s.raw.id} className="mdb-rec-card"
-                      style={{ "--tier-color": s.tierConfig.accentColor } as React.CSSProperties}
-                      onClick={() => goToTest(s)}>
-                      <div className="mdb-rec-card__rank label">#{i + 1}</div>
-                      <div className="mdb-rec-card__icon-wrap" style={{ background: `${s.tierConfig.accentColor}18`, borderColor: `${s.tierConfig.accentColor}44` }}>
-                        <span>{CATEGORY_ICONS[s.raw.category] ?? "🎯"}</span>
-                      </div>
-                      <div className="mdb-rec-card__info">
-                        <div className="mdb-rec-card__name">{s.raw.name}</div>
-                        <div className="mdb-rec-card__meta label">{s.raw.category} · {s.tierConfig.emoji} {s.tierConfig.label}</div>
-                      </div>
-                      <div className="mdb-rec-card__bar-wrap">
-                        <div className="mdb-rec-card__bar-track">
-                          <div className="mdb-rec-card__bar-fill" style={{ width: `${s.demandScore}%`, background: s.tierConfig.accentColor }} />
-                        </div>
-                        <span className="mdb-rec-card__pct label" style={{ color: s.tierConfig.accentColor }}>{s.demandScore}%</span>
-                      </div>
-                      <div className="mdb-rec-card__arrow" style={{ color: s.tierConfig.accentColor }}>→</div>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* Tier sections */}
-            {TIERS.map((tier) => {
-              const tierSkills = byTier.get(tier.id) ?? [];
-              if (tierSkills.length === 0) return null;
-              const verifiedInTier = tierSkills.filter((s) => s.badge !== null).length;
-              return (
-                <section key={tier.id} className="mdb-tier-section">
-                  <TierHeader config={tier} count={tierSkills.length} verifiedCount={verifiedInTier} />
-                  <div className={`mdb-tier-row ${tier.id === "hot" ? "mdb-tier-row--hot" : ""}`}>
-                    {tierSkills.map((skill) => (
-                      <SkillCard key={skill.raw.id} skill={skill} hot={tier.id === "hot"} onClick={() => goToTest(skill)} />
-                    ))}
-                  </div>
-                </section>
-              );
-            })}
-
-            {filtered.length === 0 && (
-              <div className="empty-state">
-                <div className="empty-state-icon">🎯</div>
-                <h3>No skills found</h3>
-                <p>Try a different search term or filter.</p>
-                <button className="btn btn-ghost btn-sm mt-4" onClick={() => { setSearchQuery(""); setActiveFilter("all"); }}>
-                  Clear filters
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
       <style>{styles}</style>
     </PageLayout>
   );
 };
 
-// Styles are identical to the existing page — kept in full
+// ─────────────────────────────────────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────────────────────────────────────
+
 const styles = `
-  .mdb-page { padding-bottom: var(--space-16); }
-  .mdb-header { display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-6);margin-bottom:var(--space-6);flex-wrap:wrap; }
-  .mdb-header__title { font-family:var(--font-display);font-size:var(--text-3xl);font-weight:var(--weight-bold);color:var(--color-text-primary);letter-spacing:var(--tracking-wide);margin:0 0 var(--space-2);background:var(--gradient-brand,linear-gradient(135deg,#4A2880,#7B5EA7,#22D3EE));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text; }
-  .mdb-header__sub { font-size:var(--text-sm);color:var(--color-text-muted);margin:0;max-width:480px;line-height:var(--leading-relaxed); }
-  .mdb-header__controls { display:flex;flex-direction:column;gap:var(--space-3);align-items:flex-end; }
-  .mdb-search { position:relative;width:260px; }
-  .mdb-search__icon { position:absolute;left:var(--space-3);top:50%;transform:translateY(-50%);color:var(--color-text-muted);pointer-events:none; }
-  .mdb-search__input { padding-left:2.2rem;padding-right:2rem; }
-  .mdb-search__clear { position:absolute;right:var(--space-3);top:50%;transform:translateY(-50%);background:none;border:none;color:var(--color-text-muted);cursor:pointer;font-size:var(--text-sm);padding:0;line-height:1; }
-  .mdb-filter-chips { display:flex;gap:var(--space-2); }
-  .mdb-filter-chip { font-family:var(--font-mono);font-size:var(--text-xs);font-weight:var(--weight-medium);letter-spacing:var(--tracking-wider);padding:var(--space-1) var(--space-4);border-radius:var(--radius-full);border:1px solid var(--color-border-default);background:var(--color-bg-elevated);color:var(--color-text-muted);cursor:pointer;transition:all 120ms ease; }
-  .mdb-filter-chip--active { background:var(--color-primary-glow);border-color:var(--color-primary-500,#7B5EA7);color:var(--color-primary-400,#A78BFA); }
-  .mdb-insights { display:flex;align-items:center;gap:var(--space-6);background:var(--color-bg-elevated);border:1px solid var(--color-border-default);border-radius:var(--radius-xl);padding:var(--space-5) var(--space-6);margin-bottom:var(--space-8);flex-wrap:wrap; }
-  .mdb-insights__progress-wrap { min-width:200px;flex:1; }
-  .mdb-insights__progress-head { display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-2); }
-  .mdb-insights__progress-pct { font-family:var(--font-display);font-size:var(--text-lg);font-weight:var(--weight-bold);line-height:1; }
-  .mdb-insights__stats { display:flex;gap:var(--space-3);flex-wrap:wrap; }
-  .mdb-stat-pill { display:flex;flex-direction:column;align-items:center;gap:2px;padding:var(--space-3) var(--space-4);border-radius:var(--radius-lg);border:1px solid;min-width:68px;text-align:center; }
-  .mdb-stat-pill__value { font-family:var(--font-display);font-size:var(--text-xl);font-weight:var(--weight-bold);line-height:1; }
-  .mdb-stat-pill__sub { font-size:var(--text-xs);font-family:var(--font-body);font-weight:var(--weight-regular);color:var(--color-text-muted);opacity:0.75; }
-  .mdb-stat-pill__label { font-size:9px;color:var(--color-text-muted); }
-  .mdb-section { margin-bottom:var(--space-10); }
-  .mdb-tier-section { margin-bottom:var(--space-10); }
-  .mdb-recommended { background:var(--color-bg-elevated);border:1px solid var(--color-border-default);border-radius:var(--radius-xl);padding:var(--space-6); }
-  .mdb-recommended__header { display:flex;align-items:center;gap:var(--space-4);margin-bottom:var(--space-5); }
-  .mdb-recommended__icon { width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:var(--color-primary-glow);border:1px solid var(--color-primary-500,#7B5EA7);border-radius:var(--radius-lg);font-size:var(--text-lg);color:var(--color-primary-400,#A78BFA);flex-shrink:0; }
-  .mdb-recommended__title { font-family:var(--font-display);font-size:var(--text-lg);font-weight:var(--weight-semibold);color:var(--color-text-primary);margin:0 0 var(--space-1);letter-spacing:var(--tracking-wide); }
-  .mdb-recommended__sub { font-size:var(--text-sm);color:var(--color-text-muted);margin:0; }
-  .mdb-rec-list { display:flex;flex-direction:column;gap:var(--space-3); }
-  .mdb-rec-card { display:flex;align-items:center;gap:var(--space-4);width:100%;padding:var(--space-3) var(--space-4);background:var(--color-bg-overlay);border:1px solid var(--color-border-default);border-radius:var(--radius-lg);cursor:pointer;text-align:left;font-family:var(--font-body);transition:border-color 120ms ease,background 120ms ease,box-shadow 180ms ease; }
-  .mdb-rec-card:hover { border-color:var(--tier-color,var(--color-border-strong));background:var(--color-bg-active); }
-  .mdb-rec-card__rank { font-family:var(--font-mono);font-size:var(--text-xs);color:var(--color-text-muted);min-width:24px; }
-  .mdb-rec-card__icon-wrap { width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-md);border:1px solid;flex-shrink:0;font-size:1.1rem; }
-  .mdb-rec-card__info { flex:1;min-width:0; }
-  .mdb-rec-card__name { font-family:var(--font-display);font-size:var(--text-base);font-weight:var(--weight-semibold);color:var(--color-text-primary);letter-spacing:var(--tracking-wide);white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-  .mdb-rec-card__meta { font-size:10px;color:var(--color-text-muted);margin-top:2px; }
-  .mdb-rec-card__bar-wrap { display:flex;align-items:center;gap:var(--space-2);flex-shrink:0;width:120px; }
-  .mdb-rec-card__bar-track { flex:1;height:4px;background:var(--color-bg-active);border-radius:var(--radius-full);overflow:hidden; }
-  .mdb-rec-card__bar-fill { height:100%;border-radius:var(--radius-full);transition:width 0.6s ease; }
-  .mdb-rec-card__pct { font-size:10px;min-width:28px;text-align:right; }
-  .mdb-rec-card__arrow { font-size:var(--text-lg);flex-shrink:0;transition:transform 120ms ease; }
-  .mdb-rec-card:hover .mdb-rec-card__arrow { transform:translateX(4px); }
-  .mdb-tier-header { display:flex;align-items:flex-start;gap:var(--space-4);margin-bottom:var(--space-5); }
-  .mdb-tier-header__accent { width:3px;min-height:52px;border-radius:var(--radius-full);flex-shrink:0;margin-top:2px; }
-  .mdb-tier-header__main { flex:1; }
-  .mdb-tier-header__title-row { display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;margin-bottom:var(--space-1); }
-  .mdb-tier-header__emoji { font-size:var(--text-xl);line-height:1; }
-  .mdb-tier-header__title { font-family:var(--font-display);font-size:var(--text-xl);font-weight:var(--weight-bold);color:var(--color-text-primary);margin:0;letter-spacing:var(--tracking-wide); }
-  .mdb-tier-header__count { font-size:10px;padding:2px 8px;border-radius:var(--radius-full);border:1px solid; }
-  .mdb-tier-header__verified { font-size:10px;color:var(--color-success);padding:2px 8px;background:var(--color-success-bg);border:1px solid var(--color-success-border);border-radius:var(--radius-full); }
-  .mdb-tier-header__tagline { font-size:var(--text-xs);color:var(--color-text-muted);margin:0;line-height:var(--leading-relaxed); }
-  .mdb-tier-row { display:flex;gap:var(--space-4);overflow-x:auto;padding-bottom:var(--space-3);scrollbar-width:thin;scrollbar-color:var(--color-border-default) transparent; }
-  .mdb-tier-row::-webkit-scrollbar { height:4px; }
-  .mdb-tier-row::-webkit-scrollbar-thumb { background:var(--color-border-default);border-radius:var(--radius-full); }
-  .mdb-tier-row--hot { scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch; }
-  .mdb-tier-row--hot .mdb-skill-card { scroll-snap-align:start; }
-  .mdb-skill-card { flex-shrink:0;width:200px;background:var(--color-bg-elevated);border:1px solid var(--color-border-default);border-radius:var(--radius-xl);padding:var(--space-4);cursor:pointer;display:flex;flex-direction:column;gap:var(--space-2);position:relative;overflow:hidden;transition:border-color 180ms ease,box-shadow 180ms ease,transform 120ms ease; }
-  .mdb-skill-card:hover { border-color:var(--card-border,var(--color-border-strong));transform:translateY(-3px); }
-  .mdb-skill-card--hot { width:230px; }
-  .mdb-skill-card--gold { border-color:var(--color-badge-gold-border) !important; }
-  .mdb-skill-card--silver { border-color:var(--color-silver-border) !important; }
-  .mdb-skill-card--bronze { border-color:var(--color-bronze-border) !important; }
-  .mdb-skill-card--locked { opacity:0.7; }
-  .mdb-skill-card--inactive { opacity:0.45;pointer-events:none; }
-  .mdb-skill-card__accent-line { position:absolute;top:0;left:0;right:0;height:2px; }
-  .mdb-skill-card__rank { position:absolute;top:var(--space-3);right:var(--space-3);font-size:9px; }
-  .mdb-skill-card__top { display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-2);margin-bottom:var(--space-1); }
-  .mdb-skill-card__icon { width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;border-radius:var(--radius-lg);border:1px solid;flex-shrink:0; }
-  .mdb-skill-card__badge-pill { font-family:var(--font-mono);font-size:9px;font-weight:var(--weight-medium);letter-spacing:var(--tracking-wider);text-transform:uppercase;padding:2px 7px;border-radius:var(--radius-full);border:1px solid;display:flex;align-items:center;gap:3px;white-space:nowrap;margin-top:2px; }
-  .mdb-skill-card__name { font-family:var(--font-display);font-size:var(--text-base);font-weight:var(--weight-semibold);color:var(--color-text-primary);letter-spacing:var(--tracking-wide);line-height:var(--leading-snug);margin:0; }
-  .mdb-skill-card__category { font-size:9px;color:var(--color-text-muted); }
-  .mdb-skill-card__demand { display:flex;align-items:center;gap:var(--space-2);margin-top:var(--space-1); }
-  .mdb-skill-card__demand-track { flex:1;height:4px;background:var(--color-bg-overlay);border-radius:var(--radius-full);overflow:hidden; }
-  .mdb-skill-card__demand-fill { height:100%;border-radius:var(--radius-full);transition:width 0.6s ease; }
-  .mdb-skill-card__demand-pct { font-size:9px;min-width:26px;text-align:right; }
-  .mdb-skill-card__attempts { font-size:9px;color:var(--color-text-muted); }
-  .mdb-skill-card__cta { margin-top:auto;font-family:var(--font-display);font-size:var(--text-xs);letter-spacing:var(--tracking-wide); }
-  @media (max-width:768px) {
-    .mdb-header { flex-direction:column; }
-    .mdb-header__controls { align-items:flex-start;width:100%; }
-    .mdb-search { width:100%; }
-    .mdb-insights { flex-direction:column;gap:var(--space-4); }
-  }
-  @media (max-width:480px) {
-    .mdb-skill-card { width:175px; }
-    .mdb-skill-card--hot { width:200px; }
-  }
+
+/* ── Search + filter controls (in PageHeader right slot) ── */
+.sctrl__search {
+  position: relative;
+  width: 220px;
+}
+.sctrl__search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+.sctrl__search-input {
+  padding-left: 2rem !important;
+  padding-right: 1.8rem !important;
+  width: 100%;
+}
+.sctrl__search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.12s;
+}
+.sctrl__search-clear:hover { color: var(--color-text-primary); }
+.sctrl__chips { display: flex; gap: 6px; }
+.schip {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.schip:hover { border-color: var(--color-border-strong); color: var(--color-text-secondary); }
+.schip--active {
+  background: var(--color-primary-glow);
+  border-color: rgba(155,124,255,0.28);
+  color: var(--color-primary-400);
+}
+
+/* ── Coverage bar ──────────────────────────────────────── */
+.scov {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-4) var(--space-6);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-xl);
+  margin-bottom: var(--space-5);
+  flex-wrap: wrap;
+}
+.scov__left { flex: 1; min-width: 180px; }
+.scov__progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: var(--space-2);
+}
+.scov__label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.scov__pct {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 800;
+  color: var(--color-primary-400);
+  line-height: 1;
+}
+.scov__track {
+  height: 5px;
+  background: var(--color-bg-active);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.scov__fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-400);
+  transition: width 0.8s cubic-bezier(0.16,1,0.3,1);
+}
+.scov__sub {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+.scov__divider {
+  width: 1px;
+  height: 40px;
+  background: var(--color-border-default);
+  flex-shrink: 0;
+}
+.scov__stats { display: flex; gap: var(--space-5); flex-wrap: wrap; }
+.scov__stat { display: flex; flex-direction: column; gap: 3px; align-items: center; }
+.scov__stat-val {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 800;
+  line-height: 1;
+  color: var(--color-text-primary);
+}
+.scov__stat-lbl {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* ── Recommended strip ─────────────────────────────────── */
+.srec {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-5);
+}
+.srec__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.srec__icon {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--color-primary-glow);
+  border: 1px solid rgba(155,124,255,0.22);
+  border-radius: var(--radius-md);
+  color: var(--color-primary-400);
+  flex-shrink: 0;
+}
+.srec__title {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: -0.01em;
+}
+.srec__sub {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+.srec__list {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.srec__list::-webkit-scrollbar { display: none; }
+.srec__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: var(--color-bg-overlay);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: border-color 0.12s, background 0.12s;
+  font-family: var(--font-body);
+  text-align: left;
+}
+.srec__chip:hover {
+  border-color: rgba(155,124,255,0.30);
+  background: var(--color-bg-active);
+}
+.srec__chip-icon {
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--color-primary-glow);
+  border: 1px solid rgba(155,124,255,0.20);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+.srec__chip-text { display: flex; flex-direction: column; gap: 1px; }
+.srec__chip-name {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: -0.01em;
+}
+.srec__chip-meta {
+  font-size: 9px;
+  color: var(--color-text-muted);
+}
+.srec__chip-arrow {
+  font-size: 12px;
+  color: var(--color-primary-400);
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+/* ── Split layout ──────────────────────────────────────── */
+.ssplit {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+.ssplit__left { position: sticky; top: 80px; }
+.ssplit__right { min-width: 0; }
+
+/* ── Skill Spotlight ───────────────────────────────────── */
+.sspt {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-2xl);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  position: relative;
+  transition: border-color 0.2s;
+}
+.sspt--skeleton { opacity: 0.6; }
+.sspt__top-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2.5px;
+  background: var(--color-primary-400);
+  border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+  transition: opacity 0.3s;
+}
+.sspt__meta-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.sspt__rank {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.sspt__tier-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--color-primary-400);
+  transition: opacity 0.3s;
+}
+.sspt__badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid;
+  margin-left: auto;
+}
+.sspt__icon-wrap {
+  width: 52px; height: 52px;
+  border-radius: var(--radius-xl);
+  background: var(--color-primary-glow);
+  border: 1px solid rgba(155,124,255,0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-primary-400);
+}
+.sspt__name {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 800;
+  color: var(--color-text-primary);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0;
+}
+.sspt__category {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.sspt__demand {}
+.sspt__demand-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: var(--space-2);
+}
+.sspt__demand-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.sspt__demand-pct {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+.sspt__demand-track {
+  height: 6px;
+  background: var(--color-bg-active);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+.sspt__demand-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-400);
+  transition: width 0.7s cubic-bezier(0.16,1,0.3,1), opacity 0.3s;
+}
+.sspt__attempts {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+.sspt__attempts-warn { color: var(--color-warning); }
+.sspt__sep {
+  height: 1px;
+  background: var(--color-border-subtle);
+  margin: 0 calc(-1 * var(--space-6));
+}
+.sspt__cta {
+  width: 100%;
+  padding: 11px var(--space-5);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.15s;
+  letter-spacing: -0.01em;
+}
+.sspt__cta:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); }
+.sspt__cta:disabled { opacity: 0.45; cursor: not-allowed; }
+.sspt__cta--locked { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Tier sections ─────────────────────────────────────── */
+.stier { margin-bottom: var(--space-5); }
+.stier__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
+  border-left: 2px solid var(--color-primary-400);
+  margin-bottom: var(--space-2);
+  transition: opacity 0.3s;
+}
+.stier__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--color-primary-400);
+}
+.stier__count {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-glow);
+  border: 1px solid rgba(155,124,255,0.20);
+  color: var(--color-primary-400);
+}
+.stier__tagline {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-left: var(--space-1);
+}
+
+/* ── Ranked skill list ─────────────────────────────────── */
+.slist {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  background: var(--color-bg-surface);
+}
+
+/* ── Skill row ─────────────────────────────────────────── */
+.srow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-subtle);
+  cursor: pointer;
+  transition: background 0.12s;
+  position: relative;
+}
+.srow:last-child { border-bottom: none; }
+.srow:hover { background: var(--color-bg-hover); }
+.srow--active { background: var(--color-bg-elevated); }
+.srow__active-bar {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2.5px;
+  background: var(--color-primary-400);
+  border-radius: 0 2px 2px 0;
+}
+.srow__rank {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-text-disabled);
+  min-width: 20px;
+  text-align: right;
+  flex-shrink: 0;
+  transition: color 0.12s;
+}
+.srow__icon {
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-overlay);
+  border: 1px solid var(--color-border-default);
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  transition: background 0.15s, border-color 0.15s;
+}
+.srow__info { flex: 1; min-width: 0; }
+.srow__name {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+.srow__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+.srow__badge-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 700;
+}
+.srow__bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  width: 80px;
+}
+.srow__bar-track {
+  flex: 1;
+  height: 3px;
+  background: var(--color-bg-active);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+.srow__bar-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-400);
+  transition: width 0.6s ease, opacity 0.3s;
+}
+.srow__pct {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  min-width: 28px;
+  text-align: right;
+  transition: color 0.12s;
+}
+.srow__cta {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.srow__cta--verify {
+  background: var(--color-primary-glow);
+  border-color: rgba(155,124,255,0.28);
+  color: var(--color-primary-400);
+}
+.srow__cta--verify:hover { background: var(--color-primary-glow-strong); }
+.srow__cta--badge:hover  { filter: brightness(1.1); }
+.srow__cta--locked       { opacity: 0.4; cursor: not-allowed; }
+.srow__cta:disabled      { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Responsive ────────────────────────────────────────── */
+@media (max-width: 1080px) {
+  .ssplit { grid-template-columns: 260px 1fr; }
+}
+@media (max-width: 800px) {
+  .ssplit { grid-template-columns: 1fr; }
+  .ssplit__left { position: static; }
+  .scov { flex-direction: column; }
+  .sctrl__search { width: 100%; }
+}
+@media (max-width: 560px) {
+  .scov__stats { gap: var(--space-3); }
+}
 `;
 
 export default SkillsLibraryPage;

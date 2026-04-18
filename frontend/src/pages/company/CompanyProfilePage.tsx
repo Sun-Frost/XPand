@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import CompanyPageLayout from "../../components/company/companyPageLayout";
+import { Icon } from "../../components/ui/Icon";
 import { useCompanyProfile } from "../../hooks/company/useCompany";
 import type { UpdateCompanyProfilePayload } from "../../hooks/company/useCompany";
 import { CITIES } from "../../constants/cities";
@@ -32,7 +33,7 @@ const EditModal: React.FC<{
       <div className="modal cp-modal">
         <div className="modal-header">
           <h3 className="cp-modal-title">Edit Company Profile</h3>
-          <button className="btn btn-ghost btn-icon btn-icon-sm" onClick={onClose}>✕</button>
+          <button className="btn btn-ghost btn-icon btn-icon-sm" onClick={onClose}><Icon name="close" size={14} label="Close" /></button>
         </div>
         <div className="modal-body cp-modal-grid">
           <div className="input-group cp-full">
@@ -112,7 +113,7 @@ const CompanyProfilePage: React.FC = () => {
     return (
       <CompanyPageLayout pageTitle="Company Profile">
         <div className="empty-state">
-          <div className="empty-state-icon">⚠️</div>
+          <div className="empty-state-icon"><Icon name="warning" size={32} label="" /></div>
           <h3>Failed to load profile</h3><p>{error}</p>
         </div>
       </CompanyPageLayout>
@@ -124,7 +125,7 @@ const CompanyProfilePage: React.FC = () => {
   return (
     <CompanyPageLayout pageTitle="Company Profile">
 
-      {saveSuccess && <div className="cp-toast">✅ Profile updated</div>}
+      {saveSuccess && <div className="cp-toast"><Icon name="success" size={14} label="" /> Profile updated</div>}
 
       {/* ── Hero ── */}
       <div className="cp-hero card">
@@ -138,23 +139,23 @@ const CompanyProfilePage: React.FC = () => {
           <div className="cp-hero__id">
             <div className="cp-hero__status-row">
               <span className={`badge ${profile.isApproved ? "badge-verified" : "badge-warning"}`}>
-                {profile.isApproved ? "✓ Approved" : "⏳ Pending Approval"}
+                {profile.isApproved ? <><Icon name="check" size={14} label="" /> Approved</> : <><Icon name="pending" size={14} label="" /> Pending Approval</>}
               </span>
               {profile.industry && <span className="badge badge-muted">{profile.industry}</span>}
             </div>
             <h1 className="cp-hero__name">{profile.companyName}</h1>
             <p className="cp-hero__email">{profile.email}</p>
-            {profile.location && <p className="cp-hero__loc">📍 {profile.location}</p>}
+            {profile.location && <p className="cp-hero__loc"><Icon name="location" size={12} label="" /> {profile.location}</p>}
             {profile.websiteUrl && (
               <a href={profile.websiteUrl} target="_blank" rel="noopener noreferrer" className="cp-website-link">
-                🌐 {profile.websiteUrl}
+                <Icon name="portfolio" size={14} label="" /> {profile.websiteUrl}
               </a>
             )}
           </div>
 
           {/* Actions */}
           <div className="cp-hero__actions">
-            <button className="btn btn-ghost" onClick={() => setEditing(true)}>✏️ Edit Profile</button>
+            <button className="btn btn-ghost" onClick={() => setEditing(true)}><Icon name="edit" size={14} label="" /> Edit Profile</button>
           </div>
         </div>
 
@@ -179,7 +180,7 @@ const CompanyProfilePage: React.FC = () => {
         {/* About */}
         <div className="cp-card">
           <div className="cp-card__head">
-            <span>💬</span>
+            <Icon name="about" size={16} label="" />
             <h2 className="cp-card__title">About</h2>
           </div>
           <div className="cp-card__body">
@@ -196,7 +197,7 @@ const CompanyProfilePage: React.FC = () => {
         {/* Details */}
         <div className="cp-card">
           <div className="cp-card__head">
-            <span>📋</span>
+            <Icon name="clipboard" size={16} label="" />
             <h2 className="cp-card__title">Details</h2>
           </div>
           <div className="cp-card__body">

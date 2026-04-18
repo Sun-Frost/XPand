@@ -10,6 +10,9 @@ export interface RegisterUserPayload {
   lastName: string;
   email: string;
   password: string;
+  phoneNumber?: string;
+  country?: string;
+  city?: string;
 }
 
 export interface RegisterCompanyPayload {
@@ -22,7 +25,7 @@ export interface RegisterCompanyPayload {
   websiteUrl: string;
 }
 
-/** Matches AuthResponse.java exactly */
+/** Matches AuthResponse.java */
 export interface AuthResponse {
   token: string;
   role: string;
@@ -33,6 +36,7 @@ export interface AuthResponse {
 interface UseRegisterReturn {
   registerUser: (payload: RegisterUserPayload) => Promise<AuthResponse | null>;
   registerCompany: (payload: RegisterCompanyPayload) => Promise<AuthResponse | null>;
+  resendVerification: (email: string) => Promise<boolean>;
   isLoading: boolean;
   error: string | null;
   clearError: () => void;
@@ -48,17 +52,16 @@ export const useRegister = (): UseRegisterReturn => {
 
   const handleAuth = async <T extends AuthResponse>(
     endpoint: string,
-    payload: unknown
+    payload: unknown,
   ): Promise<T | null> => {
     setIsLoading(true);
     setError(null);
     try {
       const data = await post<T>(endpoint, payload);
-      localStorage.setItem("access_token", data.token);
-      localStorage.setItem(
-        "user",
-        JSON.stringify({ userId: data.id, email: data.email, role: data.role })
-      );
+      // NOTE: we deliberately do NOT store the token here.
+      // For users:    the RegisterPage shows a "check your email" screen.
+      // For companies: the backend doesn't approve immediately.
+      // Storing the token early would let an unverified user access protected routes.
       return data;
     } catch (err: unknown) {
       const msg =
@@ -77,7 +80,27 @@ export const useRegister = (): UseRegisterReturn => {
   const registerCompany = (payload: RegisterCompanyPayload) =>
     handleAuth<AuthResponse>("/auth/company/register", payload);
 
+  /**
+   * Asks the backend to resend the verification email.
+   * Returns true on success (including "email not found" — backend is intentionally vague).
+   */
+  const resendVerification = async (email: string): Promise<boolean> => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      await post("/auth/resend-verification", { email });
+      return true;
+    } catch (err: unknown) {
+      const msg =
+        (err as any)?.response?.data?.message ?? "Failed to resend. Please try again.";
+      setError(msg);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const clearError = () => setError(null);
 
-  return { registerUser, registerCompany, isLoading, error, clearError };
+  return { registerUser, registerCompany, resendVerification, isLoading, error, clearError };
 };

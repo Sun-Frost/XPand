@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import PageLayout from "../../components/user/PageLayout";
+import { Icon } from "../../components/ui/Icon";
 import { useReadinessReport } from "../../hooks/user/useStore";
 
 // ---------------------------------------------------------------------------
@@ -162,7 +163,7 @@ const ProseBlock: React.FC<{ block: ReturnType<typeof parseProseToBlocks>[number
     case "score":
       return (
         <div className="rr-score-line">
-          <span className="rr-score-line__icon">📊</span>
+          <span className="rr-score-line__icon"><Icon name="cat-data" size={18} label="" /></span>
           <span className="rr-score-line__text">{block.content}</span>
         </div>
       );
@@ -217,7 +218,7 @@ const ReadinessReportPage: React.FC = () => {
 
           <div className="rr-generate-card">
             <div className="rr-generate-card__glow" />
-            <div className="rr-generate-card__icon">📊</div>
+            <div className="rr-generate-card__icon"><Icon name="cat-data" size={32} label="" /></div>
             <h2 className="rr-generate-card__title">Career Readiness Report</h2>
             <p className="rr-generate-card__desc">
               Your Gemini AI will analyse your verified skills, identify gaps, and deliver
@@ -227,14 +228,14 @@ const ReadinessReportPage: React.FC = () => {
             <ul className="rr-generate-card__features">
               {["Skill gap analysis against your verified badges", "Career readiness score (0–100)", "Strengths & weaknesses breakdown", "Prioritised recommendations"].map((f, i) => (
                 <li key={i} className="rr-generate-card__feature">
-                  <span className="rr-generate-card__check">✓</span>{f}
+                  <span className="rr-generate-card__check"><Icon name="check" size={12} label="" /></span>{f}
                 </li>
               ))}
             </ul>
 
             {error && (
               <div className="rr-error-box">
-                <span>⚠</span> {error}
+                <Icon name="warning" size={14} label="" /> {error}
               </div>
             )}
 
@@ -311,16 +312,16 @@ const ReadinessReportPage: React.FC = () => {
             <h3 className="rr-sidebar__title">Next Steps</h3>
             <div className="rr-sidebar__actions">
               <button className="rr-sidebar__btn rr-sidebar__btn--primary" onClick={() => navigate("/skills")}>
-                🎯 Verify Skills →
+                <Icon name="cat-default" size={14} label="" /> Verify Skills →
               </button>
               <button className="rr-sidebar__btn" onClick={() => navigate("/challenges")}>
-                ⚡ Earn XP
+                <Icon name="xp" size={14} label="" /> Earn XP
               </button>
               <button className="rr-sidebar__btn" onClick={() => navigate("/jobs")}>
-                💼 Browse Jobs
+                <Icon name="work" size={14} label="" /> Browse Jobs
               </button>
               <button className="rr-sidebar__btn" onClick={() => navigate("/store")}>
-                🛒 Back to Store
+                <Icon name="store" size={14} label="" /> Back to Store
               </button>
             </div>
           </div>
@@ -339,7 +340,7 @@ const ReadinessReportPage: React.FC = () => {
 
           {error && (
             <div className="rr-error-box rr-error-box--sm">
-              <span>⚠</span> {error}
+              <Icon name="warning" size={14} label="" /> {error}
             </div>
           )}
         </aside>

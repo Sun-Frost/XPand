@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { Icon, type IconName } from "../../components/ui/Icon";
 import { useSkillTest } from "../../hooks/user/useSkillTest";
 import type { AnswerMap, QuestionDTO } from "../../hooks/user/useSkillTest";
 
@@ -22,11 +23,11 @@ function formatTime(seconds: number): string {
   return `${m}:${s}`;
 }
 
-function getCategoryIcon(category: string): string {
-  const icons: Record<string, string> = {
-    Frontend: "🖥️", Backend: "⚙️", Data: "📊", Cloud: "☁️", Mobile: "📱",
+function getCategoryIcon(category: string): IconName {
+  const icons: Record<string, IconName> = {
+    Frontend: "cat-frontend" as IconName, Backend: "cat-backend" as IconName, Data: "cat-data" as IconName, Cloud: "cat-cloud" as IconName, Mobile: "cat-mobile" as IconName,
   };
-  return icons[category] ?? "🎯";
+  return icons[category] ?? "cat-default";
 }
 
 // ---------------------------------------------------------------------------
@@ -41,12 +42,12 @@ const AttemptWarning: React.FC<{
   <div className="modal-backdrop">
     <div className="modal test-confirm-modal" onClick={(e) => e.stopPropagation()}>
       <div className="modal-header">
-        <h3>⚠️ Attempt Warning</h3>
-        <button className="btn btn-ghost btn-icon btn-icon-sm" onClick={onCancel}>✕</button>
+        <h3><Icon name="warning" size={16} label="" /> Attempt Warning</h3>
+        <button className="btn btn-ghost btn-icon btn-icon-sm" onClick={onCancel}><Icon name="close" size={14} label="Close" /></button>
       </div>
       <div className="modal-body">
         <div className="test-confirm-warning">
-          <span className="test-confirm-warning__icon">📋</span>
+          <span className="test-confirm-warning__icon"><Icon name="clipboard" size={20} label="" /></span>
           <p>
             Starting the <strong>{skillName}</strong> test will use one of your{" "}
             <strong>3 monthly attempts</strong>. You cannot undo this.
@@ -57,7 +58,7 @@ const AttemptWarning: React.FC<{
       </div>
       <div className="modal-footer">
         <button className="btn btn-ghost" onClick={onCancel}>Go Back</button>
-        <button className="btn btn-xp" onClick={onConfirm}>⚡ Start Test</button>
+        <button className="btn btn-xp" onClick={onConfirm}><Icon name="xp" size={14} label="" /> Start Test</button>
       </div>
     </div>
   </div>
@@ -182,7 +183,7 @@ const SkillTestPage: React.FC = () => {
     return (
       <div className="page-content test-page test-loading">
         <div className="test-loading__inner">
-          <div className="test-loading__spinner animate-spin">⚙️</div>
+          <div className="test-loading__spinner animate-spin"><Icon name="cat-backend" size={32} label="" /></div>
           <h2>Loading test...</h2>
           <p>Preparing your 15 questions</p>
         </div>
@@ -196,7 +197,7 @@ const SkillTestPage: React.FC = () => {
     return (
       <div className="page-content">
         <div className="empty-state">
-          <div className="empty-state-icon">⚠️</div>
+          <div className="empty-state-icon"><Icon name="warning" size={32} label="" /></div>
           <h3>Test unavailable</h3>
           <p>{error ?? "Could not load this skill test."}</p>
           <button className="btn btn-primary btn-sm mt-4" onClick={() => navigate("/skills")}>
@@ -225,7 +226,7 @@ const SkillTestPage: React.FC = () => {
             ← Exit
           </button>
           <div className="test-skill-info">
-            <span className="test-skill-info__icon">{getCategoryIcon(skillCategory)}</span>
+            <span className="test-skill-info__icon"><Icon name={getCategoryIcon(skillCategory)} size={20} label="" /></span>
             <div>
               <p className="label test-skill-info__label">Skill Verification</p>
               <h2 className="test-skill-info__name">{skillName}</h2>
@@ -239,7 +240,7 @@ const SkillTestPage: React.FC = () => {
             <span className="test-progress-info__count">{answeredCount} / {questions.length}</span>
           </div>
           <div className={`test-timer ${isUrgent ? "test-timer--urgent" : ""}`}>
-            <span className="test-timer__icon">{isUrgent ? "⚠️" : "⏱"}</span>
+            <span className="test-timer__icon">{isUrgent ? <Icon name="warning" size={14} label="" /> : <Icon name="timer" size={14} label="" />}</span>
             <span className="test-timer__time">{formatTime(secondsLeft)}</span>
           </div>
         </div>
@@ -266,7 +267,7 @@ const SkillTestPage: React.FC = () => {
                 className={`btn btn-icon btn-sm test-flag-btn ${isCurrentFlagged ? "test-flag-btn--active" : ""}`}
                 onClick={toggleFlag} title={isCurrentFlagged ? "Unflag" : "Flag for review"}
               >
-                🚩
+                <Icon name="flag" size={14} label="" />
               </button>
             </div>
 
@@ -283,7 +284,7 @@ const SkillTestPage: React.FC = () => {
                     onClick={() => handleAnswer(opt)}>
                     <span className={`test-option__letter ${isSelected ? "test-option__letter--selected" : ""}`}>{opt}</span>
                     <span className="test-option__text">{optionText}</span>
-                    {isSelected && <span className="test-option__check">✓</span>}
+                    {isSelected && <span className="test-option__check"><Icon name="check" size={14} label="" /></span>}
                   </button>
                 );
               })}
@@ -294,8 +295,8 @@ const SkillTestPage: React.FC = () => {
                 disabled={currentIndex === 0}>← Previous</button>
 
               <div className="test-navigation__center">
-                {isCurrentFlagged && <span className="badge badge-warning">🚩 Flagged</span>}
-                {currentAnswer && !isCurrentFlagged && <span className="badge badge-verified">✓ Answered</span>}
+                {isCurrentFlagged && <span className="badge badge-warning"><Icon name="flag" size={12} label="" /> Flagged</span>}
+                {currentAnswer && !isCurrentFlagged && <span className="badge badge-verified"><Icon name="check" size={12} label="" /> Answered</span>}
               </div>
 
               {currentIndex < questions.length - 1 ? (
@@ -305,7 +306,7 @@ const SkillTestPage: React.FC = () => {
                 </button>
               ) : (
                 <button className="btn btn-xp btn-sm" onClick={() => setShowConfirm(true)} disabled={isSubmitting}>
-                  {isSubmitting ? "Submitting..." : "Submit Test ⚡"}
+                  {isSubmitting ? "Submitting..." : <><Icon name="xp" size={14} label="" /> Submit Test</>}
                 </button>
               )}
             </div>
@@ -326,7 +327,7 @@ const SkillTestPage: React.FC = () => {
                   <button key={q.id}
                     className={["test-nav-dot", isActive ? "test-nav-dot--active" : "", answered ? "test-nav-dot--answered" : "", isFlagged ? "test-nav-dot--flagged" : ""].filter(Boolean).join(" ")}
                     onClick={() => setCurrentIndex(i)} title={`Q${i + 1}${isFlagged ? " (flagged)" : ""}`}>
-                    {isFlagged ? "🚩" : i + 1}
+                    {isFlagged ? <Icon name="flag" size={12} label="" /> : i + 1}
                   </button>
                 );
               })}
@@ -335,7 +336,7 @@ const SkillTestPage: React.FC = () => {
             <div className="test-sidebar__legend">
               <div className="test-legend-item"><span className="test-nav-dot test-nav-dot--answered test-legend-dot" /><span>Answered</span></div>
               <div className="test-legend-item"><span className="test-nav-dot test-legend-dot" /><span>Unanswered</span></div>
-              <div className="test-legend-item"><span className="test-legend-flag">🚩</span><span>Flagged</span></div>
+              <div className="test-legend-item"><span className="test-legend-flag"><Icon name="flag" size={12} label="" /></span><span>Flagged</span></div>
             </div>
 
             <div className="test-sidebar__score-preview">
@@ -350,7 +351,7 @@ const SkillTestPage: React.FC = () => {
 
             <button className="btn btn-xp btn-sm w-full" onClick={() => setShowConfirm(true)}
               disabled={isSubmitting || answeredCount === 0}>
-              {isSubmitting ? <span className="animate-spin">⚙️</span> : <>⚡ Submit Test</>}
+              {isSubmitting ? <span className="animate-spin"><Icon name="cat-backend" size={16} label="" /></span> : <><Icon name="xp" size={14} label="" /> Submit Test</>}
             </button>
           </div>
         </aside>
@@ -362,12 +363,12 @@ const SkillTestPage: React.FC = () => {
           <div className="modal test-confirm-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Submit Test?</h3>
-              <button className="btn btn-ghost btn-icon btn-icon-sm" onClick={() => setShowConfirm(false)}>✕</button>
+              <button className="btn btn-ghost btn-icon btn-icon-sm" onClick={() => setShowConfirm(false)}><Icon name="close" size={14} label="Close" /></button>
             </div>
             <div className="modal-body">
               {answeredCount < questions.length ? (
                 <div className="test-confirm-warning">
-                  <span className="test-confirm-warning__icon">⚠️</span>
+                  <span className="test-confirm-warning__icon"><Icon name="warning" size={20} label="" /></span>
                   <p>
                     You have <strong>{questions.length - answeredCount} unanswered</strong> question{questions.length - answeredCount !== 1 ? "s" : ""}. Unanswered questions count as incorrect.
                     <br /><br />
@@ -386,7 +387,7 @@ const SkillTestPage: React.FC = () => {
             <div className="modal-footer">
               <button className="btn btn-ghost" onClick={() => setShowConfirm(false)}>Continue Test</button>
               <button className="btn btn-xp" onClick={handleSubmit} disabled={isSubmitting}>
-                {isSubmitting ? "Submitting..." : "⚡ Confirm Submit"}
+                {isSubmitting ? "Submitting..." : <><Icon name="xp" size={14} label="" /> Confirm Submit</>}
               </button>
             </div>
           </div>
@@ -397,7 +398,7 @@ const SkillTestPage: React.FC = () => {
       {isSubmitting && (
         <div className="test-submitting-overlay">
           <div className="test-submitting-inner">
-            <div className="test-submitting-spinner">⚡</div>
+            <div className="test-submitting-spinner"><Icon name="xp" size={32} label="" /></div>
             <h3>Analysing your answers...</h3>
             <p>Calculating score and badge</p>
           </div>

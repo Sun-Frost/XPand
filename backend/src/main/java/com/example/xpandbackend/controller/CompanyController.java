@@ -7,6 +7,7 @@ import com.example.xpandbackend.dto.response.CompanyViewUserProfileResponse;
 import com.example.xpandbackend.dto.response.UserProfileResponse;
 import com.example.xpandbackend.exception.ForbiddenException;
 import com.example.xpandbackend.exception.ResourceNotFoundException;
+import com.example.xpandbackend.models.Application;
 import com.example.xpandbackend.models.Company;
 import com.example.xpandbackend.repository.ApplicationRepository;
 import com.example.xpandbackend.repository.CompanyRepository;
@@ -16,6 +17,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/company")
@@ -54,9 +58,19 @@ public class CompanyController {
 
         Integer companyId = principal.getId();
 
-        // 🔴 SECURITY CHECK
+        // 🔴 SECURITY CHECK — company must have at least one application from this user
         if (!applicationRepository.existsByCompanyIdAndUserId(companyId, userId)) {
             throw new ForbiddenException("You can only view applicants.");
+        }
+
+        // 🔒 DEADLINE GATE — CV is locked until the job deadline has passed.
+        // Find the most recent (or any active) application from this user to this company.
+        List<Application> applications = applicationRepository.findByCompanyIdAndUserId(companyId, userId);
+        boolean allDeadlinesPassed = applications.stream()
+                .allMatch(a -> a.getJob().getDeadline() != null
+                        && a.getJob().getDeadline().isBefore(LocalDateTime.now()));
+        if (!allDeadlinesPassed) {
+            throw new ForbiddenException("CV locked until deadline.");
         }
 
         // ✅ FETCH DATA

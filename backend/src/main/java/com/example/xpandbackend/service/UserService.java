@@ -24,7 +24,6 @@ public class UserService {
     private final ProjectRepository projectRepository;
     private final ProjectSkillRepository projectSkillRepository;
     private final SkillRepository skillRepository;
-    private final ChallengeEvaluationService challengeEvaluationService;
 
     public UserProfileResponse getProfile(Integer userId) {
         User user = findUser(userId);
@@ -46,7 +45,6 @@ public class UserService {
         if (request.getProfessionalTitle() != null) user.setProfessionalTitle(request.getProfessionalTitle());
         if (request.getAboutMe() != null) user.setAboutMe(request.getAboutMe());
         userRepository.save(user);
-        challengeEvaluationService.evaluateProfileOptimization(userId);  // COMPLETE_PROFILE
         return mapToProfileResponse(user);
     }
 
@@ -132,7 +130,6 @@ public class UserService {
         cert.setUser(user);
         setCertFields(cert, request);
         certificationRepository.save(cert);
-        challengeEvaluationService.evaluateProfileOptimization(userId);  // ADD_CERTIFICATION
         return mapToCertResponse(cert);
     }
 
@@ -168,7 +165,6 @@ public class UserService {
         setProjectFields(project, request);
         projectRepository.save(project);
         saveProjectSkills(project, request.getSkillIds());
-        challengeEvaluationService.evaluateProfileOptimization(userId);  // ADD_PROJECT
         return mapToProjectResponse(project);
     }
 

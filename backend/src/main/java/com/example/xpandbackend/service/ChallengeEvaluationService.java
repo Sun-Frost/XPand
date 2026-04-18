@@ -5,8 +5,7 @@ import com.example.xpandbackend.models.Enums.BadgeLevel;
 import com.example.xpandbackend.models.Enums.ChallengeStatus;
 import com.example.xpandbackend.models.Enums.ChallengeType;
 import com.example.xpandbackend.models.Enums.TransactionType;
-import com.example.xpandbackend.repository.*;
-import lombok.RequiredArgsConstructor;
+import com.example.xpandbackend.repository.*;import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,39 +23,6 @@ public class ChallengeEvaluationService {
     private final UserRepository userRepository;
     private final XPTransactionRepository xpTransactionRepository;
     private final UserSkillVerificationRepository verificationRepository;
-    private final ProjectRepository projectRepository;
-    private final CertificationRepository certificationRepository;
-
-    // ── PROFILE & ONBOARDING ─────────────────────────────────────────────────
-
-    /**
-     * Call after any profile update or project/certification add.
-     * Evaluates COMPLETE_PROFILE, ADD_PROJECT, ADD_CERTIFICATION.
-     */
-    @Transactional
-    public void evaluateProfileOptimization(Integer userId) {
-        User user = findUser(userId);
-        if (user == null) return;
-
-        // COMPLETE_PROFILE: check that all key fields are filled
-        boolean profileComplete = user.getFirstName() != null
-                && user.getLastName() != null
-                && user.getProfessionalTitle() != null
-                && user.getAboutMe() != null
-                && user.getCountry() != null
-                && user.getProfilePicture() != null;
-        if (profileComplete) {
-            evaluate(user, ChallengeType.COMPLETE_PROFILE, 1);
-        }
-
-        // ADD_PROJECT: count user's projects
-        long projectCount = projectRepository.countByUserId(userId);
-        evaluate(user, ChallengeType.ADD_PROJECT, (int) projectCount);
-
-        // ADD_CERTIFICATION: count user's certifications
-        long certCount = certificationRepository.countByUserId(userId);
-        evaluate(user, ChallengeType.ADD_CERTIFICATION, (int) certCount);
-    }
 
     // ── SKILL PROGRESSION ────────────────────────────────────────────────────
 

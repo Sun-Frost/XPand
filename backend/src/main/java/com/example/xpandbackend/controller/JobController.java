@@ -100,4 +100,29 @@ public class JobController {
         jobService.withdrawApplication(principal.getId(), applicationId);
         return ResponseEntity.noContent().build();
     }
+    // GET /api/jobs/{jobId}/saved  →  { "saved": true/false }
+    @GetMapping("/api/jobs/{jobId}/saved")
+    public ResponseEntity<Map<String, Boolean>> isJobSaved(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @PathVariable Integer jobId) {
+        return ResponseEntity.ok(jobService.isJobSaved(principal.getId(), jobId));
+    }
+
+    // POST /api/jobs/{jobId}/saved  →  200 OK
+    @PostMapping("/api/jobs/{jobId}/saved")
+    public ResponseEntity<Void> saveJob(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @PathVariable Integer jobId) {
+        jobService.saveJob(principal.getId(), jobId);
+        return ResponseEntity.ok().build();
+    }
+
+    // DELETE /api/jobs/{jobId}/saved  →  200 OK
+    @DeleteMapping("/api/jobs/{jobId}/saved")
+    public ResponseEntity<Void> unsaveJob(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @PathVariable Integer jobId) {
+        jobService.unsaveJob(principal.getId(), jobId);
+        return ResponseEntity.ok().build();
+    }
 }

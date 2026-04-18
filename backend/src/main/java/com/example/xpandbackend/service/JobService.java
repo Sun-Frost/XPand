@@ -28,7 +28,34 @@ public class JobService {
     private final UserPurchaseRepository userPurchaseRepository;
     private final ChallengeEvaluationService challengeEvaluationService;
 
+    private final SavedJobRepository savedJobRepository;
     // -------- Job Postings --------
+
+    public Map<String, Boolean> isJobSaved(Integer userId, Integer jobId) {
+        boolean saved = savedJobRepository.existsByUserIdAndJobId(userId, jobId);
+        return Map.of("saved", saved);
+    }
+
+    @Transactional
+    public void saveJob(Integer userId, Integer jobId) {
+        // Idempotent — silently ignore duplicate saves
+        if (savedJobRepository.existsByUserIdAndJobId(userId, jobId)) return;
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found."));
+        JobPosting job = findJob(jobId);
+
+        SavedJob savedJob = new SavedJob();
+        savedJob.setUser(user);
+        savedJob.setJob(job);
+        savedJobRepository.save(savedJob);
+    }
+
+    @Transactional
+    public void unsaveJob(Integer userId, Integer jobId) {
+        savedJobRepository.findByUserIdAndJobId(userId, jobId)
+                .ifPresent(savedJobRepository::delete);
+    }
 
     public List<JobPostingResponse> getActiveJobs() {
         return jobPostingRepository.findActiveJobs(LocalDateTime.now()).stream()
@@ -140,10 +167,22 @@ public class JobService {
                 throw new BadRequestException("Priority slot is for a different job.");
             }
 
-            long activePriorityCount = applicationRepository.countActivePrioritySlots(request.getJobId());
-            if (activePriorityCount >= 3) throw new BadRequestException("All priority slots for this job are taken.");
+            // Resolve the integer rank from the purchase's SlotRank enum.
+            // FIRST=1 (top, 150 XP), SECOND=2 (mid, 120 XP), THIRD=3 (base, 100 XP).
+            SlotRank slotRank = purchase.getSlotRank();
+            if (slotRank == null) throw new BadRequestException("Purchase has no slot rank.");
+            int rank = switch (slotRank) {
+                case FIRST  -> 1;
+                case SECOND -> 2;
+                case THIRD  -> 3;
+            };
 
-            int rank = (int) activePriorityCount + 1;
+            // Check that this specific rank slot is not already taken for this job.
+            boolean rankTaken = applicationRepository
+                    .existsByJobIdAndPrioritySlotRank(request.getJobId(), rank);
+            if (rankTaken) throw new BadRequestException(
+                    "Priority slot rank " + rank + " is already taken for this job.");
+
             application.setPrioritySlotRank(rank);
             purchase.setIsUsed(true);
             userPurchaseRepository.save(purchase);
@@ -190,6 +229,13 @@ public class JobService {
         Application application = applicationRepository.findById(applicationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Application not found."));
         assertCompanyOwns(application.getJob(), companyId);
+
+        // 🔒 DEADLINE GATE — decisions are locked until the job deadline has passed.
+        if (application.getJob().getDeadline() != null
+                && application.getJob().getDeadline().isAfter(LocalDateTime.now())) {
+            throw new ForbiddenException("Decisions locked until deadline.");
+        }
+
         application.setStatus(status);
         applicationRepository.save(application);
 

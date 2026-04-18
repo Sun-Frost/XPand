@@ -19,7 +19,8 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
-    @Column(name = "password_hash", nullable = false)
+    // Nullable: Google-OAuth users have no password
+    @Column(name = "password_hash")
     private String passwordHash;
 
     private String firstName;
@@ -39,7 +40,7 @@ public class User {
     @Column(nullable = false)
     private Integer xpBalance = 0;
 
-    // ── NEW: login tracking for challenge evaluation ──────────────────────────
+    // ── Login tracking for challenge evaluation ───────────────────────────────
     @Column
     private LocalDateTime lastLoginDate;
 
@@ -48,6 +49,31 @@ public class User {
 
     @Column(columnDefinition = "integer default 0")
     private Integer loginsThisWeek = 0;
+
+    // ── Email verification ────────────────────────────────────────────────────
+    /** True once the user submits the correct 6-digit verification code. */
+    @Column(nullable = false)
+    private boolean emailVerified = false;
+
+    /**
+     * 6-digit numeric code (stored as String to preserve leading zeros) sent to
+     * the user's email at registration and on resend.  Cleared after verification.
+     */
+    @Column
+    private String verificationCode;
+
+    // ── OAuth ─────────────────────────────────────────────────────────────────
+    /**
+     * Authentication provider.  LOCAL = email/password.  GOOGLE = OAuth.
+     * Stored as a string so new providers can be added without a DB migration.
+     */
+    @Column(nullable = false)
+    private String provider = "LOCAL";
+
+    /** Google's unique user id (sub claim) — null for LOCAL users. */
+    @Column
+    private String providerId;
+
     // ─────────────────────────────────────────────────────────────────────────
 
     @Column(nullable = false, updatable = false)

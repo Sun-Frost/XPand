@@ -18,14 +18,16 @@ public class EmailService {
     @Value("${app.frontend-url}")
     private String frontendUrl;
 
+    // ── Existing methods — unchanged ──────────────────────────────────────────
+
     public void sendPasswordResetEmail(String to, String token) {
         String resetLink = frontendUrl + "/reset-password?token=" + token;
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);
         message.setTo(to);
         message.setSubject("XPand - Password Reset Request");
-        message.setText("Click the link below to reset your password. This link expires in 1 hour.\n\n" + resetLink
-                + "\n\nIf you did not request this, please ignore this email.");
+        message.setText("Click the link below to reset your password. This link expires in 1 hour.\n\n"
+                + resetLink + "\n\nIf you did not request this, please ignore this email.");
         mailSender.send(message);
     }
 
@@ -55,6 +57,57 @@ public class EmailService {
         message.setTo(to);
         message.setSubject("XPand - Account Suspended");
         message.setText("Your XPand account has been suspended. Please contact support for more information.");
+        mailSender.send(message);
+    }
+
+    // ── Email verification — USER ─────────────────────────────────────────────
+
+    /**
+     * Sends a verification email containing a 6-digit code.
+     * The user enters this code on the /verify page (or inline after registration).
+     *
+     * @param to   recipient email address
+     * @param code 6-digit numeric code stored on the User entity
+     */
+    public void sendVerificationEmail(String to, String code) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(from);
+        message.setTo(to);
+        message.setSubject("XPand - Your Verification Code");
+        message.setText(
+                "Welcome to XPand!\n\n"
+                        + "Your email verification code is:\n\n"
+                        + "    " + code + "\n\n"
+                        + "Enter this code on the verification page to activate your account.\n"
+                        + "This code expires in 24 hours.\n\n"
+                        + "If you did not create an account, please ignore this email."
+        );
+        mailSender.send(message);
+    }
+
+    // ── Email verification — COMPANY ──────────────────────────────────────────
+
+    /**
+     * Sends a verification email with a 6-digit code to a newly registered company.
+     *
+     * @param to          company email address
+     * @param companyName company display name (used in the email body)
+     * @param code        6-digit numeric code stored on the Company entity
+     */
+    public void sendCompanyVerificationEmail(String to, String companyName, String code) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(from);
+        message.setTo(to);
+        message.setSubject("XPand - Your Company Verification Code");
+        message.setText(
+                "Welcome to XPand, " + companyName + "!\n\n"
+                        + "Your email verification code is:\n\n"
+                        + "    " + code + "\n\n"
+                        + "Enter this code on the verification page to confirm your email address.\n"
+                        + "This code expires in 24 hours.\n\n"
+                        + "Once verified, your account will be reviewed for admin approval.\n\n"
+                        + "If you did not create an account, please ignore this email."
+        );
         mailSender.send(message);
     }
 }

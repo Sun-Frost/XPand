@@ -27,4 +27,15 @@ public interface ApplicationRepository extends JpaRepository<Application, Intege
 """)
     boolean existsByCompanyIdAndUserId(@Param("companyId") Integer companyId,
                                        @Param("userId") Integer userId);
+
+    @Query("SELECT a FROM Application a WHERE a.job.company.id = :companyId AND a.user.id = :userId")
+    List<Application> findByCompanyIdAndUserId(
+            @Param("companyId") Integer companyId,
+            @Param("userId") Integer userId);
+
+    boolean existsByJobIdAndPrioritySlotRank(Integer jobId, Integer prioritySlotRank);
+
+
+
+
 }

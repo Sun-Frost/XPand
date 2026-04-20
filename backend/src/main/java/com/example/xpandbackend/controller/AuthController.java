@@ -4,6 +4,7 @@ import com.example.xpandbackend.dto.request.*;
 import com.example.xpandbackend.dto.response.AuthResponse;
 import com.example.xpandbackend.security.AuthenticatedUser;
 import com.example.xpandbackend.service.AuthService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -21,12 +22,12 @@ public class AuthController {
     // ── Registration ──────────────────────────────────────────────────────────
 
     @PostMapping("/user/register")
-    public ResponseEntity<AuthResponse> registerUser(@RequestBody RegisterUserRequest request) {
+    public ResponseEntity<AuthResponse> registerUser(@Valid @RequestBody RegisterUserRequest request) {
         return ResponseEntity.ok(authService.registerUser(request));
     }
 
     @PostMapping("/company/register")
-    public ResponseEntity<AuthResponse> registerCompany(@RequestBody RegisterCompanyRequest request) {
+    public ResponseEntity<AuthResponse> registerCompany(@Valid @RequestBody RegisterCompanyRequest request) {
         return ResponseEntity.ok(authService.registerCompany(request));
     }
 
@@ -47,24 +48,61 @@ public class AuthController {
         return ResponseEntity.ok(authService.loginAdmin(request));
     }
 
-    // ── Password ──────────────────────────────────────────────────────────────
+    // ── Forgot / reset password ───────────────────────────────────────────────
 
+    /**
+     * Step 1 — user supplies their email.
+     * Generates a 6-digit code, stores it in verificationCode, and emails it.
+     * Always returns 200 regardless of whether the email exists (prevents enumeration).
+     *
+     * POST /api/auth/forgot-password
+     * Body: { "email": "user@example.com" }
+     */
     @PostMapping("/forgot-password")
-    public ResponseEntity<String> forgotPassword(@RequestBody ForgotPasswordRequest request) {
+    public ResponseEntity<Map<String, String>> forgotPassword(
+            @RequestBody ForgotPasswordRequest request) {
         authService.forgotPassword(request);
-        return ResponseEntity.ok("If the email exists, a reset link has been sent.");
+        return ResponseEntity.ok(Map.of(
+                "message", "If that email is registered, a 6-digit reset code has been sent."));
     }
 
-    @PostMapping("/reset-password")
-    public ResponseEntity<String> resetPassword(@RequestBody ResetPasswordRequest request) {
-        authService.resetPassword(request);
-        return ResponseEntity.ok("Password reset successfully.");
+    /**
+     * Step 2 — user supplies email + 6-digit code to verify it is correct
+     * BEFORE being allowed to set a new password.
+     *
+     * Returns 200 on success, 400 with { "message": "..." } on bad/expired code.
+     *
+     * POST /api/auth/verify-reset-code
+     * Body: { "email": "user@example.com", "code": "482910" }
+     */
+    @PostMapping("/verify-reset-code")
+    public ResponseEntity<Map<String, String>> verifyResetCode(
+            @Valid @RequestBody VerifyResetCodeRequest request) {
+        authService.verifyResetCode(request);
+        return ResponseEntity.ok(Map.of("message", "Code verified. You may now set a new password."));
     }
+
+    /**
+     * Step 3 — user supplies email + 6-digit code + new password.
+     * Re-validates the code (idempotent, prevents replay if user goes back)
+     * and sets the new password.
+     *
+     * POST /api/auth/reset-password
+     * Body: { "email": "user@example.com", "code": "482910", "newPassword": "..." }
+     */
+    @PostMapping("/reset-password")
+    public ResponseEntity<Map<String, String>> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(Map.of("message", "Password reset successfully."));
+    }
+
+    // ── Change password (authenticated) ──────────────────────────────────────
 
     @PostMapping("/user/change-password")
     public ResponseEntity<String> changeUserPassword(
             @AuthenticationPrincipal AuthenticatedUser principal,
-            @RequestBody ChangePasswordRequest request) {
+            @Valid @RequestBody ChangePasswordRequest request) {
         authService.changeUserPassword(principal.getId(), request);
         return ResponseEntity.ok("Password changed successfully.");
     }
@@ -72,34 +110,19 @@ public class AuthController {
     @PostMapping("/company/change-password")
     public ResponseEntity<String> changeCompanyPassword(
             @AuthenticationPrincipal AuthenticatedUser principal,
-            @RequestBody ChangePasswordRequest request) {
+            @Valid @RequestBody ChangePasswordRequest request) {
         authService.changeCompanyPassword(principal.getId(), request);
         return ResponseEntity.ok("Password changed successfully.");
     }
 
     // ── Email verification ────────────────────────────────────────────────────
 
-    /**
-     * Verifies a user or company email using the 6-digit code they received.
-     *
-     * POST /api/auth/verify
-     * Body: { "email": "user@example.com", "code": "482910" }
-     *
-     * Returns 200 on success, 400 if the code is wrong or the email is unknown.
-     */
     @PostMapping("/verify")
     public ResponseEntity<Map<String, String>> verifyEmail(@RequestBody VerifyCodeRequest request) {
         authService.verifyEmail(request);
         return ResponseEntity.ok(Map.of("message", "Email verified successfully. You can now log in."));
     }
 
-    /**
-     * Generates a fresh 6-digit code and resends the verification email.
-     * Always returns 200 — safe to call even with an unknown email (prevents enumeration).
-     *
-     * POST /api/auth/resend-verification
-     * Body: { "email": "user@example.com" }
-     */
     @PostMapping("/resend-verification")
     public ResponseEntity<Map<String, String>> resendVerification(
             @RequestBody ResendVerificationRequest request) {

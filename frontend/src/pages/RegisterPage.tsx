@@ -83,9 +83,42 @@ const STRENGTH_META: Record<StrengthLevel, { label: string; className: string }>
   3: { label: "Strong", className: "strength--strong" },
 };
 
+// Password requirement checklist shown below the password field
+const PasswordRequirements: React.FC<{ password: string }> = ({ password }) => {
+  const checks = [
+    { label: "At least 8 characters", met: password.length >= 8 },
+    { label: "One uppercase letter (A–Z)", met: /[A-Z]/.test(password) },
+    { label: "One lowercase letter (a–z)", met: /[a-z]/.test(password) },
+    { label: "One number (0–9)", met: /\d/.test(password) },
+    { label: "One special character (!@#$…)", met: /[^A-Za-z\d]/.test(password) },
+  ];
+  return (
+    <ul className="reg-pw-requirements">
+      {checks.map(({ label, met }) => (
+        <li key={label} className={`reg-pw-req ${met ? "reg-pw-req--met" : ""}`}>
+          <span className="reg-pw-req__icon">{met ? "✓" : "○"}</span>
+          {label}
+        </li>
+      ))}
+    </ul>
+  );
+};
+
 // ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------
+
+const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
+
+const getPasswordError = (pw: string): string => {
+  if (!pw) return "Password is required.";
+  if (pw.length < 8) return "Password must be at least 8 characters.";
+  if (!/[A-Z]/.test(pw)) return "Password must contain at least one uppercase letter.";
+  if (!/[a-z]/.test(pw)) return "Password must contain at least one lowercase letter.";
+  if (!/\d/.test(pw)) return "Password must contain at least one number.";
+  if (!/[^A-Za-z\d]/.test(pw)) return "Password must contain at least one special character.";
+  return "";
+};
 
 const validateAccount = (f: AccountFields): AccountErrors => {
   const e: AccountErrors = {};
@@ -95,8 +128,8 @@ const validateAccount = (f: AccountFields): AccountErrors => {
   else if (f.lastName.trim().length < 2) e.lastName = "Must be at least 2 characters.";
   if (!f.email.trim()) e.email = "Email is required.";
   else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) e.email = "Enter a valid email address.";
-  if (!f.password) e.password = "Password is required.";
-  else if (f.password.length < 8) e.password = "Password must be at least 8 characters.";
+  const pwErr = getPasswordError(f.password);
+  if (pwErr) e.password = pwErr;
   if (!f.confirmPassword) e.confirmPassword = "Please confirm your password.";
   else if (f.confirmPassword !== f.password) e.confirmPassword = "Passwords do not match.";
   return e;
@@ -107,8 +140,8 @@ const validateCompany = (f: CompanyFields): CompanyErrors => {
   if (!f.companyName.trim()) e.companyName = "Company name is required.";
   if (!f.email.trim()) e.email = "Email is required.";
   else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) e.email = "Enter a valid email address.";
-  if (!f.password) e.password = "Password is required.";
-  else if (f.password.length < 8) e.password = "Must be at least 8 characters.";
+  const pwErr = getPasswordError(f.password);
+  if (pwErr) e.password = pwErr;
   if (!f.confirmPassword) e.confirmPassword = "Please confirm your password.";
   else if (f.confirmPassword !== f.password) e.confirmPassword = "Passwords do not match.";
   if (!f.description.trim()) e.description = "Description is required.";
@@ -930,6 +963,8 @@ const RegisterPage: React.FC = () => {
               </div>
             )}
 
+            {account.password && <PasswordRequirements password={account.password} />}
+
             <FormField id="confirmPassword" label="Confirm Password"
               type={showConfirm ? "text" : "password"} placeholder="Repeat your password"
               value={account.confirmPassword} error={accountErrors.confirmPassword}
@@ -1296,6 +1331,22 @@ const pageStyles = `
     .register-name-row { grid-template-columns: 1fr; }
     .reg-step-actions { flex-direction: column-reverse; }
     .register-card__header { padding: var(--space-6) var(--space-5) var(--space-2); }
+  }
+
+  /* ── Password requirement checklist ─────────────────────────────────────── */
+  .reg-pw-requirements {
+    list-style: none; margin: calc(var(--space-1) * -1) 0 0; padding: 0;
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .reg-pw-req {
+    display: flex; align-items: center; gap: var(--space-2);
+    font-size: var(--text-xs); color: var(--color-text-muted);
+    transition: color 0.2s;
+  }
+  .reg-pw-req--met { color: var(--color-success, #34D399); }
+  .reg-pw-req__icon {
+    font-size: 10px; font-family: var(--font-mono);
+    width: 12px; text-align: center; flex-shrink: 0;
   }
 `;
 

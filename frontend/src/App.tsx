@@ -43,6 +43,7 @@ import AdminStorePage      from "./pages/admin/AdminStorePage";
 import AdminSkillsPage     from "./pages/admin/AdminSkillsPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
 import OAuthCallbackPage from "./pages/OAuthCallbackPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 // ---------------------------------------------------------------------------
 // Auth guards — token + role aware
 // ---------------------------------------------------------------------------
@@ -90,6 +91,8 @@ const AppRoutes: React.FC = () => {
       <Route path="/landing" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       
       <Route path="/verify"          element={<VerifyEmailPage />} />
       <Route path="/oauth-callback"  element={<OAuthCallbackPage />} />

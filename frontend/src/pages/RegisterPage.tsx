@@ -653,7 +653,8 @@ const SixDigitVerify: React.FC<{
 const UserVerifyPending: React.FC<{
   email: string;
   onGoToLogin: () => void;
-}> = ({ email, onGoToLogin }) => {
+  onContinueSetup?: () => void;
+}> = ({ email, onGoToLogin, onContinueSetup }) => {
   const [done, setDone] = React.useState(false);
 
   if (done) {
@@ -664,9 +665,20 @@ const UserVerifyPending: React.FC<{
           <div className="register-success">
             <div className="register-success__icon">🎉</div>
             <h2 className="register-success__title">Email Verified!</h2>
-            <p className="register-success__message">Your account is active. You can now sign in.</p>
-            <button type="button" className="btn btn-primary btn-lg" onClick={onGoToLogin}>
-              Go to Login
+            <p className="register-success__message">
+              Your account is active! Complete your profile and select skills to get discovered by employers faster.
+            </p>
+            {onContinueSetup && (
+              <button
+                type="button"
+                className="btn btn-primary btn-lg w-full"
+                onClick={onContinueSetup}
+              >
+                Complete Profile Setup →
+              </button>
+            )}
+            <button type="button" className={onContinueSetup ? "btn btn-ghost btn-lg w-full" : "btn btn-primary btn-lg"} onClick={onGoToLogin}>
+              {onContinueSetup ? "Skip — Go to Login" : "Go to Login"}
             </button>
           </div>
         </div>
@@ -744,6 +756,7 @@ const RegisterPage: React.FC = () => {
   const [role, setRole] = useState<Role | null>(null);
   const [done, setDone] = useState<"user-verify" | "company-verify" | null>(null);
   const [registeredEmail, setRegisteredEmail] = useState("");
+  const [postVerify, setPostVerify] = useState(false); // true when continuing setup after email verification
 
   // User flow state
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -847,7 +860,11 @@ const RegisterPage: React.FC = () => {
   const handleFinish = () => {
     if (selectedSkillIds.size > 0)
       localStorage.setItem("onboarding_skill_ids", JSON.stringify([...selectedSkillIds]));
-    setDone("user-verify");
+    if (postVerify) {
+      navigate("/dashboard");
+    } else {
+      setDone("user-verify");
+    }
   };
 
   const filteredSkills = skills.filter(s =>
@@ -865,6 +882,25 @@ const RegisterPage: React.FC = () => {
     <UserVerifyPending
       email={registeredEmail}
       onGoToLogin={() => navigate("/login")}
+      onContinueSetup={async () => {
+        // Auto-login with the credentials from step 1, then continue to step 2
+        try {
+          const loginData = await post<{ token: string; role: string; id: number; email: string }>(
+            "/auth/user/login",
+            { email: account.email.trim(), password: account.password }
+          );
+          if (loginData?.token) {
+            localStorage.setItem("access_token", loginData.token);
+          }
+        } catch {
+          // Login failed — redirect to login page so user can sign in manually
+          navigate("/login");
+          return;
+        }
+        setDone(null);
+        setPostVerify(true);
+        setStep(2);
+      }}
     />
   );
   if (done === "company-verify") return (

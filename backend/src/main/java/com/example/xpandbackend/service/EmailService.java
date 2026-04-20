@@ -20,17 +20,6 @@ public class EmailService {
 
     // ── Existing methods — unchanged ──────────────────────────────────────────
 
-    public void sendPasswordResetEmail(String to, String token) {
-        String resetLink = frontendUrl + "/reset-password?token=" + token;
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(from);
-        message.setTo(to);
-        message.setSubject("XPand - Password Reset Request");
-        message.setText("Click the link below to reset your password. This link expires in 1 hour.\n\n"
-                + resetLink + "\n\nIf you did not request this, please ignore this email.");
-        mailSender.send(message);
-    }
-
     public void sendCompanyApprovalEmail(String to, String companyName) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);
@@ -62,13 +51,6 @@ public class EmailService {
 
     // ── Email verification — USER ─────────────────────────────────────────────
 
-    /**
-     * Sends a verification email containing a 6-digit code.
-     * The user enters this code on the /verify page (or inline after registration).
-     *
-     * @param to   recipient email address
-     * @param code 6-digit numeric code stored on the User entity
-     */
     public void sendVerificationEmail(String to, String code) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);
@@ -87,13 +69,6 @@ public class EmailService {
 
     // ── Email verification — COMPANY ──────────────────────────────────────────
 
-    /**
-     * Sends a verification email with a 6-digit code to a newly registered company.
-     *
-     * @param to          company email address
-     * @param companyName company display name (used in the email body)
-     * @param code        6-digit numeric code stored on the Company entity
-     */
     public void sendCompanyVerificationEmail(String to, String companyName, String code) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);
@@ -107,6 +82,50 @@ public class EmailService {
                         + "This code expires in 24 hours.\n\n"
                         + "Once verified, your account will be reviewed for admin approval.\n\n"
                         + "If you did not create an account, please ignore this email."
+        );
+        mailSender.send(message);
+    }
+
+    // ── Password reset — USER ─────────────────────────────────────────────────
+
+    /**
+     * Sends a 6-digit password-reset code to a registered (LOCAL) user.
+     * The code is stored in user.verificationCode and expires after 15 minutes
+     * (enforced in AuthService, not here).
+     */
+    public void sendPasswordResetEmail(String to, String code) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(from);
+        message.setTo(to);
+        message.setSubject("XPand - Password Reset Code");
+        message.setText(
+                "You requested a password reset for your XPand account.\n\n"
+                        + "Your password reset code is:\n\n"
+                        + "    " + code + "\n\n"
+                        + "Enter this code on the password reset page. It expires in 15 minutes.\n\n"
+                        + "If you did not request a password reset, please ignore this email.\n"
+                        + "Your password will not change unless you complete the process."
+        );
+        mailSender.send(message);
+    }
+
+    // ── Password reset — COMPANY ──────────────────────────────────────────────
+
+    /**
+     * Sends a 6-digit password-reset code to a registered (LOCAL) company.
+     */
+    public void sendCompanyPasswordResetEmail(String to, String companyName, String code) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(from);
+        message.setTo(to);
+        message.setSubject("XPand - Company Password Reset Code");
+        message.setText(
+                "You requested a password reset for the XPand company account: " + companyName + ".\n\n"
+                        + "Your password reset code is:\n\n"
+                        + "    " + code + "\n\n"
+                        + "Enter this code on the password reset page. It expires in 15 minutes.\n\n"
+                        + "If you did not request a password reset, please ignore this email.\n"
+                        + "Your password will not change unless you complete the process."
         );
         mailSender.send(message);
     }

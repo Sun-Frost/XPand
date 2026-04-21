@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import CompanyPageLayout from "../../components/company/companyPageLayout";
 import { Icon, type IconName } from "../../components/ui/Icon";
+import PageHeader, { PAGE_CONFIGS } from "../../components/ui/PageHeader";
 import { useCompanyProfile, useCompanyJobs } from "../../hooks/company/useCompany";
 import type { JobPostingResponse, ApplicationStatus } from "../../hooks/company/useCompany";
 
@@ -85,24 +86,17 @@ const CompanyDashboardPage: React.FC = () => {
   return (
     <CompanyPageLayout pageTitle="Company Dashboard">
 
-      {/* ── Header ── */}
-      <div className="cd-header">
-        <div className="cd-header__left">
-          {profile && !profile.isApproved && (
+      <PageHeader
+        {...PAGE_CONFIGS["company-dashboard"]}
+        right={
+          profile && !profile.isApproved ? (
             <div className="cd-pending-banner">
               <Icon name="pending" size={16} label="" />
-              <span>Your company is <strong>pending approval</strong>. You can prepare jobs but they won't be visible until approved.</span>
+              <span>Pending approval — jobs won't be visible until approved.</span>
             </div>
-          )}
-          <div className="cd-welcome">
-            <div className="cd-welcome__icon"><Icon name="job-type-full-time" size={28} label="" /></div>
-            <div>
-              <h1 className="cd-welcome__name">{profile?.companyName ?? "Company"}</h1>
-              <p className="cd-welcome__sub">{profile?.industry ?? "No industry set"}{profile?.location ? ` · ${profile.location}` : ""}</p>
-            </div>
-          </div>
-        </div>
-      </div>
+          ) : undefined
+        }
+      />
 
       {/* ── Stats ── */}
       <div className="cd-stats">
@@ -213,13 +207,6 @@ const styles = `
     font-size: var(--text-sm); color: var(--color-warning);
     margin-bottom: var(--space-4);
   }
-  /* Header */
-  .cd-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-8); flex-wrap: wrap; }
-  .cd-header__left { flex: 1; }
-  .cd-welcome { display: flex; align-items: center; gap: var(--space-4); }
-  .cd-welcome__icon { font-size: 2.5rem; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; background: var(--color-bg-elevated); border: 1px solid var(--color-border-default); border-radius: var(--radius-xl); }
-  .cd-welcome__name { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: var(--weight-bold); color: var(--color-text-primary); margin: 0; }
-  .cd-welcome__sub { color: var(--color-text-muted); font-size: var(--text-sm); margin-top: 2px; }
   /* Stats */
   .cd-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); margin-bottom: var(--space-8); }
   .cd-stat { background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-xl); padding: var(--space-5); display: flex; align-items: center; gap: var(--space-4); transition: all 160ms ease; }

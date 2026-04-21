@@ -7,6 +7,7 @@ import { get } from "../../api/axios";
 import type { StoreItemWithMeta, UserPurchaseResponse } from "../../hooks/user/useStore";
 import type { ApplicationResponse } from "../../hooks/user/useApplications";
 import PageHeader, { PAGE_CONFIGS } from "../../components/ui/PageHeader";
+import Modal from "../../components/ui/Modal";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -100,7 +101,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
   };
 
   return (
-    <div className="store-modal-backdrop" onClick={onClose}>
+    <Modal onClose={onClose}>
       <div className="store-modal" onClick={(e) => e.stopPropagation()}>
 
         <div className="store-modal__header" style={{ background: accent.gradient }}>
@@ -261,7 +262,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 
@@ -708,7 +709,6 @@ const styles = `
   .sc__cta--open:hover { filter:brightness(1.2); transform:translateY(-1px); }
 
   /* ═══ PURCHASE MODAL ════════════════════════════════════════ */
-  .store-modal-backdrop { position:fixed; top:var(--layout-navbar-height,60px); bottom:var(--layout-bottom-height,64px); left:0; right:0; background:rgba(0,0,0,.82); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; z-index:150; padding:16px; overflow-y:auto; animation:sm-fade .15s ease-out; }
   @keyframes sm-fade { from{opacity:0} to{opacity:1} }
   .store-modal { position:relative; width:100%; max-width:540px; max-height:100%; display:flex; flex-direction:column; background:var(--color-bg-surface); border:1px solid var(--color-border-strong); border-radius:20px; box-shadow:0 24px 80px #000000cc; animation:sm-slide .2s cubic-bezier(.34,1.56,.64,1); overflow:hidden; }
   @keyframes sm-slide { from{transform:translateY(18px);opacity:0} to{transform:translateY(0);opacity:1} }
@@ -785,7 +785,6 @@ const styles = `
   }
   @media (max-width:640px) {
     .store-grid { grid-template-columns:1fr; }
-    .store-modal-backdrop { padding:8px; }
     .how-strip { gap:6px; }
     .how-strip__arrow { transform:rotate(90deg); }
   }

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageLayout from "../../components/user/PageLayout";
 import { Icon, type IconName } from "../../components/ui/Icon";
+import PageHeader, { PAGE_CONFIGS } from "../../components/ui/PageHeader";
 import {
   useProfile,
   type UpdateProfilePayload,
@@ -12,7 +13,7 @@ import {
 } from "../../hooks/user/useProfile";
 import { useSkills, type BadgeLevel } from "../../hooks/user/useSkills";
 import { CITIES } from "../../constants/cities";
-
+import Modal from "../../components/ui/Modal";
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -55,11 +56,11 @@ const Skeleton: React.FC<{ h?: number; w?: string; radius?: string }> = ({ h = 2
 );
 
 // ---------------------------------------------------------------------------
-// Modal shell
+// Modal shell — uses Portal so navbar/dock never overlap
 // ---------------------------------------------------------------------------
 
-const Modal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
-  <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+const ModalShell: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
+  <Modal onClose={onClose}>
     <div className="modal">
       <div className="modal-header">
         <h3>{title}</h3>
@@ -67,7 +68,7 @@ const Modal: React.FC<{ title: string; onClose: () => void; children: React.Reac
       </div>
       {children}
     </div>
-  </div>
+  </Modal>
 );
 
 const MField: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
@@ -98,7 +99,7 @@ const EditProfileModal: React.FC<{
   };
 
   return (
-    <Modal title="Edit Profile" onClose={onClose}>
+    <ModalShell title="Edit Profile" onClose={onClose}>
       <div className="modal-body prof-modal-grid">
         <MField label="First Name"><input className="input" value={form.firstName ?? ""} onChange={set("firstName")} /></MField>
         <MField label="Last Name"><input className="input" value={form.lastName ?? ""} onChange={set("lastName")} /></MField>
@@ -136,7 +137,7 @@ const EditProfileModal: React.FC<{
         <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
         <button className="btn btn-primary" onClick={handleSave} disabled={isSaving}>{isSaving ? "Saving…" : "Save Changes"}</button>
       </div>
-    </Modal>
+    </ModalShell>
   );
 };
 
@@ -169,7 +170,7 @@ const EducationModal: React.FC<{
   };
 
   return (
-    <Modal title={initial === EMPTY_EDU ? "Add Education" : "Edit Education"} onClose={onClose}>
+    <ModalShell title={initial === EMPTY_EDU ? "Add Education" : "Edit Education"} onClose={onClose}>
       <div className="modal-body prof-modal-grid">
         <MField label="Institution *">
           <input className={`input${fieldErrors.institutionName ? " input-error" : ""}`} value={form.institutionName}
@@ -205,7 +206,7 @@ const EducationModal: React.FC<{
         <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
         <button className="btn btn-primary" onClick={handleSave} disabled={isSaving}>{isSaving ? "Saving…" : "Save"}</button>
       </div>
-    </Modal>
+    </ModalShell>
   );
 };
 
@@ -237,7 +238,7 @@ const WorkModal: React.FC<{
   };
 
   return (
-    <Modal title={initial === EMPTY_WORK ? "Add Work Experience" : "Edit Work Experience"} onClose={onClose}>
+    <ModalShell title={initial === EMPTY_WORK ? "Add Work Experience" : "Edit Work Experience"} onClose={onClose}>
       <div className="modal-body prof-modal-grid">
         <MField label="Job Title *">
           <input className={`input${fieldErrors.jobTitle ? " input-error" : ""}`} value={form.jobTitle}
@@ -269,7 +270,7 @@ const WorkModal: React.FC<{
         <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
         <button className="btn btn-primary" onClick={handleSave} disabled={isSaving}>{isSaving ? "Saving…" : "Save"}</button>
       </div>
-    </Modal>
+    </ModalShell>
   );
 };
 
@@ -296,7 +297,7 @@ const CertModal: React.FC<{
   };
 
   return (
-    <Modal title={initial === EMPTY_CERT ? "Add Certification" : "Edit Certification"} onClose={onClose}>
+    <ModalShell title={initial === EMPTY_CERT ? "Add Certification" : "Edit Certification"} onClose={onClose}>
       <div className="modal-body prof-modal-grid">
         <MField label="Certification Name *">
           <input className={`input${fieldErrors.name ? " input-error" : ""}`} value={form.name}
@@ -323,7 +324,7 @@ const CertModal: React.FC<{
         <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
         <button className="btn btn-primary" onClick={handleSave} disabled={isSaving}>{isSaving ? "Saving…" : "Save"}</button>
       </div>
-    </Modal>
+    </ModalShell>
   );
 };
 
@@ -354,7 +355,7 @@ const ProjectModal: React.FC<{
   };
 
   return (
-    <Modal title={initial === EMPTY_PROJ ? "Add Project" : "Edit Project"} onClose={onClose}>
+    <ModalShell title={initial === EMPTY_PROJ ? "Add Project" : "Edit Project"} onClose={onClose}>
       <div className="modal-body prof-modal-grid">
         <MField label="Project Title *">
           <input className={`input${fieldErrors.title ? " input-error" : ""}`} value={form.title}
@@ -385,7 +386,7 @@ const ProjectModal: React.FC<{
         <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
         <button className="btn btn-primary" onClick={handleSave} disabled={isSaving}>{isSaving ? "Saving…" : "Save"}</button>
       </div>
-    </Modal>
+    </ModalShell>
   );
 };
 
@@ -394,7 +395,7 @@ const ProjectModal: React.FC<{
 // ---------------------------------------------------------------------------
 
 const ConfirmDelete: React.FC<{ label: string; onConfirm: () => void; onCancel: () => void }> = ({ label, onConfirm, onCancel }) => (
-  <Modal title="Confirm Delete" onClose={onCancel}>
+  <ModalShell title="Confirm Delete" onClose={onCancel}>
     <div className="modal-body">
       <p style={{ color: "var(--color-text-secondary)" }}>
         Are you sure you want to delete <strong>{label}</strong>? This cannot be undone.
@@ -404,7 +405,7 @@ const ConfirmDelete: React.FC<{ label: string; onConfirm: () => void; onCancel: 
       <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
       <button className="btn btn-danger" onClick={onConfirm}>Delete</button>
     </div>
-  </Modal>
+  </ModalShell>
 );
 
 // ---------------------------------------------------------------------------
@@ -662,6 +663,7 @@ const ProfilePage: React.FC = () => {
 
   return (
     <PageLayout pageTitle="Profile">
+      <PageHeader {...PAGE_CONFIGS.profile} />
       {saveSuccess && <div className="prof-toast"> <Icon name="complete"/> Saved successfully</div>}
 
       {/* ── HERO ──────────────────────────────────────────────────── */}
@@ -1384,18 +1386,6 @@ const pageStyles = `
   .prof-modal-full { grid-column:1/-1; }
   .prof-textarea { resize:vertical;min-height:80px;font-family:var(--font-body); }
   .prof-modal-error { color:var(--color-danger);font-size:var(--text-sm); }
-  .modal-backdrop {
-    position: fixed;
-    top: var(--layout-navbar-height, 60px); left: 0; right: 0; bottom: 72px;
-    background: rgba(0,0,0,0.72); backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    z-index: var(--z-modal);
-    display: flex; align-items: center; justify-content: center;
-    padding: var(--space-4); overflow-y: auto;
-  }
-  .modal {
-    background: var(--color-bg-elevated);
-    border: 1px solid var(--color-border-default);
     border-radius: var(--radius-2xl);
     box-shadow: var(--shadow-xl);
     width: 100%; max-width: 560px; max-height: 100%;

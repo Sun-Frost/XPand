@@ -1,395 +1,537 @@
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState, type JSX } from "react";
 import "../assets/css/LandingPage.css";
 
-const LandingPage = () => {
-  const navigate = useNavigate();
+/* ─────────────────────────────────────────────
+   Panel definitions — sourced from real app pages
+───────────────────────────────────────────── */
+const panels = [
+  {
+    letter: "X",
+    word: "eXpose",
+    tagline: "Real Skills",
+    hook: "Stop listing skills.\nStart proving them.",
+    body: "Your abilities are visible, not buried in a resume. Verified badges in React, TypeScript, Node.js — earned through structured tests, shared directly with employers.",
+    userValue: ["Gold, Silver & Bronze badges per skill", "Badges shared directly with companies"],
+    companyValue: ["Instantly see verified competency levels", "No resume keyword guessing"],
+    accent: "violet",
+    previewType: "badges",
+  },
+  {
+    letter: "P",
+    word: "Prove",
+    tagline: "Your Ability",
+    hook: "Anyone can say it.\nFew can prove it.",
+    body: "15 questions. 15 minutes. Your result determines your badge level. 3 attempts per month — every attempt counts. Your score speaks before you do.",
+    userValue: ["Timed skill tests across Frontend, Backend, Data & Cloud", "3 monthly attempts — results are permanent"],
+    companyValue: ["Trust candidates based on verified test results", "Filter by badge tier: Bronze → Silver → Gold"],
+    accent: "cyan",
+    previewType: "test",
+  },
+  {
+    letter: "A",
+    word: "Access",
+    tagline: "Opportunities",
+    hook: "No more blind\napplications.",
+    body: "Jobs unlock based on your badge level. Earn XP through challenges and spend it in the XP Store — priority applications, salary insights, skill gap reports.",
+    userValue: ["Apply only when your badges meet the job requirements", "Spend XP on Priority Apply, Salary Insights & Reports"],
+    companyValue: ["Receive only badge-verified, qualified applicants", "Match score calculated from real skill data — not keywords"],
+    accent: "gold",
+    previewType: "access",
+  },
+  {
+    letter: "N",
+    word: "Navigate",
+    tagline: "Your Growth",
+    hook: "No guessing.\nJust direction.",
+    body: "Daily, Weekly, Streak, and Milestone challenges keep you moving. Mission tracks show exactly where you are and what to do next. XP is your fuel.",
+    userValue: ["Daily Ops, Skill Path & Weekly Push mission tracks", "See your market coverage gaps instantly"],
+    companyValue: ["Identify candidates with active growth momentum", "Track trajectory, not just current badge level"],
+    accent: "green",
+    previewType: "progress",
+  },
+  {
+    letter: "D",
+    word: "Differentiate",
+    tagline: "Yourself",
+    hook: "Be seen for\nwhat you've done.",
+    body: "Mock interviews with live sentiment analysis. AI interviewers in Good Cop or Bad Cop mode. Every completed challenge adds XP. Your profile is built entirely from proof.",
+    userValue: ["Live AI mock interviews with real-time sentiment tracking", "XP Store: priority access, reports & career perks"],
+    companyValue: ["Discover top-tier, self-improving candidates fast", "Every profile is backed by test data, not claims"],
+    accent: "purple",
+    previewType: "interview",
+  },
+];
 
+/* ─────────────────────────────────────────────
+   X — Skills Library (badge tiers from real app)
+───────────────────────────────────────────── */
+function BadgesPreview() {
+  const skills = [
+    { name: "React",      tier: "gold",   category: "Frontend" },
+    { name: "TypeScript", tier: "silver", category: "Frontend" },
+    { name: "Node.js",    tier: "bronze", category: "Backend"  },
+    { name: "PostgreSQL", tier: null,     category: "Data"     },
+  ];
+  const cfg: Record<string, { color: string; bg: string; border: string }> = {
+    gold:   { color: "var(--color-gold-light)",   bg: "var(--color-gold-bg)",   border: "var(--color-gold-border)"   },
+    silver: { color: "var(--color-silver-light)", bg: "var(--color-silver-bg)", border: "var(--color-silver-border)" },
+    bronze: { color: "var(--color-bronze-light)", bg: "var(--color-bronze-bg)", border: "var(--color-bronze-border)" },
+  };
 
   return (
-    <div className="landing-root">
-      {/* ── Background atmosphere ──────────────────────────── */}
-      <div className="landing-bg-orb landing-bg-orb-1" />
-      <div className="landing-bg-orb landing-bg-orb-2" />
-      <div className="landing-bg-grid" />
+    <div className="preview-skills">
+      <div className="prev-skills__header">
+        <span className="prev-skills__title">Skills Library</span>
+        <span className="prev-skills__coverage">Market Coverage · 75%</span>
+      </div>
+      <div className="prev-skills__track">
+        <div className="prev-skills__fill" style={{ width: "75%" }} />
+      </div>
+      <div className="prev-skills__list">
+        {skills.map((s) => (
+          <div key={s.name} className={`prev-skill-row${!s.tier ? " unverified" : ""}`}>
+            <div className="prev-skill-row__left">
+              <div
+                className="prev-skill-orb"
+                style={s.tier ? {
+                  background: cfg[s.tier].bg,
+                  borderColor: cfg[s.tier].border,
+                  color: cfg[s.tier].color,
+                } : undefined}
+              >
+                {s.tier ? "✓" : "·"}
+              </div>
+              <div>
+                <div className="prev-skill-row__name">{s.name}</div>
+                <div className="prev-skill-row__cat">{s.category}</div>
+              </div>
+            </div>
+            {s.tier ? (
+              <span className="prev-tier-pill" style={{ color: cfg[s.tier].color, background: cfg[s.tier].bg, borderColor: cfg[s.tier].border }}>
+                {s.tier.charAt(0).toUpperCase() + s.tier.slice(1)}
+              </span>
+            ) : (
+              <button className="prev-verify-btn">Verify →</button>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="prev-skills__stats">
+        <span style={{ color: "var(--color-gold-light)" }}>2 Gold</span>
+        <span style={{ color: "var(--color-silver-light)" }}>1 Silver</span>
+        <span style={{ color: "var(--color-bronze-light)" }}>1 Bronze</span>
+        <span style={{ color: "var(--color-text-muted)" }}>1 Unverified</span>
+      </div>
+    </div>
+  );
+}
 
-      {/* ── Navbar ─────────────────────────────────────────── */}
-      <nav className="landing-nav">
-        <div className="landing-nav-brand">
-          <div className="landing-nav-mark">
-            <svg width="18" height="18" viewBox="0 0 40 40" fill="none">
-              <path
-                d="M20 6 L34 20 L26 20 L26 34 L14 34 L14 20 L6 20 Z"
-                fill="url(#nav-grad)"
-              />
-              <defs>
-                <linearGradient id="nav-grad" x1="6" y1="6" x2="34" y2="34" gradientUnits="userSpaceOnUse">
-                  <stop offset="0%" stopColor="#A78BFA" />
-                  <stop offset="100%" stopColor="#22D3EE" />
-                </linearGradient>
-              </defs>
+/* ─────────────────────────────────────────────
+   P — Skill Test page (15q / 15min, 3 attempts)
+───────────────────────────────────────────── */
+function TestPreview() {
+  return (
+    <div className="preview-test">
+      <div className="prev-test__header">
+        <div>
+          <div className="prev-test__skill">TypeScript · Advanced</div>
+          <span className="prev-test__cat-badge">Frontend</span>
+        </div>
+        <div className="prev-test__timer-box">
+          <div className="prev-test__timer">12:44</div>
+          <div className="prev-test__timer-label">remaining</div>
+        </div>
+      </div>
+
+      <div className="prev-test__progress-row">
+        <div className="prev-test__track">
+          <div className="prev-test__fill" style={{ width: "33%" }} />
+        </div>
+        <span className="prev-test__q-count">Q5 / 15</span>
+      </div>
+
+      <div className="prev-test__question">
+        Which utility type makes all properties of <code>T</code> optional?
+      </div>
+
+      {[
+        { label: "A", text: "Partial<T>",   selected: true  },
+        { label: "B", text: "Required<T>",  selected: false },
+        { label: "C", text: "Readonly<T>",  selected: false },
+        { label: "D", text: "Pick<T, K>",   selected: false },
+      ].map((opt) => (
+        <div key={opt.label} className={`prev-test__option${opt.selected ? " selected" : ""}`}>
+          <span className="prev-test__opt-label">{opt.label}</span>
+          <code>{opt.text}</code>
+        </div>
+      ))}
+
+      <div className="prev-test__attempts-row">
+        <div className="prev-attempt__dots">
+          <span className="prev-attempt__dot used" />
+          <span className="prev-attempt__dot used" />
+          <span className="prev-attempt__dot" />
+        </div>
+        <span className="prev-test__attempt-label">2 of 3 monthly attempts used</span>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   A — Job Details (skill requirements + XP Store)
+───────────────────────────────────────────── */
+function AccessPreview() {
+  return (
+    <div className="preview-access">
+      <div className="prev-job">
+        <div className="prev-job__top">
+          <div>
+            <div className="prev-job__role">Senior Frontend Engineer</div>
+            <div className="prev-job__company">Vercel · Remote · Full-time</div>
+          </div>
+          {/* Match ring */}
+          <div style={{ position: "relative", width: 44, height: 44, flexShrink: 0 }}>
+            <svg viewBox="0 0 44 44" width="44" height="44" style={{ transform: "rotate(-90deg)" }}>
+              <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(45,212,160,0.12)" strokeWidth="3.5" />
+              <circle cx="22" cy="22" r="18" fill="none"
+                stroke="var(--color-green-400)" strokeWidth="3.5"
+                strokeDasharray={`${0.88 * 113} 113`}
+                strokeLinecap="round" />
             </svg>
+            <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.6875rem", fontWeight: 700, color: "var(--color-green-400)", fontFamily: "var(--font-mono)" }}>88%</span>
           </div>
-          <span className="logo-wordmark" style={{ fontSize: "1.1rem" }}>XPand</span>
         </div>
 
-        <div className="landing-nav-actions">
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => navigate("/login")}
-          >
-            Login
-          </button>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={() => navigate("/register")}
-          >
-            Get Started
-          </button>
+        <div className="prev-jd-skills-title">
+          <span className="prev-jd-star">★</span> Skill Requirements
+          <span className="prev-jd-req-count">2 / 3 verified</span>
         </div>
-      </nav>
 
-       {/* ── Hero ───────────────────────────────────────────── */}
-      <section className="landing-hero">
-        <div className="landing-hero-inner">
-
-          {/* Eyebrow badge */}
-          <div className="landing-eyebrow animate-fade-in">
-            <span className="badge badge-primary">
-              <span>✦</span> Skill-First Hiring Platform
-            </span>
+        {[
+          { name: "React",      badge: "gold",   required: true },
+          { name: "TypeScript", badge: "silver", required: true },
+          { name: "Node.js",    badge: null,     required: true },
+        ].map((s) => (
+          <div key={s.name} className={`prev-jd-skill${!s.badge && s.required ? " missing" : ""}`}>
+            <span className={`prev-jd-orb${s.badge ? " ok" : " warn"}`}>{s.badge ? "✓" : "!"}</span>
+            <span className="prev-jd-name">{s.name}</span>
+            {s.badge ? (
+              <span className={`prev-jd-tier prev-jd-tier--${s.badge}`}>{s.badge.charAt(0).toUpperCase() + s.badge.slice(1)}</span>
+            ) : (
+              <span className="prev-jd-verify">Verify now →</span>
+            )}
           </div>
+        ))}
 
-          {/* Headline */}
-          <h1 className="landing-headline animate-fade-in" style={{ animationDelay: "80ms" }}>
-            Prove Your Skills.
-            <br />
-            <span className="landing-headline-accent">Get Hired.</span>
-          </h1>
+        <div className="prev-apply-locked">
+          Verify Node.js to unlock your application
+        </div>
+      </div>
 
-          {/* Subtext */}
-          <p className="landing-subtext animate-fade-in" style={{ animationDelay: "160ms" }}>
-            XPand replaces resumes with verified skills, badges, and XP.
-            <br />
-            Employers see what you can actually do — not just what you claim.
-          </p>
+      <div className="prev-xp-store">
+        <span className="prev-store__label">⚡ XP Store</span>
+        <div className="prev-store__items">
+          <div className="prev-store__item">Priority Apply        <span>200 XP</span></div>
+          <div className="prev-store__item">Salary Insights       <span>400 XP</span></div>
+          <div className="prev-store__item">Skill Gap Report      <span>150 XP</span></div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-          {/* CTAs */}
-          <div className="landing-ctas animate-fade-in" style={{ animationDelay: "240ms" }}>
-            <button
-              className="btn btn-primary btn-lg landing-cta-primary"
-              onClick={() => navigate("/register")}
-            >
-              Create Your Profile
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
-                <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            <button
-              className="btn btn-ghost btn-lg"
-              onClick={() => navigate("/login")}
-            >
-              I already have an account
-            </button>
+/* ─────────────────────────────────────────────
+   N — Challenges (Mission Control: rank, tracks, featured mission)
+───────────────────────────────────────────── */
+function ProgressPreview() {
+  return (
+    <div className="preview-challenges">
+      {/* Mission Command strip */}
+      <div className="prev-mission-cmd">
+        <div className="prev-rank-orb">IV</div>
+        <div className="prev-rank-info">
+          <div className="prev-rank-label">Expert</div>
+          <div className="prev-rank-xp">4,820 XP total</div>
+        </div>
+        <div className="prev-rank-stats">
+          <div className="prev-stat-pill green">
+            <div className="prev-stat-val">12</div>
+            <div className="prev-stat-lbl">DONE</div>
           </div>
+          <div className="prev-stat-pill primary">
+            <div className="prev-stat-val">3</div>
+            <div className="prev-stat-lbl">ACTIVE</div>
+          </div>
+        </div>
+      </div>
 
-          {/* Social proof strip */}
-          <div className="landing-proof animate-fade-in" style={{ animationDelay: "320ms" }}>
-            <div className="landing-proof-avatars">
-              {["A", "M", "D", "R"].map((initial, i) => (
-                <div key={i} className="landing-proof-avatar" style={{ zIndex: 4 - i }}>
-                  {initial}
+      <div className="prev-xp-bar-row">
+        <div className="prev-xp-track"><div className="prev-xp-fill" style={{ width: "68%" }} /></div>
+        <span className="prev-xp-label">680 XP to Master</span>
+      </div>
+
+      {/* Mission tracks */}
+      <div className="prev-tracks">
+        {[
+          { label: "Daily Ops",   dots: ["done","done","active","active","locked","locked"], resetLabel: "resets daily" },
+          { label: "Skill Path",  dots: ["done","active","locked","locked"],                resetLabel: "ongoing"      },
+          { label: "Weekly Push", dots: ["done","done","done","active","locked"],            resetLabel: "resets weekly"},
+        ].map((track) => (
+          <div key={track.label} className="prev-track">
+            <div className="prev-track__top">
+              <span className="prev-track__label">{track.label}</span>
+              <span className="prev-track__reset">{track.resetLabel}</span>
+            </div>
+            <div className="prev-track__dots">
+              {track.dots.map((state, i) => (
+                <div key={i} className={`prev-dot prev-dot--${state}`}>
+                  {state === "done" ? "✓" : state === "active" ? String(i + 1) : "·"}
                 </div>
               ))}
             </div>
-            <p className="landing-proof-text">
-              Join <strong>2,400+</strong> verified professionals
-            </p>
           </div>
-        </div>
-
-        {/* Hero visual — floating skill cards */}
-        <div className="landing-hero-visual animate-fade-in" style={{ animationDelay: "200ms" }}>
-          <HeroVisual />
-        </div>
-      </section>
-
-      {/* ── Feature cards ──────────────────────────────────── */}
-      <section className="landing-features">
-        <div className="landing-features-label label">How it works</div>
-
-        <div className="landing-features-grid stagger">
-
-          {/* Card 1 — Skill Verification */}
-          <div className="landing-feature-card card card-interactive card-glow-cyan animate-fade-in">
-            <div className="landing-feature-icon landing-feature-icon-cyan">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 12l2 2 4-4" />
-                <path d="M12 2a10 10 0 100 20A10 10 0 0012 2z" />
-              </svg>
-            </div>
-            <div className="landing-feature-step label">Step 01</div>
-            <h3 className="landing-feature-title">Skill Verification</h3>
-            <p className="landing-feature-desc">
-              Take structured skill tests across development, design, and data.
-              Pass them and earn a verified badge — bronze, silver, or gold —
-              that proves your level.
-            </p>
-            <div className="landing-feature-footer">
-              <span className="badge badge-cyan">Verified Tests</span>
-              <span className="badge badge-muted">100+ Skills</span>
-            </div>
-          </div>
-
-          {/* Card 2 — Earn XP & Badges */}
-          <div className="landing-feature-card card card-interactive card-glow-gold animate-fade-in">
-            <div className="landing-feature-icon landing-feature-icon-gold">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-              </svg>
-            </div>
-            <div className="landing-feature-step label">Step 02</div>
-            <h3 className="landing-feature-title">Earn XP &amp; Badges</h3>
-            <p className="landing-feature-desc">
-              Every test, challenge, and verified skill earns you XP. Build your
-              profile like a character sheet — your earned XP and badges tell
-              your story without a single line of resume.
-            </p>
-            <div className="landing-feature-footer">
-              <span className="badge badge-gold">XP Currency</span>
-              <span className="badge badge-muted">3 Badge Tiers</span>
-            </div>
-          </div>
-
-          {/* Card 3 — Get Ranked */}
-          <div className="landing-feature-card card card-interactive card-glow-primary animate-fade-in">
-            <div className="landing-feature-icon landing-feature-icon-purple">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 00-3-3.87" />
-                <path d="M16 3.13a4 4 0 010 7.75" />
-              </svg>
-            </div>
-            <div className="landing-feature-step label">Step 03</div>
-            <h3 className="landing-feature-title">Get Ranked by Employers</h3>
-            <p className="landing-feature-desc">
-              Employers post jobs with required skills and badge levels. Your
-              verified profile is matched against open roles — no cover letters,
-              no guesswork. Pure skill fit.
-            </p>
-            <div className="landing-feature-footer">
-              <span className="badge badge-primary">Skill Matching</span>
-              <span className="badge badge-muted">Verified Hiring</span>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      {/* ── Bottom CTA band ────────────────────────────────── */}
-      <section className="landing-bottom-cta">
-        <div className="landing-bottom-cta-inner card card-elevated card-accent-top">
-          <div className="card-body landing-bottom-cta-body">
-            <div>
-              <h2 className="landing-bottom-title">Ready to level up?</h2>
-              <p className="landing-bottom-sub">
-                Join thousands of job seekers who let their skills speak for them.
-              </p>
-            </div>
-            <button
-              className="btn btn-xp btn-lg landing-bottom-btn"
-              onClick={() => navigate("/register")}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-              </svg>
-              Start for Free
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Footer ─────────────────────────────────────────── */}
-      <footer className="landing-footer">
-        <span className="logo-wordmark" style={{ fontSize: "0.9rem" }}>XPand</span>
-        <span className="landing-footer-sep" />
-        <span className="label" style={{ fontSize: "0.65rem" }}>
-          Level Up Your Skill Set
-        </span>
-      </footer>
-    </div>
-  );
-};
-
-export default LandingPage;
-
-/* ── Sub-components ──────────────────────────────────────── */
-
-const features = [
-  {
-    icon: "◈",
-    iconColor: "cyan",
-    title: "Skill Verification",
-    description:
-      "Take structured tests curated by industry experts. Every score is tamper-proof and timestamped — employers can trust what they see.",
-    badge: "Bronze · Silver · Gold",
-    badgeVariant: "badge-gold",
-  },
-  {
-    icon: "⬡",
-    iconColor: "primary",
-    title: "Earn XP & Badges",
-    description:
-      "Every test you pass, challenge you complete, and skill you verify earns XP. Watch your profile rank climb as your skill tree grows.",
-    badge: "+50 XP per challenge",
-    badgeVariant: "badge-cyan",
-  },
-  {
-    icon: "◎",
-    iconColor: "green",
-    title: "Get Ranked by Employers",
-    description:
-      "Companies post jobs with required skills. You're matched and ranked automatically based on verified badges — no cover letter needed.",
-    badge: "Verified match",
-    badgeVariant: "badge-success",
-  },
-];
-
-interface FeatureCardProps {
-  icon: string;
-  iconColor: string;
-  title: string;
-  description: string;
-  badge: string;
-  badgeVariant: string;
-}
-
-const FeatureCard = ({ icon, iconColor, title, description, badge, badgeVariant }: FeatureCardProps) => (
-  <div className={`landing-feature-card card card-interactive card-glow-${iconColor === "cyan" ? "cyan" : iconColor === "primary" ? "primary" : "cyan"} animate-fade-in`}>
-    <div className="card-body">
-      <div className={`landing-feature-icon landing-feature-icon--${iconColor}`}>
-        {icon}
-      </div>
-      <h3 className="landing-feature-title">{title}</h3>
-      <p className="landing-feature-desc">{description}</p>
-      <span className={`badge ${badgeVariant} mt-4`}>{badge}</span>
-    </div>
-  </div>
-);
-
-const tiers = [
-  {
-    name: "Bronze",
-    icon: "🥉",
-    cls: "bronze",
-    xp: "100 XP",
-    description: "You know the fundamentals. Employers can see you're not starting from zero.",
-  },
-  {
-    name: "Silver",
-    icon: "🥈",
-    cls: "silver",
-    xp: "250 XP",
-    description: "Solid working knowledge. You're ready to contribute from day one.",
-  },
-  {
-    name: "Gold",
-    icon: "🏆",
-    cls: "gold",
-    xp: "500 XP",
-    description: "Top-tier verified expertise. You'll stand out from every other applicant.",
-  },
-];
-
-interface TierCardProps {
-  name: string;
-  icon: string;
-  cls: string;
-  xp: string;
-  description: string;
-}
-
-const TierCard = ({ name, icon, cls, xp, description }: TierCardProps) => (
-  <div className="landing-tier-card animate-fade-in">
-    <div className={`skill-badge ${cls}`} style={{ width: "100%" }}>
-      <span className="skill-badge-icon">{icon}</span>
-      <span>{name}</span>
-    </div>
-    <div className="landing-tier-body">
-      <span className="xp-pill">
-        <span className="xp-icon">XP</span>
-        {xp}
-      </span>
-      <p className="landing-tier-desc">{description}</p>
-    </div>
-  </div>
-);
-
-/* ── Hero visual — floating XP cards ────────────────────── */
-const HeroVisual = () => (
-  <div className="hero-visual-wrap">
-    {/* Main profile card */}
-    <div className="hero-card hero-card-main card card-elevated">
-      <div className="hero-card-header">
-        <div className="avatar avatar-md" style={{ background: "var(--color-primary-glow)", color: "var(--color-primary-400)" }}>
-          AJ
-        </div>
-        <div>
-          <div className="hero-card-name">Alex Johnson</div>
-          <div className="label" style={{ fontSize: "10px" }}>Full-Stack Developer</div>
-        </div>
-        <span className="badge badge-success" style={{ marginLeft: "auto" }}>Verified</span>
-      </div>
-
-      <div className="hero-card-xp">
-        <div className="xp-display">
-          <span className="xp-icon">XP</span>
-          <span className="xp-amount">4,820</span>
-        </div>
-        <div className="label" style={{ fontSize: "10px" }}>Total earned</div>
-      </div>
-
-      <div className="hero-card-skills">
-        {[
-          { name: "React", tier: "gold" },
-          { name: "TypeScript", tier: "silver" },
-          { name: "Node.js", tier: "gold" },
-        ].map((s) => (
-          <span key={s.name} className={`badge badge-${s.tier}`}>{s.name}</span>
         ))}
       </div>
 
-      <div className="hero-card-progress">
-        <div className="flex justify-between mb-2" style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)" }}>
-          <span>Level 12 progress</span>
-          <span className="text-xp">+180 XP to next</span>
+      {/* Featured mission */}
+      <div className="prev-featured-mission">
+        <div className="prev-fm__top">
+          <span className="prev-fm__cat">DAILY</span>
+          <span className="prev-fm__xp">+150 XP</span>
+          <span className="prev-fm__timer">⏱ 4h 20m</span>
         </div>
-        <div className="progress-track progress-track-lg">
-          <div className="progress-fill progress-xp animated" style={{ width: "72%" }} />
-        </div>
+        <div className="prev-fm__title">Complete 3 skill verifications today</div>
+        <div className="prev-fm__bar"><div className="prev-fm__fill" style={{ width: "66%" }} /></div>
+        <span className="prev-fm__progress">2 / 3 · 66%</span>
       </div>
     </div>
+  );
+}
 
-    {/* Floating XP gain toast */}
-    <div className="hero-float hero-float-xp">
-      <div className="xp-display">
-        <span className="xp-icon">XP</span>
-        <span className="xp-amount-sm text-xp">+500</span>
+/* ─────────────────────────────────────────────
+   D — Mock Interview (sentiment + Good/Bad cop mode)
+───────────────────────────────────────────── */
+function InterviewPreview() {
+  return (
+    <div className="preview-interview">
+      <div className="prev-mi__header">
+        <span className="prev-mi__title">Mock Interview</span>
+        <div className="prev-mi__modes">
+          <div className="prev-mi__mode good">😊 Good Cop</div>
+          <div className="prev-mi__mode bad active">😤 Bad Cop</div>
+        </div>
       </div>
-      <span className="badge badge-gold">Gold Earned</span>
-    </div>
 
-    {/* Floating match card */}
-    <div className="hero-float hero-float-match card">
-      <div className="flex items-center gap-3">
-        <span style={{ fontSize: "1.25rem" }}>🏢</span>
-        <div>
-          <div style={{ fontSize: "var(--text-sm)", fontWeight: "var(--weight-semibold)", color: "var(--color-text-primary)" }}>
-            TechCorp
+      {/* Camera box with scanline + sentiment */}
+      <div className="prev-mi__cam">
+        <div className="prev-mi__scanline" />
+        <div className="prev-mi__sentiment-chip">
+          <span className="prev-mi__sent-dot confident" />
+          Confident
+        </div>
+        <div className="prev-mi__cam-label">Live Camera · Sentiment Active</div>
+      </div>
+
+      {/* Current question */}
+      <div className="prev-mi__q-block">
+        <div className="prev-mi__q-meta">
+          <span className="prev-mi__q-type technical">TECHNICAL</span>
+          <span className="prev-mi__q-num">Q3 / 8</span>
+        </div>
+        <div className="prev-mi__q-text">
+          Explain the event loop in Node.js and how it handles async operations.
+        </div>
+      </div>
+
+      {/* Answer status */}
+      <div className="prev-mi__answer-bar">
+        <div className="prev-mi__rec-dot" />
+        <span className="prev-mi__rec-label">Recording · 1:24</span>
+        <button className="prev-mi__next-btn">Next →</button>
+      </div>
+    </div>
+  );
+}
+
+const Previews: Record<string, () => JSX.Element> = {
+  badges:    BadgesPreview,
+  test:      TestPreview,
+  access:    AccessPreview,
+  progress:  ProgressPreview,
+  interview: InterviewPreview,
+};
+
+function frameSurface(accent: string) {
+  if (accent === "violet" || accent === "purple") return "surface-glow-primary";
+  if (accent === "cyan")  return "surface-glow-cyan";
+  if (accent === "gold")  return "surface-glow-gold";
+  if (accent === "green") return "surface-glow-green";
+  return "surface-glow-primary";
+}
+
+/* ─────────────────────────────────────────────
+   Root component
+───────────────────────────────────────────── */
+export default function LandingPage() {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const panelRefs = useRef<(HTMLElement | null)[]>([]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const onScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      setScrollProgress(scrollTop / (scrollHeight - clientHeight));
+      panelRefs.current.forEach((panel, i) => {
+        if (!panel) return;
+        const rect = panel.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        const panelCenter = rect.top - containerRect.top + rect.height / 2;
+        if (Math.abs(panelCenter - clientHeight / 2) < rect.height * 0.5) setActiveIndex(i);
+      });
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const handleCardMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const card = e.currentTarget;
+    const rect = card.getBoundingClientRect();
+    card.style.setProperty("--card-mouse-x", `${((e.clientX - rect.left) / rect.width) * 100}%`);
+    card.style.setProperty("--card-mouse-y", `${((e.clientY - rect.top) / rect.height) * 100}%`);
+  };
+
+  return (
+    <div className="landing-root" data-theme="dark">
+      <div className="ambient-canvas" aria-hidden="true" />
+
+      <nav className="lp-nav">
+        <div className="lp-nav__logo">
+          <span className="lp-nav__x">X</span>
+          <span className="lp-nav__pand">Pand</span>
+        </div>
+        <div className="lp-nav__pills">
+          {panels.map((p, i) => (
+            <button
+              key={p.letter}
+              className={`lp-nav__pill${i === activeIndex ? " active" : ""}`}
+              onClick={() => panelRefs.current[i]?.scrollIntoView({ behavior: "smooth", block: "center" })}
+            >
+              {p.letter}
+            </button>
+          ))}
+        </div>
+        <a href="#" className="btn btn-primary lp-nav__cta">Get Started</a>
+      </nav>
+
+      <div className="lp-progress-track" aria-hidden="true">
+        <div className="lp-progress-fill" style={{ height: `${scrollProgress * 100}%` }} />
+      </div>
+
+      <div className="lp-scroll-container" ref={containerRef}>
+
+        {/* ── Hero ── */}
+        <section className="lp-hero">
+          <div className="lp-hero__eyebrow">The Career OS for Verified Talent</div>
+          <h1 className="lp-hero__title">
+            {"XPAND".split("").map((char, i) => (
+              <span key={i} className="lp-hero__char" style={{ animationDelay: `${i * 80}ms` }}>{char}</span>
+            ))}
+          </h1>
+          <p className="lp-hero__sub">From invisible candidate to verified, visible, and hireable talent.</p>
+          <div className="lp-hero__scroll-hint" aria-hidden="true">
+            <span>Scroll to unfold</span>
+            <div className="lp-hero__scroll-arrow">↓</div>
           </div>
-          <div className="label" style={{ fontSize: "9px" }}>98% skill match</div>
-        </div>
+        </section>
+
+        {/* ── Panels ── */}
+        {panels.map((panel, i) => {
+          const isActive = activeIndex === i;
+          const PreviewComp = Previews[panel.previewType];
+          return (
+            <section
+              key={panel.letter}
+              ref={(el) => { panelRefs.current[i] = el; }}
+              className={`lp-panel lp-panel--${panel.accent}${isActive ? " is-active" : ""}${i < activeIndex ? " is-past" : ""}`}
+            >
+              <div className="lp-panel__bg-letter" aria-hidden="true">{panel.letter}</div>
+
+              <div className="lp-panel__inner">
+                <div className="lp-panel__content">
+                  <div className="lp-panel__letter-badge"><span>{panel.letter}</span></div>
+
+                  <div className="lp-panel__word-group">
+                    <span className={`lp-panel__word lp-panel__word--${panel.accent}`}>{panel.word}</span>
+                    <span className="lp-panel__tagline"> {panel.tagline}</span>
+                  </div>
+
+                  <h2 className="lp-panel__hook">
+                    {panel.hook.split("\n").map((line, li) => (
+                      <span key={li} className="lp-panel__hook-line">{line}</span>
+                    ))}
+                  </h2>
+
+                  <p className="lp-panel__body">{panel.body}</p>
+
+                  <div className="lp-panel__dual">
+                    <div className="lp-panel__value-card card-interactive surface-glass" onMouseMove={handleCardMouseMove}>
+                      <span className="lp-panel__value-label">For Talent</span>
+                      <ul className="lp-panel__value-list">
+                        {panel.userValue.map((v) => (
+                          <li key={v}><span className="lp-panel__check">✓</span>{v}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="lp-panel__value-card card-interactive surface-glass" onMouseMove={handleCardMouseMove}>
+                      <span className="lp-panel__value-label">For Companies</span>
+                      <ul className="lp-panel__value-list">
+                        {panel.companyValue.map((v) => (
+                          <li key={v}><span className="lp-panel__check">✓</span>{v}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="lp-panel__preview">
+                  <div className={`lp-panel__preview-frame ${frameSurface(panel.accent)}`}>
+                    <PreviewComp />
+                  </div>
+                </div>
+              </div>
+
+              {i < panels.length - 1 && (
+                <div className="lp-panel__connector" aria-hidden="true">
+                  <div className="lp-panel__connector-line" />
+                  <div className="lp-panel__connector-dot" />
+                </div>
+              )}
+            </section>
+          );
+        })}
+
+        {/* ── Finale ── */}
+        <section className="lp-finale">
+          <div className="lp-finale__word">
+            {"XPAND".split("").map((c, i) => (
+              <span key={i} className="lp-finale__char" style={{ animationDelay: `${i * 60}ms` }}>{c}</span>
+            ))}
+          </div>
+          <p className="lp-finale__sub">
+            Not a job platform. A system that verifies skills,<br />
+            guides growth, unlocks opportunities, and makes talent visible.
+          </p>
+          <div className="lp-finale__actions">
+            <a href="#" className="btn btn-primary btn-lg">Start Your Journey</a>
+            <a href="#" className="btn btn-ghost btn-lg">For Employers →</a>
+          </div>
+        </section>
+
       </div>
     </div>
-  </div>
-);
+  );
+}

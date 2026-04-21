@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import CompanyPageLayout from "../../components/company/companyPageLayout";
 import { Icon } from "../../components/ui/Icon";
+import PageHeader, { PAGE_CONFIGS } from "../../components/ui/PageHeader";
 import { useCompanyJobs } from "../../hooks/company/useCompany";
 import type { JobPostingResponse, JobStatus, JobType } from "../../hooks/company/useCompany";
 
@@ -418,28 +419,23 @@ const ManageJobsPage: React.FC = () => {
   return (
     <CompanyPageLayout pageTitle="Manage Jobs">
 
-      {/* Header */}
-      <div className="mj-header">
-        <div>
-          <h1 className="mj-page-title">Manage Jobs</h1>
-          <p className="mj-page-sub">
-            {jobs.length} posting{jobs.length !== 1 ? "s" : ""} total ·{" "}
-            <span style={{ color: "var(--color-verified, #34D399)" }}>{counts.ACTIVE} active</span>
-          </p>
-        </div>
-        <div className="mj-header__controls">
-          <button
-            className={`mj-view-btn ${viewMode === "card" ? "mj-view-btn--active" : ""}`}
-            onClick={() => setViewMode("card")}
-            title="Card view"
-          >▦</button>
-          <button
-            className={`mj-view-btn ${viewMode === "compact" ? "mj-view-btn--active" : ""}`}
-            onClick={() => setViewMode("compact")}
-            title="Compact view"
-          ><Icon name="clipboard" size={14} label="Compact view" /></button>
-        </div>
-      </div>
+      <PageHeader
+        {...PAGE_CONFIGS["company-jobs"]}
+        right={
+          <div className="mj-header__controls">
+            <button
+              className={`mj-view-btn ${viewMode === "card" ? "mj-view-btn--active" : ""}`}
+              onClick={() => setViewMode("card")}
+              title="Card view"
+            >▦</button>
+            <button
+              className={`mj-view-btn ${viewMode === "compact" ? "mj-view-btn--active" : ""}`}
+              onClick={() => setViewMode("compact")}
+              title="Compact view"
+            ><Icon name="clipboard" size={14} label="Compact view" /></button>
+          </div>
+        }
+      />
 
       {/* Stats bar */}
       <StatsBar jobs={jobs} archived={archived} />
@@ -614,10 +610,7 @@ const ManageJobsPage: React.FC = () => {
 // ---------------------------------------------------------------------------
 
 const styles = `
-  /* Header */
-  .mj-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-4); flex-wrap: wrap; }
-  .mj-page-title { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: var(--weight-bold); color: var(--color-text-primary); margin: 0; }
-  .mj-page-sub { color: var(--color-text-muted); font-size: var(--text-sm); margin-top: 3px; }
+  /* View toggle (lives in PageHeader right slot) */
   .mj-header__controls { display: flex; gap: 4px; align-items: center; }
   .mj-view-btn { padding: 6px 10px; background: transparent; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); cursor: pointer; font-size: 16px; color: var(--color-text-muted); transition: all 140ms; }
   .mj-view-btn--active { background: var(--color-bg-hover); color: var(--color-text-primary); border-color: var(--color-border-strong); }

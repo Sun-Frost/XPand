@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import CompanyPageLayout from "../../components/company/companyPageLayout";
 import { Icon } from "../../components/ui/Icon";
+import PageHeader, { PAGE_CONFIGS } from "../../components/ui/PageHeader";
 import { useCompanyProfile } from "../../hooks/company/useCompany";
 import type { UpdateCompanyProfilePayload } from "../../hooks/company/useCompany";
 import { CITIES } from "../../constants/cities";
+import Modal from "../../components/ui/Modal";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -29,7 +31,7 @@ const EditModal: React.FC<{
       setForm((p) => ({ ...p, [k]: e.target.value || null }));
 
   return (
-    <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <Modal onClose={onClose}>
       <div className="modal cp-modal">
         <div className="modal-header">
           <h3 className="cp-modal-title">Edit Company Profile</h3>
@@ -74,7 +76,7 @@ const EditModal: React.FC<{
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 
@@ -124,6 +126,17 @@ const CompanyProfilePage: React.FC = () => {
 
   return (
     <CompanyPageLayout pageTitle="Company Profile">
+
+      <PageHeader
+        {...PAGE_CONFIGS["company-profile"]}
+        right={
+          <span className={`badge ${profile.isApproved ? "badge-verified" : "badge-warning"}`}>
+            {profile.isApproved
+              ? <><Icon name="check" size={14} label="" /> Approved</>
+              : <><Icon name="pending" size={14} label="" /> Pending Approval</>}
+          </span>
+        }
+      />
 
       {saveSuccess && <div className="cp-toast"><Icon name="success" size={14} label="" /> Profile updated</div>}
 

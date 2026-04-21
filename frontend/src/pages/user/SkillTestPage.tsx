@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Icon, type IconName } from "../../components/ui/Icon";
 import { useSkillTest } from "../../hooks/user/useSkillTest";
 import type { AnswerMap, QuestionDTO } from "../../hooks/user/useSkillTest";
+import Modal from "../../components/ui/Modal";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -39,7 +40,7 @@ const AttemptWarning: React.FC<{
   onConfirm: () => void;
   onCancel: () => void;
 }> = ({ skillName, onConfirm, onCancel }) => (
-  <div className="modal-backdrop">
+  <Modal onClose={onCancel}>
     <div className="modal test-confirm-modal" onClick={(e) => e.stopPropagation()}>
       <div className="modal-header">
         <h3><Icon name="warning" size={16} label="" /> Attempt Warning</h3>
@@ -61,7 +62,7 @@ const AttemptWarning: React.FC<{
         <button className="btn btn-xp" onClick={onConfirm}><Icon name="xp" size={14} label="" /> Start Test</button>
       </div>
     </div>
-  </div>
+  </Modal>
 );
 
 // ---------------------------------------------------------------------------
@@ -359,7 +360,7 @@ const SkillTestPage: React.FC = () => {
 
       {/* ══ Confirm submit / exit modal ══ */}
       {showConfirm && (
-        <div className="modal-backdrop" onClick={() => setShowConfirm(false)}>
+        <Modal onClose={() => setShowConfirm(false)}>
           <div className="modal test-confirm-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Submit Test?</h3>
@@ -391,7 +392,7 @@ const SkillTestPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* ══ Submitting overlay ══ */}

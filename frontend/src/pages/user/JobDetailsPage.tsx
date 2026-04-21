@@ -6,6 +6,7 @@ import { useJobDetail } from "../../hooks/user/useJobs";
 import { BadgeLevel } from "../../types";
 import { get, post, del } from "../../api/axios";
 import type { UserPurchaseResponse } from "../../hooks/user/useStore";
+import Modal from "../../components/ui/Modal";
 
 // ---------------------------------------------------------------------------
 // Constants (unchanged)
@@ -428,7 +429,7 @@ const ApplyModal: React.FC<{
   }, [jobId]);
 
   return (
-    <div className="jd-modal-backdrop" onClick={onClose}>
+    <Modal onClose={onClose}>
       <div className="jd-modal animate-scale-in" onClick={(e) => e.stopPropagation()}>
 
         <div className="jd-modal__header">
@@ -555,7 +556,7 @@ const ApplyModal: React.FC<{
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 
@@ -1552,14 +1553,6 @@ const styles = `
 }
 
 /* ══ MODAL (unchanged) ════════════════════════════════════════════════ */
-.jd-modal-backdrop {
-  position: fixed; inset: 0; z-index: var(--z-modal);
-  background: rgba(0,0,0,0.65);
-  backdrop-filter: blur(8px);
-  display: flex; align-items: center; justify-content: center;
-  padding: var(--space-4);
-}
-
 .jd-modal {
   width: 100%; max-width: 440px; max-height: 90vh;
   background: var(--color-bg-elevated);
@@ -1910,7 +1903,6 @@ const styles = `
     border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
     align-self: flex-end;
   }
-  .jd-modal-backdrop { align-items: flex-end; padding: 0; }
 }
 `;
 

@@ -29,6 +29,43 @@ const STATUS_META = {
   used:   { label: "Used",  color: "#94A3B8", bg: "#94A3B812", border: "#94A3B833" },
 };
 
+// Gold / Silver / Bronze rank theming for PRIORITY_SLOT cards
+const SLOT_RANK_META: Record<string, {
+  label: string; sublabel: string; icon: IconName;
+  color: string; colorDim: string;
+  gradient: string; accentBar: string;
+  glow: string; glowCard: string;
+  border: string; infoBg: string;
+}> = {
+  FIRST: {
+    label: "1st Priority", sublabel: "Gold Slot",
+    icon: "badge-gold",
+    color: "#FCD34D", colorDim: "#FCD34D99",
+    gradient: "linear-gradient(135deg,#78490a,#3d2200)",
+    accentBar: "linear-gradient(90deg,#FCD34D,#F59E0B,#D97706)",
+    glow: "#FCD34D30", glowCard: "#FCD34D18",
+    border: "#FCD34D55", infoBg: "#FCD34D0c",
+  },
+  SECOND: {
+    label: "2nd Priority", sublabel: "Silver Slot",
+    icon: "badge-silver",
+    color: "#CBD5E1", colorDim: "#CBD5E199",
+    gradient: "linear-gradient(135deg,#2e3f55,#1a2535)",
+    accentBar: "linear-gradient(90deg,#CBD5E1,#94A3B8,#64748B)",
+    glow: "#CBD5E128", glowCard: "#CBD5E112",
+    border: "#CBD5E140", infoBg: "#CBD5E10a",
+  },
+  THIRD: {
+    label: "3rd Priority", sublabel: "Bronze Slot",
+    icon: "badge-bronze",
+    color: "#D97706", colorDim: "#D9770699",
+    gradient: "linear-gradient(135deg,#4a2800,#2a1600)",
+    accentBar: "linear-gradient(90deg,#F59E0B,#D97706,#92400E)",
+    glow: "#D9770628", glowCard: "#D9770612",
+    border: "#D9770640", infoBg: "#D977060a",
+  },
+};
+
 const FILTERS = [
   { id: "ALL",              label: "All" },
   { id: "unused",           label: "Unused" },
@@ -453,9 +490,17 @@ const PurchaseCard: React.FC<{
   onArchive: (id: number) => void;
 }> = ({ purchase, onView, isSelecting, isSelected, onToggleSelect, onArchive }) => {
   const navigate = useNavigate();
-  const meta   = TYPE_META[purchase.itemType] ?? TYPE_META.READINESS_REPORT;
-  const status = purchase.isUsed ? STATUS_META.used : STATUS_META.unused;
-  const canView = purchase.itemType === "READINESS_REPORT" || purchase.itemType === "MOCK_INTERVIEW";
+  const meta     = TYPE_META[purchase.itemType] ?? TYPE_META.READINESS_REPORT;
+  const status   = purchase.isUsed ? STATUS_META.used : STATUS_META.unused;
+  const canView  = purchase.itemType === "READINESS_REPORT" || purchase.itemType === "MOCK_INTERVIEW";
+
+  // Rank-specific theming for priority slots
+  const isPriority = purchase.itemType === "PRIORITY_SLOT";
+  const rank       = isPriority && purchase.slotRank ? SLOT_RANK_META[purchase.slotRank] ?? SLOT_RANK_META.THIRD : null;
+
+  // Card-level colour tokens — rank overrides default meta for priority cards
+  const cardColor = rank ? rank.color : meta.color;
+  const cardGlow  = rank ? rank.glow  : meta.glow;
 
   const handleView = () => {
     if (isSelecting) { onToggleSelect(purchase.id); return; }
@@ -470,11 +515,11 @@ const PurchaseCard: React.FC<{
 
   return (
     <div
-      className={`col-card ${isSelected ? "col-card--selected" : ""} ${isSelecting ? "col-card--selecting" : ""}`}
-      style={{ "--card-color": meta.color, "--card-glow": meta.glow } as React.CSSProperties}
+      className={`col-card ${isPriority && rank ? `col-card--${purchase.slotRank!.toLowerCase()}` : ""} ${isSelected ? "col-card--selected" : ""} ${isSelecting ? "col-card--selecting" : ""}`}
+      style={{ "--card-color": cardColor, "--card-glow": cardGlow } as React.CSSProperties}
       onClick={isSelecting ? () => onToggleSelect(purchase.id) : undefined}
     >
-      {/* Selection checkbox overlay */}
+      {/* Selection checkbox */}
       {isSelecting && (
         <div className="col-card__checkbox" onClick={(e) => { e.stopPropagation(); onToggleSelect(purchase.id); }}>
           <div className={`col-checkbox ${isSelected ? "col-checkbox--checked" : ""}`}>
@@ -484,39 +529,57 @@ const PurchaseCard: React.FC<{
       )}
 
       <div className="col-card__glow" />
-      <div className="col-card__accent" style={{ background: meta.gradient }} />
+
+      {/* Accent top bar — gradient for rank cards, solid for others */}
+      <div className="col-card__accent" style={{ background: rank ? rank.accentBar : meta.gradient }} />
+
       <div className="col-card__body">
         <div className="col-card__top">
-          <div className="col-card__icon-wrap" style={{ background: meta.gradient }}>
-            <span className="col-card__icon"><Icon name={meta.icon} size={24} label="" /></span>
+          {/* Icon wrap */}
+          <div className="col-card__icon-wrap" style={{ background: rank ? rank.gradient : meta.gradient, borderColor: rank ? `${rank.color}22` : undefined }}>
+            <Icon name={rank ? rank.icon : meta.icon} size={24} label="" />
           </div>
+
           <div className="col-card__header">
-            <p className="col-card__type" style={{ color: meta.color }}>{meta.label}</p>
+            <p className="col-card__type" style={{ color: cardColor }}>{meta.label}</p>
             <h3 className="col-card__name">{purchase.itemName}</h3>
           </div>
+
           <div className="col-card__status" style={{ color: status.color, background: status.bg, borderColor: status.border }}>
             <span className="col-card__status-dot" style={{ background: status.color }} />
             {status.label}
           </div>
         </div>
+
         <div className="col-card__meta">
           <span className="col-card__meta-item"><Icon name="date" size={12} label="" /> Purchased {fmtDate(purchase.purchasedAt)}</span>
           {purchase.associatedJobTitle && (
             <span className="col-card__meta-item"><Icon name="work" size={12} label="" /> {purchase.associatedJobTitle}</span>
           )}
         </div>
-        {purchase.itemType === "PRIORITY_SLOT" && (
-          <div className="col-card__slot-info">
-            <span>⭐</span>
-            <span>{purchase.isUsed ? "Slot redeemed — you were a priority applicant." : "Voucher ready — use it when applying to a job."}</span>
+
+        {/* Priority slot rank badge block */}
+        {isPriority && rank && (
+          <div className="col-card__rank-block" style={{ background: rank.infoBg, borderColor: rank.border }}>
+            <div className="col-card__rank-medal" style={{ background: rank.gradient, borderColor: `${rank.color}33` }}>
+              <Icon name={rank.icon} size={22} label="" style={{ color: rank.color } as React.CSSProperties} />
+            </div>
+            <div className="col-card__rank-info">
+              <span className="col-card__rank-label" style={{ color: rank.color }}>{rank.label}</span>
+              <span className="col-card__rank-sub" style={{ color: rank.colorDim }}>{rank.sublabel}</span>
+              <span className="col-card__rank-desc">
+                {purchase.isUsed ? "Slot redeemed — you were a priority applicant." : "Voucher ready — use it when applying to a job."}
+              </span>
+            </div>
           </div>
         )}
       </div>
+
       <div className="col-card__footer">
         {canView && !isSelecting ? (
           <button
             className="col-card__view-btn"
-            style={{ color: meta.color, borderColor: `${meta.color}44` }}
+            style={{ color: cardColor, borderColor: `${cardColor}44` }}
             onClick={(e) => { e.stopPropagation(); handleView(); }}
           >
             {purchase.itemType === "READINESS_REPORT"
@@ -524,12 +587,11 @@ const PurchaseCard: React.FC<{
               : (purchase.isUsed ? "View Feedback →" : "Start Interview →")}
           </button>
         ) : !isSelecting ? (
-          <span className="col-card__slot-label" style={{ color: purchase.isUsed ? "#94A3B8" : "#FCD34D" }}>
+          <span className="col-card__slot-label" style={{ color: rank ? rank.color : (purchase.isUsed ? "#94A3B8" : "#FCD34D") }}>
             {purchase.isUsed ? <><Icon name="check" size={12} label="" /> Redeemed</> : "Use when applying"}
           </span>
         ) : null}
 
-        {/* Archive button on card (only when NOT in bulk-select mode) */}
         {!isSelecting && (
           <button
             className="col-card__archive-btn"
@@ -667,18 +729,24 @@ const CollectionPage: React.FC = () => {
         />
       )}
 
+      {/* ── Back ─────────────────────────────────────────── */}
       <button className="col-back-btn" onClick={() => navigate("/store")}>← Back to Store</button>
 
-      {/* ── Hero ─────────────────────────────────────────── */}
+      {/* ── Hero banner ──────────────────────────────────── */}
       <div className="col-hero">
-        <div>
-          <div className="col-hero__eyebrow">
-            <span><Icon name="collection" size={16} label="" /></span>
-            <span className="col-hero__eyebrow-text">MY COLLECTION</span>
+        <div className="col-hero__noise" aria-hidden="true" />
+        <div className="col-hero__glow" aria-hidden="true" />
+
+        <div className="col-hero__content">
+          <div className="col-hero__top">
+            <span className="col-hero__pill">
+              <Icon name="collection" size={11} label="" /> MY COLLECTION
+            </span>
           </div>
           <h1 className="col-hero__title">Your Purchased Items</h1>
-          <p className="col-hero__sub">Click any card to view its content directly here.</p>
+          <p className="col-hero__sub">All your XP-redeemed career tools in one place. Click any card to view its content.</p>
         </div>
+
         {!isLoading && purchases.length > 0 && (
           <div className="col-stats">
             <div className="col-stat">
@@ -863,13 +931,17 @@ const styles = `
 .col-back-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; margin-bottom:20px; border-radius:var(--radius-lg); border:1px solid var(--color-border-default); background:var(--color-bg-surface); font-size:13px; color:var(--color-text-secondary); cursor:pointer; transition:all var(--duration-fast); }
 .col-back-btn:hover { border-color:var(--color-border-strong); color:var(--color-text-primary); }
 
-.col-hero { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin-bottom:28px; flex-wrap:wrap; }
-.col-hero__eyebrow { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
-.col-hero__eyebrow-text { font-family:var(--font-mono); font-size:10px; font-weight:700; letter-spacing:.2em; color:var(--color-text-muted); }
-.col-hero__title { font-family:var(--font-display); font-size:var(--text-3xl); font-weight:800; color:var(--color-text-primary); margin:0 0 6px; letter-spacing:-.02em; }
-.col-hero__sub { font-size:var(--text-sm); color:var(--color-text-muted); margin:0; }
+/* ── Hero banner ─────────────────────────────────── */
+.col-hero { position:relative; display:flex; align-items:center; justify-content:space-between; gap:32px; padding:36px 40px; background:linear-gradient(150deg,#0e1420,#121b2e,#0b1016); border:1px solid #ffffff10; border-radius:20px; overflow:hidden; margin-bottom:28px; flex-wrap:wrap; }
+.col-hero__noise { position:absolute; inset:0; opacity:.025; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); pointer-events:none; }
+.col-hero__glow { position:absolute; top:-80px; left:-40px; width:400px; height:300px; background:radial-gradient(ellipse,rgba(155,124,255,.12),transparent 65%); pointer-events:none; }
+.col-hero__content { position:relative; z-index:1; flex:1; min-width:0; }
+.col-hero__top { margin-bottom:12px; }
+.col-hero__pill { display:inline-flex; align-items:center; gap:7px; font-family:var(--font-mono); font-size:9px; font-weight:700; letter-spacing:.22em; color:var(--color-primary-300); background:var(--color-primary-900,#2D1C68); border:1px solid var(--color-primary-700,rgba(155,124,255,.3)); padding:3px 10px; border-radius:999px; }
+.col-hero__title { font-family:var(--font-display); font-size:clamp(1.6rem,3.5vw,2.2rem); font-weight:800; color:var(--color-text-primary); margin:0 0 8px; letter-spacing:-.025em; line-height:1.1; position:relative; z-index:1; }
+.col-hero__sub { font-size:var(--text-sm); color:var(--color-text-secondary); margin:0; line-height:1.65; max-width:480px; position:relative; z-index:1; }
 
-.col-stats { display:flex; align-items:center; gap:20px; padding:16px 20px; background:var(--color-bg-elevated); border:1px solid var(--color-border-default); border-radius:var(--radius-xl); flex-shrink:0; }
+.col-stats { position:relative; z-index:1; display:flex; align-items:center; gap:20px; padding:18px 22px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:var(--radius-xl); flex-shrink:0; backdrop-filter:blur(4px); }
 .col-stat { display:flex; flex-direction:column; align-items:center; gap:2px; }
 .col-stat__val { font-family:var(--font-mono); font-size:var(--text-2xl); font-weight:700; color:var(--color-text-primary); line-height:1; }
 .col-stat__lbl { font-family:var(--font-mono); font-size:10px; letter-spacing:.1em; color:var(--color-text-muted); text-transform:uppercase; }
@@ -937,11 +1009,32 @@ const styles = `
 .col-card__status-dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
 .col-card__meta { display:flex; flex-direction:column; gap:4px; }
 .col-card__meta-item { font-size:var(--text-xs); color:var(--color-text-muted); }
-.col-card__slot-info { display:flex; align-items:flex-start; gap:8px; padding:10px 12px; background:#FCD34D08; border:1px solid #FCD34D22; border-radius:var(--radius-lg); font-size:var(--text-xs); color:var(--color-text-muted); line-height:1.5; }
 .col-card__footer { padding:0 20px 16px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .col-card__view-btn { padding:8px 16px; border-radius:var(--radius-lg); border:1px solid; background:transparent; font-family:var(--font-mono); font-size:11px; font-weight:700; letter-spacing:.05em; cursor:pointer; transition:all var(--duration-fast); }
 .col-card__view-btn:hover { filter:brightness(1.2); transform:translateX(2px); }
 .col-card__slot-label { font-family:var(--font-mono); font-size:11px; }
+
+/* ── Priority rank block ─────────────────────────── */
+.col-card__rank-block { display:flex; align-items:center; gap:12px; padding:12px 14px; border:1px solid; border-radius:var(--radius-lg); }
+.col-card__rank-medal { width:44px; height:44px; border-radius:var(--radius-lg); border:1px solid; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.col-card__rank-info { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.col-card__rank-label { font-family:var(--font-mono); font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; line-height:1; }
+.col-card__rank-sub { font-family:var(--font-mono); font-size:10px; letter-spacing:.06em; line-height:1; }
+.col-card__rank-desc { font-size:11px; color:var(--color-text-muted); line-height:1.5; margin-top:3px; }
+
+/* ── Per-rank card overrides ─────────────────────── */
+/* Gold */
+.col-card--first { border-color:#FCD34D33; }
+.col-card--first:hover { border-color:#FCD34D88; box-shadow:0 0 32px #FCD34D20, 0 0 0 1px #FCD34D22; }
+.col-card--first .col-card__accent { height:3px; }
+
+/* Silver */
+.col-card--second { border-color:#CBD5E133; }
+.col-card--second:hover { border-color:#CBD5E177; box-shadow:0 0 28px #CBD5E118, 0 0 0 1px #CBD5E122; }
+
+/* Bronze */
+.col-card--third { border-color:#D9770633; }
+.col-card--third:hover { border-color:#D9770677; box-shadow:0 0 28px #D9770618, 0 0 0 1px #D9770622; }
 
 /* Archive button on card */
 .col-card__archive-btn { display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; border-radius:var(--radius-md); border:1px solid var(--color-border-default); background:transparent; color:var(--color-text-muted); cursor:pointer; transition:all var(--duration-fast); flex-shrink:0; margin-left:auto; }
@@ -1068,14 +1161,16 @@ const styles = `
 .cv-answer-chunk__text { font-size:12px; color:var(--color-text-muted); line-height:1.6; margin:0; }
 
 @media (max-width:900px) {
-  .col-hero { flex-direction:column; align-items:flex-start; }
+  .col-hero { flex-direction:column; align-items:flex-start; padding:28px 24px; gap:20px; }
   .col-grid { grid-template-columns:1fr; }
   .cv-answering { grid-template-columns:1fr; }
   .cv-completed-layout { grid-template-columns:1fr; }
   .cv-modal--wide { max-width:100%; }
 }
 @media (max-width:600px) {
-  .col-hero__title { font-size:var(--text-2xl); }
+  .col-hero { padding:22px 18px; }
+  .col-hero__title { font-size:1.5rem; }
+  .col-stats { width:100%; justify-content:space-between; }
   .cv-body { padding:16px; }
   .cv-report-banner { flex-direction:column; gap:14px; }
   .cv-completed-banner { flex-direction:column; gap:12px; align-items:flex-start; }

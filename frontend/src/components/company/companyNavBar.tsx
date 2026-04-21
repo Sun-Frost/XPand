@@ -11,6 +11,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Icon } from "../ui/Icon";
+import { NavbarPageTitle } from "../ui/PageHeader";
 
 interface CompanyNavbarProps {
   companyName: string | null;
@@ -69,14 +70,9 @@ const CompanyNavbar: React.FC<CompanyNavbarProps> = ({
           </button>
         </div>
 
-        {/* Centre — company name + status */}
-        <div className="cn-centre">
-          {companyName && (
-            <div className="cn-identity">
-              <span className="cn-company-name">{companyName}</span>
-              
-            </div>
-          )}
+        {/* Centre — scrolled-in page title (same mechanism as user Navbar) */}
+        <div className="navbar__centre">
+          <NavbarPageTitle />
         </div>
 
         {/* Right — theme + menu */}
@@ -152,26 +148,6 @@ const ChevronIcon: React.FC<{ open: boolean }> = ({ open }) => (
 );
 
 const styles = `
-  .cn-centre {
-    flex: 1;
-    display: flex;
-    justify-content: center;
-    padding: 0 var(--space-6);
-  }
-  .cn-identity {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  .cn-company-name {
-    font-family: var(--font-display);
-    font-size: var(--text-sm);
-    font-weight: var(--weight-semibold);
-    color: var(--color-text-primary);
-  }
-  .cn-status-badge {
-    font-size: 9px !important;
-  }
   .cn-avatar {
     width: 28px;
     height: 28px;
@@ -187,7 +163,7 @@ const styles = `
     flex-shrink: 0;
   }
   /* Reuse user navbar base styles that already exist in theme */
-  .navbar__left { display:flex;align-items:center;gap:var(--space-3);flex-shrink:0; }
+  .navbar__centre { flex:1;display:flex;justify-content:center;padding:0 var(--space-6);max-width:520px;margin:0 auto; }align-items:center;gap:var(--space-3);flex-shrink:0; }
   .navbar-brand { display:flex;align-items:center;gap:var(--space-3);background:none;border:none;cursor:pointer;text-decoration:none;font-family:var(--font-display);font-size:var(--text-xl);font-weight:var(--weight-bold);letter-spacing:var(--tracking-wide);color:var(--color-text-primary); }
   .navbar__logo-inner { width:100%;height:100%;background:var(--gradient-primary);display:flex;align-items:center;justify-content:center;border-radius:var(--radius-md); }
   .navbar__logo-text { font-family:var(--font-display);font-size:11px;font-weight:var(--weight-bold);color:#fff;letter-spacing:0.05em; }

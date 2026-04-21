@@ -285,11 +285,7 @@ const ReadinessReportPage: React.FC = () => {
           <p className="rr-header__sub">
             AI-powered analysis of your verified skills, market fit, and career trajectory.
           </p>
-          <div className="rr-header__actions">
-            <button className="rr-header__action-btn" onClick={generate} disabled={isGenerating}>
-              {isGenerating ? <><span className="rr-spinner rr-spinner--sm" /> Regenerating…</> : "↺ Regenerate"}
-            </button>
-          </div>
+
         </div>
 
         {score !== null && (

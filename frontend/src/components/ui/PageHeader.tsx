@@ -149,6 +149,36 @@ export const PAGE_CONFIGS: Record<string, PageHeaderConfig> = {
     subtitle:     "The board doesn't lie. XP earned through verified achievement only.",
     accent:       "gold",
   },
+
+  // ── Company pages ─────────────────────────────────────────────────────────
+  "company-dashboard": {
+    eyebrow:      "COMMAND CENTER",
+    title:        "Company",
+    gradientWord: "HQ",
+    subtitle:     "Your hiring pipeline, active jobs, and market position — all in one view.",
+    accent:       "emerald",
+  },
+  "company-profile": {
+    eyebrow:      "COMPANY IDENTITY",
+    title:        "Your",
+    gradientWord: "Profile",
+    subtitle:     "The face candidates see. Keep it sharp, accurate, and compelling.",
+    accent:       "violet",
+  },
+  "company-jobs": {
+    eyebrow:      "JOB CONTROL",
+    title:        "Manage",
+    gradientWord: "Jobs",
+    subtitle:     "Post, edit, close, and track every role in your hiring pipeline.",
+    accent:       "cyan",
+  },
+  "company-insights": {
+    eyebrow:      "TALENT INTELLIGENCE",
+    title:        "Market",
+    gradientWord: "Insights",
+    subtitle:     "Real-time skill demand, job type trends, and location data from the platform.",
+    accent:       "gold",
+  },
 };
 
 // ── GlowPortal — rendered into document.body, position:fixed ─────────────────

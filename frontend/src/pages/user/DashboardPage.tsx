@@ -1,22 +1,32 @@
 /* ============================================================
-   DashboardPage.tsx  — XPand  v6.0
-   "Career Arena Map"
+   DashboardPage.tsx  — XPand  v7.0
+   "Arena Header + 3D Card Deck"
 
-   SECTIONS (in render order):
-   1. ArenaHeader        — Identity Core (name, tier, XP status)
-   2. CareerMap          — Node-based career progression map (SVG)
-   3. CareerPath         — Linear bottom guide: next steps with rewards
+   LAYOUT:
+   1. ArenaHeader   — Identity Core (from v6, unchanged)
+   2. CardDeck      — Horizontal scroll, 3D flip cards:
+        · Mission          (priority next action)
+        · Market Presence  (visibility score + readiness)
+        · Stats            (5 key metrics)
+        · Market Intel     (skills market bars)
+        · My Skills        (badges)
+        · Quick Actions    (next moves)
+        · Activity         (log)
    ============================================================ */
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import PageLayout from "../../components/user/PageLayout";
 import { Icon, type IconName } from "../../components/ui/Icon";
+import PageHeader, { PAGE_CONFIGS } from "../../components/ui/PageHeader";
 import {
   useDashboard,
   type DashboardData,
+  type ActivityItem,
+  type MarketSkillItem,
+  type SkillBadgeSummary,
 } from "../../hooks/user/useDashboard";
 
 import "../../assets/css/Dashboardpage.css";
@@ -30,12 +40,7 @@ const fadeUp = {
 
 const stagger = {
   hidden: {},
-  show:   { transition: { staggerChildren: 0.08 } },
-};
-
-const scaleIn = {
-  hidden: { opacity: 0, scale: 0.85 },
-  show:   { opacity: 1, scale: 1, transition: { type: "spring" as const, stiffness: 300, damping: 26 } },
+  show:   { transition: { staggerChildren: 0.07 } },
 };
 
 /* ── Prestige tier system ─────────────────────────────────────────────────── */
@@ -69,265 +74,170 @@ function getPrestigeProgress(xp: number): number {
   return span > 0 ? (xp - cur.min) / span : 1;
 }
 
-/* ── Visibility score engine ────────────────────────────────────────────── */
+/* ── Helpers ─────────────────────────────────────────────────────────────── */
 
-function computeVisibilityScore(data: DashboardData): number {
-  const skillPts = Math.min(data.verifiedSkills * 8, 40);
-  const badgePts = Math.min(data.totalBadges * 5 + data.goldBadges * 5, 30);
-  const chalPts  = Math.min(data.completedChallenges * 4, 20);
-  const appPts   = Math.min(data.totalApplications * 2, 10);
-  return Math.round(skillPts + badgePts + chalPts + appPts);
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m    = Math.floor(diff / 60000);
+  if (m < 1)  return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
-/* ── Career path step builder ───────────────────────────────────────────── */
+/* ── Visibility score ────────────────────────────────────────────────────── */
 
-interface PathStep {
-  id:        string;
-  label:     string;
-  reward:    string;
-  req:       string;
-  path:      string;
-  done:      boolean;
-  isNext:    boolean;
+interface VisibilityMetrics {
+  score:            number;
+  aheadPct:         number;
+  isRecruiterReady: boolean;
+  label:            string;
+  strengths:        Array<{ text: string; type: "strong" | "weak" | "warning" | "info" }>;
 }
 
-function buildCareerPath(data: DashboardData): PathStep[] {
-  const steps: PathStep[] = [
-    {
-      id:     "verify-skill",
-      label:  "Verify a Skill",
-      reward: "+100 XP",
-      req:    "Pass skill test",
-      path:   "/skills",
-      done:   data.verifiedSkills > 0,
-      isNext: false,
-    },
-    {
-      id:     "earn-gold",
-      label:  "Earn Gold Badge",
-      reward: "+200 XP",
-      req:    "1+ verified skill",
-      path:   "/skills",
-      done:   data.goldBadges > 0,
-      isNext: false,
-    },
-    {
-      id:     "complete-challenge",
-      label:  "Complete Challenge",
-      reward: "+40 XP",
-      req:    "Any skill",
-      path:   "/challenges",
-      done:   data.completedChallenges > 0,
-      isNext: false,
-    },
-    {
-      id:     "unlock-jobs",
-      label:  "Unlock Jobs",
-      reward: "Job Access",
-      req:    "3+ skills · 1 badge",
-      path:   "/jobs",
-      done:   data.verifiedSkills >= 3 && data.totalBadges >= 1,
-      isNext: false,
-    },
-    {
-      id:     "apply",
-      label:  "Apply & Get Hired",
-      reward: "Career",
-      req:    "Active job matches",
-      path:   "/jobs",
-      done:   data.acceptedApplications > 0,
-      isNext: false,
-    },
-  ];
+function computeVisibility(data: DashboardData): VisibilityMetrics {
+  const skillPts  = Math.min(data.verifiedSkills * 8,  40);
+  const badgePts  = Math.min(data.totalBadges * 5 + data.goldBadges * 5, 30);
+  const chalPts   = Math.min(data.completedChallenges * 4, 20);
+  const appPts    = Math.min(data.totalApplications * 2, 10);
+  const score     = Math.round(skillPts + badgePts + chalPts + appPts);
+  const aheadPct  = Math.round(Math.min(Math.pow(score / 100, 0.65) * 100, 99));
+  const isRecruiterReady = score >= 50 && data.verifiedSkills >= 3 && data.totalBadges >= 2;
 
-  // Mark the first incomplete step as "next"
-  let foundNext = false;
-  for (const step of steps) {
-    if (!step.done && !foundNext) {
-      step.isNext = true;
-      foundNext = true;
-    }
-  }
+  const strengths: VisibilityMetrics["strengths"] = [];
+  if (data.goldBadges > 0)
+    strengths.push({ text: `${data.goldBadges} Gold Badge${data.goldBadges > 1 ? "s" : ""} — top credential signal`, type: "strong" });
+  else if (data.totalBadges > 0)
+    strengths.push({ text: "No Gold Badges yet — silver/bronze don't unlock premium jobs", type: "warning" });
+  if (data.verifiedSkills >= 5)
+    strengths.push({ text: `${data.verifiedSkills} verified skills — strong proof stack`, type: "strong" });
+  else if (data.verifiedSkills >= 2)
+    strengths.push({ text: `Only ${data.verifiedSkills} verified skills — add ${5 - data.verifiedSkills} more to stand out`, type: "warning" });
+  else
+    strengths.push({ text: "Critical: 0–1 verified skills — invisible to smart recruiters", type: "weak" });
+  if (data.totalApplications === 0)
+    strengths.push({ text: "Zero applications — no market exposure right now", type: "weak" });
+  else if (data.acceptedApplications > 0)
+    strengths.push({ text: `${data.acceptedApplications} application accepted — momentum building`, type: "info" });
+  if (data.activeChallenges > 0)
+    strengths.push({ text: `${data.activeChallenges} active challenge${data.activeChallenges > 1 ? "s" : ""} in progress`, type: "info" });
 
-  return steps;
+  const label = score >= 80 ? "Highly visible" : score >= 55 ? "Moderately visible" : score >= 30 ? "Low visibility" : "Not visible yet";
+  return { score, aheadPct, isRecruiterReady, label, strengths };
 }
 
-/* ── Node type definitions ───────────────────────────────────────────────── */
+/* ── Mission engine ──────────────────────────────────────────────────────── */
 
-type NodeStatus = "completed" | "available" | "locked";
-type NodeType   = "skill" | "job" | "challenge" | "reputation";
-
-interface MapNode {
-  id:       string;
-  label:    string;
-  sublabel: string;
-  type:     NodeType;
-  status:   NodeStatus;
-  path:     string;
-  reward?:  string;
-  req?:     string;
-  impact?:  string;
-  // layout
-  angle:    number;  // degrees from top
-  ring:     1 | 2;  // distance ring
+interface MissionItem {
+  id: string; icon: string; eyebrow: string; title: string; desc: string;
+  progressPct: number; progressLabel: string; rewardXP: number;
+  ctaText: string; ctaPath: string; tension?: string; score: number;
 }
 
-function buildMapNodes(data: DashboardData): MapNode[] {
-  const visScore = computeVisibilityScore(data);
+function computeMission(data: DashboardData): MissionItem {
+  const candidates: MissionItem[] = [];
 
-  return [
-    /* ── SKILLS BRANCH ── */
-    {
-      id: "skills-verified",
-      label: `${data.verifiedSkills} Skills`,
-      sublabel: "Verified",
-      type: "skill",
-      status: data.verifiedSkills > 0 ? "completed" : "available",
-      path: "/skills",
-      reward: "+100 XP each",
-      req: "Pass skill test",
-      impact: "Each skill unlocks more job matches",
-      angle: -60,
-      ring: 1,
-    },
-    {
-      id: "skills-tests",
-      label: "Skill Tests",
-      sublabel: "Available now",
-      type: "skill",
-      status: "available",
-      path: "/skills",
-      reward: "+80–200 XP",
-      req: "None",
-      impact: "Pass to earn badges and visibility",
-      angle: -85,
-      ring: 2,
-    },
-    {
-      id: "skills-locked",
-      label: "Advanced Skills",
-      sublabel: "Locked",
-      type: "skill",
-      status: data.verifiedSkills >= 3 ? "available" : "locked",
-      path: "/skills",
-      reward: "+300 XP",
-      req: "3+ verified skills",
-      impact: "Opens elite job listings",
-      angle: -38,
-      ring: 2,
-    },
+  if (data.verifiedSkills === 0)
+    candidates.push({ id:"first-skill", icon:"🎯", eyebrow:"PRIORITY MISSION",
+      title:"Verify your first skill — unlock the job market",
+      desc:"You currently have zero verified skills. Recruiters cannot find you. One test changes that.",
+      progressPct:0, progressLabel:"0 / 1 skills verified", rewardXP:100,
+      ctaText:"Take a Skill Test →", ctaPath:"/skills",
+      tension:"You are invisible to every recruiter right now", score:1.0 });
 
-    /* ── JOBS BRANCH ── */
-    {
-      id: "jobs-available",
-      label: `${data.totalApplications > 0 ? data.totalApplications : "0"} Applied`,
-      sublabel: "Jobs",
-      type: "job",
-      status: data.verifiedSkills >= 2 ? (data.totalApplications > 0 ? "completed" : "available") : "locked",
-      path: "/jobs",
-      reward: "Career access",
-      req: "2+ skills",
-      impact: "Direct path to offers",
-      angle: 60,
-      ring: 1,
-    },
-    {
-      id: "jobs-locked",
-      label: "Premium Jobs",
-      sublabel: "Locked",
-      type: "job",
-      status: data.goldBadges > 0 ? "available" : "locked",
-      path: "/jobs",
-      reward: "Top offers",
-      req: "Gold Badge required",
-      impact: "2× higher-paying roles",
-      angle: 82,
-      ring: 2,
-    },
-    {
-      id: "jobs-matches",
-      label: "Job Matches",
-      sublabel: data.verifiedSkills >= 2 ? "Active" : "Needs skills",
-      type: "job",
-      status: data.verifiedSkills >= 2 ? "available" : "locked",
-      path: "/jobs",
-      reward: "Instant apply",
-      req: "Skill match",
-      impact: "Curated to your verified stack",
-      angle: 42,
-      ring: 2,
-    },
+  if (data.goldBadges === 0 && data.verifiedSkills > 0)
+    candidates.push({ id:"first-gold", icon:"🥇", eyebrow:"CAREER ACCELERATOR",
+      title:"Pass the top test → earn your first Gold Badge",
+      desc:"Gold Badges unlock premium job listings and push you to the top of recruiter search results.",
+      progressPct:Math.min(data.totalBadges / 3 * 100, 95),
+      progressLabel:`${data.totalBadges} badge${data.totalBadges !== 1 ? "s" : ""} earned — Gold is next`,
+      rewardXP:200, ctaText:"Earn Gold Badge →", ctaPath:"/skills",
+      tension:"Gold unlocks 2× more job matches", score:0.94 });
 
-    /* ── CHALLENGES BRANCH ── */
-    {
-      id: "challenges-active",
-      label: `${data.activeChallenges} Active`,
-      sublabel: "Challenges",
-      type: "challenge",
-      status: data.activeChallenges > 0 ? "available" : (data.completedChallenges > 0 ? "completed" : "available"),
-      path: "/challenges",
-      reward: `+${Math.max(data.activeChallenges, 1) * 40} XP`,
-      req: "None",
-      impact: "Proves skills under real pressure",
-      angle: 165,
-      ring: 1,
-    },
-    {
-      id: "challenges-completed",
-      label: `${data.completedChallenges} Done`,
-      sublabel: "Completed",
-      type: "challenge",
-      status: data.completedChallenges > 0 ? "completed" : "locked",
-      path: "/challenges",
-      reward: "XP + credibility",
-      req: "Attempt challenges",
-      impact: "Builds recruiter trust score",
-      angle: 148,
-      ring: 2,
-    },
+  if (data.totalApplications === 0 && data.verifiedSkills >= 2)
+    candidates.push({ id:"first-apply", icon:"📤", eyebrow:"MARKET ENTRY",
+      title:"Apply to your first matched job — enter the arena",
+      desc:`You have ${data.verifiedSkills} verified skills. Matching jobs exist. Zero applications = zero outcomes.`,
+      progressPct:0, progressLabel:"0 applications sent", rewardXP:50,
+      ctaText:"View Matched Jobs →", ctaPath:"/jobs",
+      tension:"You are behind candidates who already applied", score:0.85 });
 
-    /* ── REPUTATION BRANCH ── */
-    {
-      id: "rep-xp",
-      label: `${data.xpBalance.toLocaleString()} XP`,
-      sublabel: "Balance",
-      type: "reputation",
-      status: data.xpBalance > 100 ? "completed" : "available",
-      path: "/store",
-      reward: "Spendable",
-      req: "Earn via actions",
-      impact: "Unlocks mock interviews + boosts",
-      angle: -160,
-      ring: 1,
-    },
-    {
-      id: "rep-visibility",
-      label: `${visScore}/100`,
-      sublabel: "Visibility",
-      type: "reputation",
-      status: visScore >= 50 ? "completed" : visScore >= 20 ? "available" : "locked",
-      path: "/skills",
-      reward: "Recruiter reach",
-      req: "Skills + badges",
-      impact: "Score 50+ to appear in recruiter searches",
-      angle: -140,
-      ring: 2,
-    },
-    {
-      id: "rep-tier",
-      label: getPrestigeTier(data.xpBalance).name,
-      sublabel: "Prestige Tier",
-      type: "reputation",
-      status: data.xpBalance >= 500 ? "completed" : "available",
-      path: "/store",
-      reward: "Status + perks",
-      req: "Earn XP",
-      impact: "Higher tier = more job unlocks",
-      angle: -175,
-      ring: 2,
-    },
-  ];
+  if (data.activeChallenges > 0)
+    candidates.push({ id:"active-challenge", icon:"⚡", eyebrow:"ACTIVE MISSION",
+      title:`Finish your challenge — claim +${data.activeChallenges * 40} XP`,
+      desc:`${data.activeChallenges} challenge${data.activeChallenges > 1 ? "s" : ""} waiting for you.`,
+      progressPct:Math.min((data.completedChallenges / (data.completedChallenges + data.activeChallenges)) * 100, 90),
+      progressLabel:`${data.completedChallenges} completed · ${data.activeChallenges} in progress`,
+      rewardXP:data.activeChallenges * 40, ctaText:"Go to Challenges →", ctaPath:"/challenges",
+      score:0.75 });
+
+  if (data.xpBalance >= 300)
+    candidates.push({ id:"spend-xp", icon:"💎", eyebrow:"XP READY TO DEPLOY",
+      title:"Unlock a mock interview — practice before the real thing",
+      desc:`You have ${data.xpBalance.toLocaleString()} XP. Convert practice into offers.`,
+      progressPct:Math.min((data.xpBalance / 500) * 100, 100),
+      progressLabel:`${data.xpBalance.toLocaleString()} XP available to spend`,
+      rewardXP:0, ctaText:"Visit XP Store →", ctaPath:"/store", score:0.68 });
+
+  if (candidates.length === 0)
+    candidates.push({ id:"grow", icon:"📈", eyebrow:"KEEP CLIMBING",
+      title:`Add ${Math.max(5 - data.verifiedSkills, 1)} more verified skills`,
+      desc:"Each verified skill expands your job matches and lifts your visibility score.",
+      progressPct:Math.min((data.verifiedSkills / 10) * 100, 95),
+      progressLabel:`${data.verifiedSkills} / 10 target skills`,
+      rewardXP:80, ctaText:"Verify a Skill →", ctaPath:"/skills", score:0.5 });
+
+  return candidates.sort((a, b) => b.score - a.score)[0];
 }
+
+/* ── Smart actions ───────────────────────────────────────────────────────── */
+
+interface SmartAction { icon: IconName; title: string; sub: string; path: string; glow: string; }
+
+function buildSmartActions(data: DashboardData): SmartAction[] {
+  const actions: SmartAction[] = [];
+  const topMissingSkill = data.topMarketSkills.find(s => !s.userHasIt);
+  actions.push(topMissingSkill
+    ? { icon:"challenge-skill", title:`Pass ${topMissingSkill.skillName} Test`, sub:`Unlock ${topMissingSkill.jobCount} more job matches`, path:"/skills", glow:"rgba(155,124,255,0.22)" }
+    : { icon:"challenge-skill", title:"Verify Next Skill", sub:"Expand your job eligibility", path:"/skills", glow:"rgba(155,124,255,0.22)" }
+  );
+  actions.push({
+    icon:"work",
+    title: data.totalApplications === 0 ? "Apply to 3 Matching Jobs" : `Apply to ${Math.max(3 - data.totalApplications, 1)} More Jobs`,
+    sub: data.totalApplications === 0 ? "Zero applications = zero chance right now" : `${data.acceptedApplications} accepted · build momentum`,
+    path:"/jobs", glow:"rgba(45,212,160,0.20)",
+  });
+  actions.push(data.activeChallenges > 0
+    ? { icon:"quest", title:`Finish Challenge → +${data.activeChallenges * 40} XP`, sub:`${data.activeChallenges} in progress`, path:"/challenges", glow:"rgba(34,211,238,0.20)" }
+    : { icon:"quest", title:"Start a Challenge", sub:"Earn XP + prove skills under pressure", path:"/challenges", glow:"rgba(34,211,238,0.20)" }
+  );
+  actions.push({
+    icon:"xp-spend",
+    title: data.xpBalance >= 200 ? `Spend ${data.xpBalance.toLocaleString()} XP` : "Unlock Mock Interview",
+    sub: data.xpBalance >= 200 ? "Mock interview · readiness report · priority slot" : "Earn XP to unlock career advantages",
+    path:"/store", glow:"rgba(245,183,49,0.22)",
+  });
+  return actions;
+}
+
+/* ── AnimCount ───────────────────────────────────────────────────────────── */
+
+const AnimCount: React.FC<{ value: number; duration?: number }> = ({ value, duration = 800 }) => {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    const steps = 36;
+    const step  = Math.max(1, Math.ceil(value / steps));
+    let cur = 0;
+    const id = setInterval(() => {
+      cur += step;
+      if (cur >= value) { setN(value); clearInterval(id); }
+      else setN(cur);
+    }, duration / steps);
+    return () => clearInterval(id);
+  }, [value, duration]);
+  return <>{n.toLocaleString()}</>;
+};
 
 /* ── XP burst ────────────────────────────────────────────────────────────── */
 
@@ -354,7 +264,12 @@ const ArenaHeader: React.FC<{ data: DashboardData }> = ({ data }) => {
   const next     = getNextPrestigeTier(data.xpBalance);
   const progress = getPrestigeProgress(data.xpBalance);
   const xpToNext = next ? next.min - data.xpBalance : 0;
-  const visScore = computeVisibilityScore(data);
+
+  const skillPts = Math.min(data.verifiedSkills * 8,  40);
+  const badgePts = Math.min(data.totalBadges * 5 + data.goldBadges * 5, 30);
+  const chalPts  = Math.min(data.completedChallenges * 4, 20);
+  const appPts   = Math.min(data.totalApplications * 2, 10);
+  const visScore = Math.round(skillPts + badgePts + chalPts + appPts);
 
   const statusMessage = useMemo(() => {
     if (next && xpToNext <= 200)
@@ -368,44 +283,29 @@ const ArenaHeader: React.FC<{ data: DashboardData }> = ({ data }) => {
     return { text: `Rank ${tier.name} · ${visScore}/100 visibility — keep climbing`, cls: "status-ok" };
   }, [data, tier, next, xpToNext, visScore]);
 
-  const R      = 52;
-  const circ   = 2 * Math.PI * R;
-  const offset = circ * (1 - progress);
+  const R = 52, circ = 2 * Math.PI * R, offset = circ * (1 - progress);
 
   return (
     <motion.div variants={fadeUp} className="arena-header">
-      {/* Left: Status + Identity */}
       <div className="arena-id">
         <div className={`arena-status-msg ${statusMessage.cls}`}>
           <span className="arena-status-dot" />
           {statusMessage.text}
         </div>
-
         <h1 className="arena-name">
           {data.firstName}{" "}
           <span className="arena-name-accent">{data.lastName}</span>
         </h1>
-
-        {data.professionalTitle && (
-          <p className="arena-role">{data.professionalTitle}</p>
-        )}
-
+        {data.professionalTitle && <p className="arena-role">{data.professionalTitle}</p>}
         <div className="arena-tags">
           <span className="arena-tag arena-tag-tier" style={{ "--tier-color": tier.color } as React.CSSProperties}>
             {tier.name}
           </span>
-          <span className="arena-tag arena-tag-xp">
-            {data.xpBalance.toLocaleString()} XP
-          </span>
-          {data.country && (
-            <span className="arena-tag arena-tag-loc">
-              {data.country}
-            </span>
-          )}
+          <span className="arena-tag arena-tag-xp">{data.xpBalance.toLocaleString()} XP</span>
+          {data.country && <span className="arena-tag arena-tag-loc">{data.country}</span>}
         </div>
       </div>
 
-      {/* Center: Avatar + Ring */}
       <div className="arena-av-hub">
         <div className="arena-av-outer-ring" />
         <svg className="arena-ring-svg" width="124" height="124" viewBox="0 0 124 124">
@@ -416,16 +316,10 @@ const ArenaHeader: React.FC<{ data: DashboardData }> = ({ data }) => {
             </linearGradient>
           </defs>
           <circle cx="62" cy="62" r={R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
-          <circle
-            cx="62" cy="62" r={R}
-            fill="none"
-            stroke={`url(#arenaRingGrad)`}
-            strokeWidth="5"
-            strokeLinecap="round"
-            strokeDasharray={circ}
-            strokeDashoffset={offset}
+          <circle cx="62" cy="62" r={R} fill="none" stroke="url(#arenaRingGrad)" strokeWidth="5"
+            strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={offset}
             transform="rotate(-90 62 62)"
-            style={{ transition: "stroke-dashoffset 1.4s cubic-bezier(0.22,1,0.36,1)", filter: `drop-shadow(0 0 8px ${tier.color}66)` }}
+            style={{ transition:"stroke-dashoffset 1.4s cubic-bezier(0.22,1,0.36,1)", filter:`drop-shadow(0 0 8px ${tier.color}66)` }}
           />
         </svg>
         <div className="arena-av">
@@ -439,7 +333,6 @@ const ArenaHeader: React.FC<{ data: DashboardData }> = ({ data }) => {
         </div>
       </div>
 
-      {/* Right: XP Stats */}
       <div className="arena-xp-stats">
         <div className="arena-xp-primary">
           <span className="arena-xp-value">{data.xpBalance.toLocaleString()}</span>
@@ -451,10 +344,7 @@ const ArenaHeader: React.FC<{ data: DashboardData }> = ({ data }) => {
         </div>
         <div className="arena-xp-progress-wrap">
           <div className="arena-xp-progress-track">
-            <div
-              className="arena-xp-progress-fill"
-              style={{ width: `${Math.round(progress * 100)}%`, background: tier.color }}
-            />
+            <div className="arena-xp-progress-fill" style={{ width:`${Math.round(progress * 100)}%`, background: tier.color }} />
           </div>
           <span className="arena-xp-next-hint">
             {next ? `${xpToNext.toLocaleString()} XP → ${next.name}` : "Max Prestige"}
@@ -462,10 +352,7 @@ const ArenaHeader: React.FC<{ data: DashboardData }> = ({ data }) => {
         </div>
         <div className="arena-vis-row">
           <span className="arena-vis-label">Visibility</span>
-          <span
-            className="arena-vis-score"
-            style={{ color: visScore >= 50 ? "#2DD4A0" : visScore >= 30 ? "#F5B731" : "#F87171" }}
-          >
+          <span className="arena-vis-score" style={{ color: visScore >= 50 ? "#2DD4A0" : visScore >= 30 ? "#F5B731" : "#F87171" }}>
             {visScore}/100
           </span>
         </div>
@@ -475,421 +362,433 @@ const ArenaHeader: React.FC<{ data: DashboardData }> = ({ data }) => {
 };
 
 /* ═══════════════════════════════════════════════════════════
-   2. CAREER MAP — Node-based SVG map
+   2. 3D FLIP CARD SHELL
    ═══════════════════════════════════════════════════════════ */
 
-const NODE_TYPE_COLORS: Record<NodeType, { primary: string; glow: string; bg: string }> = {
-  skill:      { primary: "#9B7CFF", glow: "rgba(155,124,255,0.4)", bg: "rgba(155,124,255,0.12)" },
-  job:        { primary: "#2DD4A0", glow: "rgba(45,212,160,0.4)",  bg: "rgba(45,212,160,0.10)" },
-  challenge:  { primary: "#F5B731", glow: "rgba(245,183,49,0.4)",  bg: "rgba(245,183,49,0.10)" },
-  reputation: { primary: "#22D3EE", glow: "rgba(34,211,238,0.4)",  bg: "rgba(34,211,238,0.10)" },
-};
-
-const NODE_STATUS_OPACITY: Record<NodeStatus, number> = {
-  completed: 1,
-  available: 0.85,
-  locked: 0.30,
-};
-
-interface TooltipData {
-  node:    MapNode;
-  x:       number;
-  y:       number;
-  visible: boolean;
+interface ExpandCardProps {
+  accentColor:  string;
+  glowColor:    string;
+  icon:         React.ReactNode;
+  eyebrow:      string;
+  frontSummary: React.ReactNode;
+  back:         React.ReactNode;
+  width?:       number;
+  animDelay?:   number;
 }
 
-const CareerMap: React.FC<{
-  data:     DashboardData;
-  navigate: (p: string) => void;
-}> = ({ data, navigate }) => {
-  const nodes = useMemo(() => buildMapNodes(data), [data]);
-  const [tooltip, setTooltip] = useState<TooltipData | null>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
-
-  // SVG dimensions
-  const W  = 700;
-  const H  = 520;
-  const CX = W / 2;
-  const CY = H / 2 + 10;
-  const R1 = 130; // inner ring
-  const R2 = 230; // outer ring
-
-  // Convert angle (degrees from top, clockwise) to x/y
-  const toXY = (angleDeg: number, r: number) => {
-    const rad = ((angleDeg - 90) * Math.PI) / 180;
-    return { x: CX + r * Math.cos(rad), y: CY + r * Math.sin(rad) };
-  };
-
-  const handleNodeClick = useCallback((node: MapNode, e: React.MouseEvent) => {
-    if (node.status === "locked") return;
-    navigate(node.path);
-  }, [navigate]);
-
-  const handleNodeHover = useCallback((node: MapNode, e: React.MouseEvent<SVGGElement>) => {
-    const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const svgEl = e.currentTarget;
-    const svgRect = svgEl.getBoundingClientRect();
-    setTooltip({
-      node,
-      x: svgRect.left - rect.left + svgRect.width / 2,
-      y: svgRect.top  - rect.top,
-      visible: true,
-    });
-  }, []);
-
-  const clearTooltip = useCallback(() => setTooltip(null), []);
-
-  // Branch label positions (midpoint of each branch)
-  const branches: Array<{ label: string; type: NodeType; angle: number }> = [
-    { label: "Skills",     type: "skill",      angle: -60  },
-    { label: "Jobs",       type: "job",        angle: 60   },
-    { label: "Challenges", type: "challenge",  angle: 160  },
-    { label: "Reputation", type: "reputation", angle: -155 },
-  ];
-
-  const typeIcon: Record<NodeType, string> = {
-    skill: "⚡",
-    job: "💼",
-    challenge: "🎯",
-    reputation: "🏆",
-  };
+const ExpandCard: React.FC<ExpandCardProps> = ({
+  accentColor, glowColor, icon, eyebrow, frontSummary, back, width = 280, animDelay = 0,
+}) => {
+  const [expanded, setExpanded] = useState(false);
 
   return (
-    <motion.div variants={fadeUp} className="career-map-wrap">
-      <div className="career-map-label-row">
-        <span className="career-map-eyebrow">CAREER ARENA MAP</span>
-        <span className="career-map-hint">Hover nodes for details · Click to act</span>
-      </div>
+    <motion.div
+      className="fc-scene"
+      style={{ "--fc-accent": accentColor, "--fc-glow": glowColor } as React.CSSProperties}
+      variants={fadeUp}
+      transition={{ delay: animDelay }}
+      onMouseEnter={() => setExpanded(true)}
+      onMouseLeave={() => setExpanded(false)}
+    >
+      <div className={`fc-card ${expanded ? "fc-expanded" : ""}`}>
+        <div className="fc-top-beam" />
+        <div className="fc-corner-glow" />
 
-      <div className="career-map-svg-container" ref={svgRef as unknown as React.RefObject<HTMLDivElement>}>
-        <svg
-          ref={svgRef}
-          viewBox={`0 0 ${W} ${H}`}
-          className="career-map-svg"
-          preserveAspectRatio="xMidYMid meet"
-          aria-label="Career Arena Map"
-        >
-          <defs>
-            {/* Branch gradients */}
-            {branches.map(b => {
-              const c = NODE_TYPE_COLORS[b.type];
-              return (
-                <linearGradient key={b.type} id={`branch-grad-${b.type}`} x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor={c.primary} stopOpacity="0.7" />
-                  <stop offset="100%" stopColor={c.primary} stopOpacity="0.15" />
-                </linearGradient>
-              );
-            })}
+        {/* FRONT — always visible */}
+        <div className="fc-face fc-front">
+          <div className="fc-header">
+            <span className="fc-icon">{icon}</span>
+            <span className="fc-eyebrow">{eyebrow}</span>
+          </div>
+          <div className="fc-front-body">{frontSummary}</div>
+          <div className="fc-flip-hint">Hover to expand ↓</div>
+        </div>
 
-            {/* Center glow */}
-            <radialGradient id="center-glow" cx="50%" cy="50%" r="50%">
-              <stop offset="0%"  stopColor="rgba(155,124,255,0.25)" />
-              <stop offset="100%" stopColor="transparent" />
-            </radialGradient>
-
-            {/* Arena rings */}
-            <radialGradient id="arena-bg" cx="50%" cy="50%" r="50%">
-              <stop offset="0%"  stopColor="rgba(13,15,25,0.0)" />
-              <stop offset="100%" stopColor="rgba(13,15,25,0.0)" />
-            </radialGradient>
-          </defs>
-
-          {/* ── Background arena rings ── */}
-          <circle cx={CX} cy={CY} r={R1 + 20} fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="1" strokeDasharray="4 8" />
-          <circle cx={CX} cy={CY} r={R2 + 20} fill="none" stroke="rgba(255,255,255,0.02)" strokeWidth="1" strokeDasharray="3 10" />
-
-          {/* ── Branch lines from center to nodes ── */}
-          {nodes.map(node => {
-            const pos = toXY(node.angle, node.ring === 1 ? R1 : R2);
-            const c   = NODE_TYPE_COLORS[node.type];
-            const op  = NODE_STATUS_OPACITY[node.status];
-            return (
-              <line
-                key={`line-${node.id}`}
-                x1={CX} y1={CY}
-                x2={pos.x} y2={pos.y}
-                stroke={c.primary}
-                strokeWidth={node.ring === 1 ? 1.5 : 1}
-                strokeOpacity={op * 0.45}
-                strokeDasharray={node.status === "locked" ? "4 5" : undefined}
-              />
-            );
-          })}
-
-          {/* ── Ring-1 to Ring-2 connectors (within same type) ── */}
-          {branches.map(b => {
-            const ring1Nodes = nodes.filter(n => n.type === b.type && n.ring === 1);
-            const ring2Nodes = nodes.filter(n => n.type === b.type && n.ring === 2);
-            return ring1Nodes.map(r1n =>
-              ring2Nodes.map(r2n => {
-                const p1 = toXY(r1n.angle, R1);
-                const p2 = toXY(r2n.angle, R2);
-                const c  = NODE_TYPE_COLORS[b.type];
-                return (
-                  <line
-                    key={`conn-${r1n.id}-${r2n.id}`}
-                    x1={p1.x} y1={p1.y}
-                    x2={p2.x} y2={p2.y}
-                    stroke={c.primary}
-                    strokeWidth={0.8}
-                    strokeOpacity={0.20}
-                    strokeDasharray="3 6"
-                  />
-                );
-              })
-            );
-          })}
-
-          {/* ── Branch labels ── */}
-          {branches.map(b => {
-            const midR   = (R1 + R2) / 2;
-            const pos    = toXY(b.angle, midR - 10);
-            const c      = NODE_TYPE_COLORS[b.type];
-            const perpAngle = ((b.angle - 90) * Math.PI) / 180;
-            const perpX  = -Math.sin(perpAngle) * 18;
-            const perpY  =  Math.cos(perpAngle) * 18;
-            return (
-              <text
-                key={`blabel-${b.type}`}
-                x={pos.x + perpX}
-                y={pos.y + perpY}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                fill={c.primary}
-                fontSize="10"
-                fontFamily="var(--font-mono)"
-                fontWeight="700"
-                letterSpacing="0.10em"
-                textDecoration="none"
-                opacity="0.55"
-                style={{ textTransform: "uppercase", pointerEvents: "none" }}
-              >
-                {typeIcon[b.type]} {b.label.toUpperCase()}
-              </text>
-            );
-          })}
-
-          {/* ── CENTER NODE — The User ── */}
-          <g>
-            {/* Center glow */}
-            <circle cx={CX} cy={CY} r={55} fill="url(#center-glow)" />
-            <circle cx={CX} cy={CY} r={42} fill="rgba(13,15,23,0.95)" stroke="rgba(155,124,255,0.35)" strokeWidth="2" />
-            <circle cx={CX} cy={CY} r={42} fill="none" stroke="rgba(155,124,255,0.12)" strokeWidth="10" />
-
-            {/* Pulsing aura */}
-            <circle cx={CX} cy={CY} r={46} fill="none" stroke="rgba(155,124,255,0.18)" strokeWidth="1.5">
-              <animate attributeName="r" values="44;52;44" dur="3s" repeatCount="indefinite" />
-              <animate attributeName="opacity" values="0.5;0.1;0.5" dur="3s" repeatCount="indefinite" />
-            </circle>
-
-            <text
-              x={CX} y={CY - 7}
-              textAnchor="middle"
-              fill="rgba(255,255,255,0.95)"
-              fontSize="11"
-              fontFamily="var(--font-display)"
-              fontWeight="800"
-              letterSpacing="-0.01em"
-              style={{ pointerEvents: "none" }}
-            >
-              YOU
-            </text>
-            <text
-              x={CX} y={CY + 8}
-              textAnchor="middle"
-              fill="rgba(255,255,255,0.35)"
-              fontSize="7"
-              fontFamily="var(--font-mono)"
-              letterSpacing="0.12em"
-              style={{ pointerEvents: "none" }}
-            >
-              ARENA
-            </text>
-          </g>
-
-          {/* ── NODES ── */}
-          {nodes.map(node => {
-            const pos    = toXY(node.angle, node.ring === 1 ? R1 : R2);
-            const c      = NODE_TYPE_COLORS[node.type];
-            const op     = NODE_STATUS_OPACITY[node.status];
-            const r      = node.ring === 1 ? 28 : 24;
-            const isLocked = node.status === "locked";
-            const isDone   = node.status === "completed";
-
-            return (
-              <g
-                key={node.id}
-                transform={`translate(${pos.x},${pos.y})`}
-                className={`map-node map-node-${node.status}`}
-                style={{ cursor: isLocked ? "not-allowed" : "pointer", opacity: op }}
-                onClick={e => handleNodeClick(node, e as unknown as React.MouseEvent)}
-                onMouseEnter={e => handleNodeHover(node, e as unknown as React.MouseEvent<SVGGElement>)}
-                onMouseLeave={clearTooltip}
-                role="button"
-                tabIndex={isLocked ? -1 : 0}
-                aria-label={`${node.label} — ${node.status}`}
-              >
-                {/* Glow */}
-                {!isLocked && (
-                  <circle r={r + 8} fill={c.glow} opacity="0.25">
-                    {isDone && (
-                      <animate attributeName="opacity" values="0.2;0.45;0.2" dur="2.5s" repeatCount="indefinite" />
-                    )}
-                  </circle>
-                )}
-
-                {/* Main circle */}
-                <circle
-                  r={r}
-                  fill={isDone ? c.bg : isLocked ? "rgba(255,255,255,0.04)" : c.bg}
-                  stroke={isDone ? c.primary : isLocked ? "rgba(255,255,255,0.10)" : c.primary}
-                  strokeWidth={isDone ? 2 : 1.5}
-                  strokeDasharray={isLocked ? "4 3" : undefined}
-                />
-
-                {/* Completion checkmark for done nodes */}
-                {isDone && (
-                  <text x={0} y={-8} textAnchor="middle" fill={c.primary} fontSize="9" style={{ pointerEvents: "none" }}>✓</text>
-                )}
-                {isLocked && (
-                  <text x={0} y={-6} textAnchor="middle" fill="rgba(255,255,255,0.25)" fontSize="10" style={{ pointerEvents: "none" }}>🔒</text>
-                )}
-
-                {/* Label */}
-                <text
-                  x={0}
-                  y={isDone || isLocked ? 4 : -2}
-                  textAnchor="middle"
-                  fill={isDone ? c.primary : isLocked ? "rgba(255,255,255,0.30)" : "rgba(255,255,255,0.90)"}
-                  fontSize={node.ring === 1 ? "9" : "8"}
-                  fontFamily="var(--font-display)"
-                  fontWeight="700"
-                  style={{ pointerEvents: "none" }}
-                >
-                  {node.label}
-                </text>
-                <text
-                  x={0}
-                  y={isDone || isLocked ? 13 : 8}
-                  textAnchor="middle"
-                  fill={isLocked ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.38)"}
-                  fontSize="6.5"
-                  fontFamily="var(--font-mono)"
-                  letterSpacing="0.05em"
-                  style={{ pointerEvents: "none", textTransform: "uppercase" }}
-                >
-                  {node.sublabel}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-
-        {/* ── Tooltip ── */}
-        <AnimatePresence>
-          {tooltip && (
-            <motion.div
-              className="map-tooltip"
-              initial={{ opacity: 0, y: 6, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 4, scale: 0.95 }}
-              transition={{ duration: 0.15 }}
-              style={{
-                left: tooltip.x,
-                top:  tooltip.y - 10,
-                "--tt-c": NODE_TYPE_COLORS[tooltip.node.type].primary,
-              } as React.CSSProperties}
-            >
-              <div className="map-tt-header">
-                <span className="map-tt-label">{tooltip.node.label}</span>
-                <span className={`map-tt-status map-tt-${tooltip.node.status}`}>{tooltip.node.status}</span>
-              </div>
-              {tooltip.node.reward && (
-                <div className="map-tt-row">
-                  <span className="map-tt-key">Reward</span>
-                  <span className="map-tt-val map-tt-reward">{tooltip.node.reward}</span>
-                </div>
-              )}
-              {tooltip.node.req && (
-                <div className="map-tt-row">
-                  <span className="map-tt-key">Requires</span>
-                  <span className="map-tt-val">{tooltip.node.req}</span>
-                </div>
-              )}
-              {tooltip.node.impact && (
-                <div className="map-tt-impact">{tooltip.node.impact}</div>
-              )}
-              {tooltip.node.status !== "locked" && (
-                <div className="map-tt-cta">Click to open →</div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* BACK — revealed on expand */}
+        <div className="fc-face fc-back">
+          <div className="fc-back-body">{back}</div>
+        </div>
       </div>
     </motion.div>
+  );
+};
+
+/* ── Card: Mission ───────────────────────────────────────────────────────── */
+
+const MissionCardFC: React.FC<{
+  data: DashboardData;
+  navigate: (p: string) => void;
+  onBurst: (x: number, y: number, amt: number) => void;
+}> = ({ data, navigate, onBurst }) => {
+  const mission = useMemo(() => computeMission(data), [data]);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 80); return () => clearTimeout(t); }, []);
+
+  const front = (
+    <div className="fc-mission-front">
+      <div className="fc-mission-icon-big">
+        <Icon name="challenge-skill" size={36} label="" />
+      </div>
+      <p className="fc-mission-eyebrow-sub">{mission.eyebrow}</p>
+      <p className="fc-mission-title-sm">{mission.title}</p>
+      {mission.rewardXP > 0 && <div className="fc-mission-reward-preview">+{mission.rewardXP} XP</div>}
+    </div>
+  );
+
+  const back = (
+    <div className="fc-mission-back">
+      <p className="fc-detail-desc">{mission.desc}</p>
+      {mission.tension && <div className="fc-tension">{mission.tension}</div>}
+      <div className="fc-progress-wrap">
+        <div className="fc-progress-meta">
+          <span>{mission.progressLabel}</span>
+          <span>{Math.round(mission.progressPct)}%</span>
+        </div>
+        <div className="fc-progress-track">
+          <div className="fc-progress-fill" style={{ width: mounted ? `${mission.progressPct}%` : "0%" }} />
+        </div>
+      </div>
+      <button
+        className="fc-cta-btn"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          onBurst(r.left + r.width / 2, r.top - 10, mission.rewardXP);
+          navigate(mission.ctaPath);
+        }}
+      >
+        {mission.ctaText}
+      </button>
+    </div>
+  );
+
+  return (
+    <ExpandCard accentColor="rgba(155,124,255,1)" glowColor="rgba(155,124,255,0.30)"
+      icon={<Icon name="challenge-skill" size={18} label="" />} eyebrow="Priority Mission" frontSummary={front} back={back} width={280} animDelay={0} />
+  );
+};
+
+/* ── Card: Market Presence ───────────────────────────────────────────────── */
+
+const MarketPresenceFC: React.FC<{ data: DashboardData }> = ({ data }) => {
+  const vis = useMemo(() => computeVisibility(data), [data]);
+  const [show, setShow] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setShow(true), 140); return () => clearTimeout(t); }, []);
+
+  const scoreColor = vis.score >= 70 ? "#2DD4A0" : vis.score >= 40 ? "#F5B731" : "#F87171";
+
+  const front = (
+    <div className="fc-presence-front">
+      <div className="fc-big-number" style={{ color: scoreColor }}>
+        <AnimCount value={vis.score} />
+        <span className="fc-big-denom">/100</span>
+      </div>
+      <p className="fc-label-muted">Visibility Score</p>
+      <div className="fc-progress-track" style={{ marginTop: 10 }}>
+        <div className="fc-progress-fill" style={{ width: show ? `${vis.score}%` : "0%", background: scoreColor }} />
+      </div>
+      <p className="fc-ahead-text">Ahead of {vis.aheadPct}% of candidates</p>
+    </div>
+  );
+
+  const back = (
+    <div className="fc-presence-back">
+      <div className={`fc-readiness-badge ${vis.isRecruiterReady ? "fc-ready" : "fc-not-ready"}`}>
+        <span className={`fc-readiness-dot ${vis.isRecruiterReady ? "dot-on" : "dot-off"}`} />
+        {vis.isRecruiterReady ? "Visible to recruiters" : "NOT visible to top jobs"}
+      </div>
+      <div className="fc-strengths">
+        {vis.strengths.slice(0, 4).map((s, i) => (
+          <div key={i} className="fc-strength-row">
+            <span className={`fc-sdot fc-sdot-${s.type}`} />
+            <span className="fc-stext">{s.text}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <ExpandCard accentColor={scoreColor} glowColor={`${scoreColor}44`}
+      icon={<Icon name="badge" size={18} label="" />} eyebrow="Market Presence" frontSummary={front} back={back} width={280} animDelay={0.06} />
+  );
+};
+
+/* ── Card: Stats ─────────────────────────────────────────────────────────── */
+
+const StatsCardFC: React.FC<{ data: DashboardData; navigate: (p: string) => void }> = ({ data, navigate }) => {
+  const stats = [
+    { label:"Gold Badges",    value:data.goldBadges,         color:"#F5B731", impact: data.goldBadges > 0 ? `Unlocks ${data.goldBadges*8}+ premium jobs` : "Earn one → unlock premium jobs", path:"/skills" },
+    { label:"Total Badges",   value:data.totalBadges,        color:"#B8C8D8", impact: data.totalBadges > 0 ? `${data.silverBadges}s · ${data.bronzeBadges}b` : "Zero badges — no proof", path:"/skills" },
+    { label:"Verified Skills",value:data.verifiedSkills,     color:"#22D3EE", impact: data.verifiedSkills >= 5 ? "Strong profile" : `Need ${Math.max(5-data.verifiedSkills,0)} more`, path:"/skills" },
+    { label:"Applications",   value:data.totalApplications,  color:"#2DD4A0", impact: data.totalApplications === 0 ? "0 = 0 market exposure" : `${data.acceptedApplications} accepted`, path:"/applications" },
+    { label:"Active Quests",  value:data.activeChallenges,   color:"#9B7CFF", impact: data.activeChallenges > 0 ? `+${data.activeChallenges*40} XP waiting` : `${data.completedChallenges} done`, path:"/challenges" },
+  ];
+
+  const front = (
+    <div className="fc-stats-grid">
+      {stats.slice(0, 3).map(s => (
+        <div key={s.label} className="fc-stat-mini">
+          <span className="fc-stat-val" style={{ color: s.color }}><AnimCount value={s.value} /></span>
+          <span className="fc-stat-lbl">{s.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+
+  const back = (
+    <div className="fc-stats-list">
+      {stats.map(s => (
+        <button key={s.label} className="fc-stat-row" onClick={() => navigate(s.path)}>
+          <div className="fc-stat-row-left">
+            <span className="fc-stat-row-val" style={{ color: s.color }}>{s.value}</span>
+            <span className="fc-stat-row-lbl">{s.label}</span>
+          </div>
+          <span className="fc-stat-row-impact" style={{ color: s.color }}>{s.impact}</span>
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <ExpandCard accentColor="#9B7CFF" glowColor="rgba(155,124,255,0.28)"
+      icon={<Icon name="badge-gold" size={18} label="" />} eyebrow="Your Stats" frontSummary={front} back={back} width={280} animDelay={0.12} />
+  );
+};
+
+/* ── Card: Market Intelligence ───────────────────────────────────────────── */
+
+const MarketIntelCardFC: React.FC<{ data: DashboardData; navigate: (p: string) => void }> = ({ data, navigate }) => {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 100); return () => clearTimeout(t); }, []);
+  const maxJobs = data.topMarketSkills[0]?.jobCount ?? 1;
+
+  const front = (
+    <div className="fc-market-front">
+      {data.topMarketSkills.slice(0, 3).map(item => (
+        <div key={item.skillName} className="fc-market-preview-row">
+          <span className="fc-market-skill-name">{item.skillName}</span>
+          <span className={`fc-market-have ${item.userHasIt ? "have-yes" : "have-no"}`}>
+            {item.userHasIt ? <Icon name="badge" size={12} label="" /> : <Icon name="xp-spend" size={12} label="" />}
+          </span>
+          <span className="fc-market-jobs-cnt">{item.jobCount}</span>
+        </div>
+      ))}
+      <p className="fc-label-muted" style={{ marginTop: 8 }}>Top skills employers need</p>
+    </div>
+  );
+
+  const back = (
+    <div className="fc-market-back">
+      {data.topMarketSkills.map(item => {
+        const pct = maxJobs > 0 ? (item.jobCount / maxJobs) * 100 : 0;
+        return (
+          <div key={item.skillName} className="fc-market-bar-row" onClick={() => !item.userHasIt && navigate("/skills")}>
+            <div className="fc-market-bar-head">
+              <span className="fc-market-bar-name">{item.skillName}</span>
+              <div className="fc-market-bar-meta">
+                {item.userHasIt ? <span className="have-yes">✓ Got it</span> : <span className="have-no">Gap ↗</span>}
+                <span className="fc-market-jobs-cnt">{item.jobCount} jobs</span>
+              </div>
+            </div>
+            <div className="fc-progress-track">
+              <div className={`fc-progress-fill ${item.userHasIt ? "fill-green" : "fill-violet"}`}
+                style={{ width: mounted ? `${pct}%` : "0%" }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <ExpandCard accentColor="#9B7CFF" glowColor="rgba(155,124,255,0.26)"
+      icon={<Icon name="work" size={18} label="" />} eyebrow="Market Intel" frontSummary={front} back={back} width={280} animDelay={0.18} />
+  );
+};
+
+/* ── Card: My Skills ─────────────────────────────────────────────────────── */
+
+const MySkillsCardFC: React.FC<{ data: DashboardData; navigate: (p: string) => void }> = ({ data, navigate }) => {
+  const front = (
+    <div className="fc-skills-front">
+      {data.topSkills.length === 0 ? (
+        <p className="fc-empty-hint">No verified skills yet — your first badge changes everything.</p>
+      ) : (
+        data.topSkills.slice(0, 3).map(s => {
+          const tier = s.badge === "GOLD" ? "gold" : s.badge === "SILVER" ? "silver" : "bronze";
+          return (
+            <div key={s.skillId} className="fc-skill-preview">
+              <span className="fc-skill-name">{s.skillName}</span>
+              <span className={`fc-badge-chip fc-badge-${tier}`}>{s.badge}</span>
+            </div>
+          );
+        })
+      )}
+      {data.topSkills.length > 3 && <p className="fc-more-hint">+{data.topSkills.length - 3} more skills</p>}
+    </div>
+  );
+
+  const back = (
+    <div className="fc-skills-back">
+      {data.topSkills.length === 0 ? (
+        <div className="fc-empty-state">
+          <p className="fc-empty-hint">No verified skills yet.</p>
+          <button className="fc-cta-btn" onClick={() => navigate("/skills")}>Start verifying →</button>
+        </div>
+      ) : (
+        <>
+          {data.topSkills.map(s => {
+            const tier = s.badge === "GOLD" ? "gold" : s.badge === "SILVER" ? "silver" : "bronze";
+            return (
+              <div key={s.skillId} className="fc-skill-row">
+                <div>
+                  <span className="fc-skill-name">{s.skillName}</span>
+                  <span className="fc-skill-cat">{s.category}</span>
+                </div>
+                <span className={`fc-badge-chip fc-badge-${tier}`}>{s.badge}</span>
+              </div>
+            );
+          })}
+          <button className="fc-link-btn" onClick={() => navigate("/skills")}>All badges →</button>
+        </>
+      )}
+    </div>
+  );
+
+  return (
+    <ExpandCard accentColor="#22D3EE" glowColor="rgba(34,211,238,0.26)"
+      icon={<Icon name="badge-silver" size={18} label="" />} eyebrow="My Skills" frontSummary={front} back={back} width={280} animDelay={0.24} />
+  );
+};
+
+/* ── Card: Quick Actions ─────────────────────────────────────────────────── */
+
+const QuickActionsCardFC: React.FC<{ data: DashboardData; navigate: (p: string) => void }> = ({ data, navigate }) => {
+  const actions = useMemo(() => buildSmartActions(data), [data]);
+
+  const front = (
+    <div className="fc-qa-front">
+      <p className="fc-qa-headline">Your top move right now:</p>
+      <div className="fc-qa-top">
+        <span className="fc-qa-top-title">{actions[0].title}</span>
+        <span className="fc-qa-top-sub">{actions[0].sub}</span>
+      </div>
+      <p className="fc-label-muted">{actions.length - 1} more actions below</p>
+    </div>
+  );
+
+  const back = (
+    <div className="fc-qa-back">
+      {actions.map((a, i) => (
+        <button key={a.path + i} className="fc-qa-btn"
+          style={{ "--qa-g": a.glow } as React.CSSProperties}
+          onClick={() => navigate(a.path)}>
+          <span className="fc-qa-icon"><Icon name={a.icon} size={16} label="" /></span>
+          <div>
+            <span className="fc-qa-title">{a.title}</span>
+            <span className="fc-qa-sub">{a.sub}</span>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <ExpandCard accentColor="#F5B731" glowColor="rgba(245,183,49,0.26)"
+      icon={<Icon name="xp" size={18} label="" />} eyebrow="Next Moves" frontSummary={front} back={back} width={280} animDelay={0.30} />
+  );
+};
+
+/* ── Card: Activity Feed ─────────────────────────────────────────────────── */
+
+const ActivityCardFC: React.FC<{ data: DashboardData }> = ({ data }) => {
+  const getConfig = (type: string) => {
+    if (type === "XP_GAIN")  return { color:"#F5B731", bg:"rgba(245,183,49,0.12)",  border:"rgba(245,183,49,0.26)" };
+    if (type === "XP_SPEND") return { color:"#9B7CFF", bg:"rgba(155,124,255,0.10)", border:"rgba(155,124,255,0.22)" };
+    return                          { color:"#22D3EE", bg:"rgba(34,211,238,0.08)",  border:"rgba(34,211,238,0.18)" };
+  };
+
+  const front = (
+    <div className="fc-activity-front">
+      {data.recentActivity.length === 0 ? (
+        <p className="fc-empty-hint">No activity yet — earn your first XP to start the log.</p>
+      ) : (
+        data.recentActivity.slice(0, 3).map((item, i) => {
+          const cfg = getConfig(item.type);
+          return (
+            <div key={i} className="fc-act-preview" style={{ "--act-c": cfg.color } as React.CSSProperties}>
+              <span className="fc-act-dot" style={{ background: cfg.color }} />
+              <span className="fc-act-label">{item.label}</span>
+              <span className="fc-act-time">{timeAgo(item.timestamp)}</span>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+
+  const back = (
+    <div className="fc-activity-back">
+      {data.recentActivity.length === 0 ? (
+        <p className="fc-empty-hint">No activity yet.</p>
+      ) : (
+        data.recentActivity.map((item, i) => {
+          const cfg = getConfig(item.type);
+          const iconName: IconName = item.type === "XP_GAIN" ? "xp" : item.type === "XP_SPEND" ? "xp-spend" : "badge";
+          return (
+            <div key={i} className="fc-act-row"
+              style={{ "--act-c":cfg.color, "--act-bg":cfg.bg, "--act-border":cfg.border } as React.CSSProperties}>
+              <div className="fc-act-icon-box"><Icon name={iconName} size={11} label="" /></div>
+              <div className="fc-act-info">
+                <span className="fc-act-label">{item.label}</span>
+                <span className="fc-act-detail">{item.detail}</span>
+              </div>
+              <span className="fc-act-time-sm">{timeAgo(item.timestamp)}</span>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+
+  return (
+    <ExpandCard accentColor="#2DD4A0" glowColor="rgba(45,212,160,0.24)"
+      icon={<Icon name="clipboard" size={18} label="" />} eyebrow="Activity Log" frontSummary={front} back={back} width={280} animDelay={0.36} />
   );
 };
 
 /* ═══════════════════════════════════════════════════════════
-   3. CAREER PATH — Linear next-step guide
+   CARD DECK — Horizontal scroll strip
    ═══════════════════════════════════════════════════════════ */
 
-const CareerPath: React.FC<{
-  data:     DashboardData;
+const CardDeck: React.FC<{
+  data: DashboardData;
   navigate: (p: string) => void;
-}> = ({ data, navigate }) => {
-  const steps = useMemo(() => buildCareerPath(data), [data]);
-
-  return (
-    <motion.div variants={fadeUp} className="career-path-wrap">
-      <div className="career-path-header">
-        <span className="career-path-eyebrow">YOUR NEXT MOVES</span>
-        <span className="career-path-hint">Follow this path to become hireable</span>
-      </div>
-
-      <div className="career-path-track">
-        {steps.map((step, i) => (
-          <React.Fragment key={step.id}>
-            {/* Step node */}
-            <button
-              className={`career-step ${step.done ? "step-done" : step.isNext ? "step-next" : "step-pending"}`}
-              onClick={() => !step.done && navigate(step.path)}
-              aria-label={step.label}
-              disabled={step.done}
-            >
-              <div className="step-icon">
-                {step.done ? "✓" : step.isNext ? "▶" : (i + 1).toString()}
-              </div>
-              <div className="step-body">
-                <span className="step-label">{step.label}</span>
-                <span className="step-reward">{step.reward}</span>
-                <span className="step-req">{step.req}</span>
-              </div>
-            </button>
-
-            {/* Connector arrow */}
-            {i < steps.length - 1 && (
-              <div className={`career-connector ${step.done ? "conn-done" : "conn-pending"}`}>
-                <svg width="36" height="16" viewBox="0 0 36 16" fill="none">
-                  <path d="M0 8 H28 M24 2 L34 8 L24 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-            )}
-          </React.Fragment>
-        ))}
-      </div>
-    </motion.div>
-  );
-};
+  onBurst: (x: number, y: number, amt: number) => void;
+}> = ({ data, navigate, onBurst }) => (
+  <motion.div variants={stagger} className="deck-track-wrap">
+    <div className="deck-track">
+      <MissionCardFC      data={data} navigate={navigate} onBurst={onBurst} />
+      <MarketPresenceFC   data={data} />
+      <StatsCardFC        data={data} navigate={navigate} />
+      <MarketIntelCardFC  data={data} navigate={navigate} />
+      <MySkillsCardFC     data={data} navigate={navigate} />
+      <QuickActionsCardFC data={data} navigate={navigate} />
+      <ActivityCardFC     data={data} />
+    </div>
+  </motion.div>
+);
 
 /* ── Skeleton ────────────────────────────────────────────────────────────── */
 
 const SkeletonDash: React.FC = () => (
-  <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-    <div className="dash-skel" style={{ height: 148, borderRadius: 22 }} />
-    <div className="dash-skel" style={{ height: 520, borderRadius: 22 }} />
-    <div className="dash-skel" style={{ height: 120, borderRadius: 18 }} />
+  <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+    <div className="dash-skel" style={{ height:148, borderRadius:22 }} />
+    <div style={{ display:"flex", gap:14, overflow:"hidden", padding:"14px 24px 60px" }}>
+      {[0,1,2,3,4,5,6].map(i => (
+        <div key={i} className="dash-skel" style={{ height:220, borderRadius:20, minWidth:280, flexShrink:0 }} />
+      ))}
+    </div>
   </div>
 );
 
@@ -909,21 +808,9 @@ const LiveDash: React.FC<{ data: DashboardData; navigate: (p: string) => void }>
   }, []);
 
   return (
-    <motion.div
-      className="dash-root"
-      variants={stagger}
-      initial="hidden"
-      animate="show"
-    >
-      {/* 1. Identity Core */}
+    <motion.div className="dash-root" variants={stagger} initial="hidden" animate="show">
       <ArenaHeader data={data} />
-
-      {/* 2. Career Map */}
-      <CareerMap data={data} navigate={navigate} />
-
-      {/* 3. Career Path */}
-      <CareerPath data={data} navigate={navigate} />
-
+      <CardDeck data={data} navigate={navigate} onBurst={triggerXpBurst} />
       <XpBurstLayer bursts={xpBursts} />
     </motion.div>
   );
@@ -944,9 +831,7 @@ const DashboardPage: React.FC = () => {
           <div className="empty-state-icon">⚠️</div>
           <h3>Couldn't load your dashboard</h3>
           <p>{error}</p>
-          <button className="btn btn-primary btn-sm" style={{ marginTop: 16 }} onClick={refetch}>
-            Retry
-          </button>
+          <button className="btn btn-primary btn-sm" style={{ marginTop:16 }} onClick={refetch}>Retry</button>
         </div>
       </PageLayout>
     );
@@ -954,6 +839,7 @@ const DashboardPage: React.FC = () => {
 
   return (
     <PageLayout pageTitle="Dashboard">
+      <PageHeader {...PAGE_CONFIGS.dashboard} />
       <div className="dash-scene">
         {isLoading ? <SkeletonDash /> : <LiveDash data={data!} navigate={navigate} />}
       </div>

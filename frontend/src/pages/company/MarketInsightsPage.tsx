@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from "react";
 import CompanyPageLayout from "../../components/company/companyPageLayout";
 import { Icon, type IconName } from "../../components/ui/Icon";
+import PageHeader, { PAGE_CONFIGS } from "../../components/ui/PageHeader";
 import { useMarketInsights } from "../../hooks/company/useCompany";
 import { exportMarketInsightsPdf } from "../../utils/pdfExport";
 import type { SkillDemand } from "../../hooks/company/useCompany";
@@ -180,27 +181,24 @@ const MarketInsightsPage: React.FC = () => {
   return (
     <CompanyPageLayout pageTitle="Market Insights">
 
-      {/* ── Header ── */}
-      <div className="mi-header">
-        <div>
-          <h1 className="mi-page-title">Market Insights</h1>
-          <p className="mi-page-sub">Real-time data from active job postings on XPand.</p>
-        </div>
-        <div className="mi-header__actions">
-          <button className="btn btn-ghost btn-sm" onClick={refetch}>↻ Refresh</button>
-          {/* ── Export to PDF ── */}
-          <button
-            className="mi-export-btn"
-            onClick={handleExportPdf}
-            disabled={isExporting}
-            title="Download market insights as PDF"
-          >
-            {isExporting
-              ? <><span className="mi-export-btn__spinner" /> Exporting…</>
-              : <>⬇ Export PDF</>}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        {...PAGE_CONFIGS["company-insights"]}
+        right={
+          <div className="mi-header__actions">
+            <button className="btn btn-ghost btn-sm" onClick={refetch}>↻ Refresh</button>
+            <button
+              className="mi-export-btn"
+              onClick={handleExportPdf}
+              disabled={isExporting}
+              title="Download market insights as PDF"
+            >
+              {isExporting
+                ? <><span className="mi-export-btn__spinner" /> Exporting…</>
+                : <>⬇ Export PDF</>}
+            </button>
+          </div>
+        }
+      />
 
       {/* ── Primary stats overview ── */}
       <div className="mi-stats">
@@ -407,10 +405,8 @@ const MarketInsightsPage: React.FC = () => {
 // ---------------------------------------------------------------------------
 
 const styles = `
-  .mi-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-8); flex-wrap: wrap; }
+  /* Actions slot (lives in PageHeader right slot) */
   .mi-header__actions { display: flex; align-items: center; gap: var(--space-3); }
-  .mi-page-title { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: var(--weight-bold); color: var(--color-text-primary); margin: 0; }
-  .mi-page-sub { color: var(--color-text-muted); font-size: var(--text-sm); margin-top: 3px; }
 
   /* ── Export PDF button ── */
   .mi-export-btn { display:inline-flex; align-items:center; gap:7px; padding:8px 16px; border-radius:var(--radius-lg,10px); border:1px solid rgba(139,92,246,.35); background:rgba(139,92,246,.08); color:#A78BFA; font-family:var(--font-mono); font-size:12px; font-weight:700; letter-spacing:.05em; cursor:pointer; transition:all 130ms; white-space:nowrap; }
@@ -499,7 +495,7 @@ const styles = `
   /* Responsive */
   @media(max-width:1280px){ .mi-extended-stats { grid-template-columns: repeat(2, 1fr); } }
   @media(max-width:1024px){ .mi-stats { grid-template-columns: repeat(2,1fr); } .mi-body { grid-template-columns: 1fr; } .mi-extended-stats { grid-template-columns: repeat(2, 1fr); } }
-  @media(max-width:640px){ .mi-stats { grid-template-columns: 1fr 1fr; } .mi-extended-stats { grid-template-columns: 1fr; } .mi-header { flex-direction:column; align-items:flex-start; } }
+  @media(max-width:640px){ .mi-stats { grid-template-columns: 1fr 1fr; } .mi-extended-stats { grid-template-columns: 1fr; } }
 `;
 
 export default MarketInsightsPage;

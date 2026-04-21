@@ -7,7 +7,7 @@
 // LOGIC / HOOKS: 100% identical to original. Zero behaviour changed.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import PageLayout from "../../components/user/PageLayout";
 import { Icon, type IconName } from "../../components/ui/Icon";
@@ -15,6 +15,61 @@ import { useJobs } from "../../hooks/user/useJobs";
 import type { JobWithMeta, JobType } from "../../hooks/user/useJobs";
 import { BadgeLevel } from "../../types";
 import PageHeader, { PAGE_CONFIGS } from "../../components/ui/PageHeader";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// useSavedJobs — fetches saved state and provides toggle helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function useSavedJobs(jobIds: number[]) {
+  const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
+  const [pending,  setPending]  = useState<Set<number>>(new Set());
+
+  // Fetch saved status for all visible jobs
+  useEffect(() => {
+    if (jobIds.length === 0) return;
+    Promise.all(
+      jobIds.map((id) =>
+        fetch(`/api/jobs/${id}/saved`, { credentials: "include" })
+          .then((r) => r.ok ? r.json() : { saved: false })
+          .then((d: { saved: boolean }) => ({ id, saved: d.saved }))
+          .catch(() => ({ id, saved: false }))
+      )
+    ).then((results) => {
+      setSavedIds(new Set(results.filter((r) => r.saved).map((r) => r.id)));
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobIds.join(",")]);
+
+  const toggleSave = useCallback(async (jobId: number, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (pending.has(jobId)) return;
+    const isSaved = savedIds.has(jobId);
+    setPending((p) => new Set(p).add(jobId));
+    // Optimistic update
+    setSavedIds((prev) => {
+      const next = new Set(prev);
+      isSaved ? next.delete(jobId) : next.add(jobId);
+      return next;
+    });
+    try {
+      await fetch(`/api/jobs/${jobId}/saved`, {
+        method: isSaved ? "DELETE" : "POST",
+        credentials: "include",
+      });
+    } catch {
+      // Revert on error
+      setSavedIds((prev) => {
+        const next = new Set(prev);
+        isSaved ? next.add(jobId) : next.delete(jobId);
+        return next;
+      });
+    } finally {
+      setPending((p) => { const n = new Set(p); n.delete(jobId); return n; });
+    }
+  }, [savedIds, pending]);
+
+  return { savedIds, toggleSave };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants (unchanged)
@@ -77,7 +132,9 @@ function getStatusConfig(status: string | undefined): { label: string; color: st
 const JobSpotlight: React.FC<{
   job: JobWithMeta;
   onApply: () => void;
-}> = ({ job, onApply }) => {
+  isSaved: boolean;
+  onToggleSave: (e?: React.MouseEvent) => void;
+}> = ({ job, onApply, isSaved, onToggleSave }) => {
   const match     = getMatchTier(job.matchScore);
   const deadline  = getDeadlineBadge(job.deadline);
   const major     = job.skillRequirements.filter((s) => s.required);
@@ -118,9 +175,21 @@ const JobSpotlight: React.FC<{
         </div>
       </div>
 
-      {/* Match label */}
-      <div className="jspot__match-label" style={{ color: match.color, background: match.bg, border: `1px solid ${match.border}` }}>
-        {match.label}
+      {/* Match label + save */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="jspot__match-label" style={{ color: match.color, background: match.bg, border: `1px solid ${match.border}` }}>
+          {match.label}
+        </div>
+        <button
+          className={`jchip jchip--saved ${isSaved ? "jchip--active jchip--saved-active" : ""}`}
+          onClick={onToggleSave}
+          aria-label={isSaved ? "Unsave job" : "Save job"}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill={isSaved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+          </svg>
+          {isSaved ? "Saved" : "Save"}
+        </button>
       </div>
 
       {/* Meta grid */}
@@ -226,7 +295,9 @@ const JobRow: React.FC<{
   isActive: boolean;
   onHover: () => void;
   onClick: () => void;
-}> = ({ job, rank, isActive, onHover, onClick }) => {
+  isSaved: boolean;
+  onToggleSave: (e: React.MouseEvent) => void;
+}> = ({ job, rank, isActive, onHover, onClick, isSaved, onToggleSave }) => {
   const match    = getMatchTier(job.matchScore);
   const deadline = getDeadlineBadge(job.deadline);
   const topSkills = job.skillRequirements.filter((s) => s.required).slice(0, 3);
@@ -294,6 +365,15 @@ const JobRow: React.FC<{
         {job.hasApplied && (
           <div className="jrow__applied-dot" title={job.applicationStatus ?? "Applied"} />
         )}
+        <button
+          className={`jrow__save-btn ${isSaved ? "jrow__save-btn--saved" : ""}`}
+          onClick={onToggleSave}
+          aria-label={isSaved ? "Unsave" : "Save"}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill={isSaved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+          </svg>
+        </button>
       </div>
     </div>
   );
@@ -304,8 +384,9 @@ const JobRow: React.FC<{
 // ─────────────────────────────────────────────────────────────────────────────
 
 const StatsBar: React.FC<{
-  total: number; highMatch: number; applied: number; onApplications: () => void;
-}> = ({ total, highMatch, applied, onApplications }) => (
+  total: number; highMatch: number; applied: number; saved: number;
+  onApplications: () => void; onSavedToggle: () => void; showingSaved: boolean;
+}> = ({ total, highMatch, applied, saved, onApplications, onSavedToggle, showingSaved }) => (
   <div className="jstats">
     <div className="jstats__item">
       <span className="jstats__value">{total}</span>
@@ -321,9 +402,16 @@ const StatsBar: React.FC<{
       <span className="jstats__value" style={{ color: "var(--color-primary-400)" }}>{applied}</span>
       <span className="jstats__label">Applied</span>
     </div>
-    <button className="jstats__link" onClick={onApplications}>
-      My Applications →
-    </button>
+    <div className="jstats__divider" />
+    <div className="jstats__item">
+      <span className="jstats__value" style={{ color: "var(--color-warning)" }}>{saved}</span>
+      <span className="jstats__label">Saved</span>
+    </div>
+    <div style={{ marginLeft: "auto", display: "flex", gap: "var(--space-3)", alignItems: "center" }}>
+      <button className="jstats__link" onClick={onApplications}>
+        My Applications →
+      </button>
+    </div>
   </div>
 );
 
@@ -368,8 +456,12 @@ const JobsPage: React.FC = () => {
   const navigate = useNavigate();
   const { jobs, isLoading, error, filter, setFilter, refetch } = useJobs();
 
-  const [sortDir,    setSortDir]    = useState<SortDir>("desc");
-  const [focusedJob, setFocusedJob] = useState<JobWithMeta | null>(null);
+  const [sortDir,     setSortDir]     = useState<SortDir>("desc");
+  const [focusedJob,  setFocusedJob]  = useState<JobWithMeta | null>(null);
+  const [showSaved,   setShowSaved]   = useState(false);
+
+  const jobIds = useMemo(() => jobs.map((j) => j.id as number), [jobs]);
+  const { savedIds, toggleSave } = useSavedJobs(jobIds);
 
   const sortedJobs = useMemo(
     () => [...jobs].sort((a, b) =>
@@ -378,11 +470,17 @@ const JobsPage: React.FC = () => {
     [jobs, sortDir]
   );
 
+  const visibleJobs = useMemo(
+    () => showSaved ? sortedJobs.filter((j) => savedIds.has(j.id as number)) : sortedJobs,
+    [sortedJobs, showSaved, savedIds]
+  );
+
   const appliedCount   = jobs.filter((j) => j.hasApplied).length;
   const highMatchCount = jobs.filter((j) => j.matchScore >= 80).length;
+  const savedCount     = savedIds.size;
 
   // Spotlight defaults to top-ranked job
-  const activeJob = focusedJob ?? sortedJobs[0] ?? null;
+  const activeJob = focusedJob ?? visibleJobs[0] ?? null;
 
   if (error) {
     return (
@@ -427,7 +525,10 @@ const JobsPage: React.FC = () => {
           total={sortedJobs.length}
           highMatch={highMatchCount}
           applied={appliedCount}
+          saved={savedCount}
           onApplications={() => navigate("/applications")}
+          onSavedToggle={() => { setShowSaved((v) => !v); setFocusedJob(null); }}
+          showingSaved={showSaved}
         />
       )}
 
@@ -464,6 +565,15 @@ const JobsPage: React.FC = () => {
                 {JOB_TYPE_LABELS[type]}
               </button>
             ))}
+            <button
+              className={`jchip jchip--saved ${showSaved ? "jchip--active jchip--saved-active" : ""}`}
+              onClick={() => { setShowSaved((v) => !v); setFocusedJob(null); }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill={showSaved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+              </svg>
+              Saved{savedIds.size > 0 && ` (${savedIds.size})`}
+            </button>
           </div>
 
           <div className="jctrl__divider" />
@@ -508,6 +618,8 @@ const JobsPage: React.FC = () => {
               key={activeJob.id}
               job={activeJob}
               onApply={() => navigate(`/jobs/${activeJob.id}`)}
+              isSaved={savedIds.has(activeJob.id as number)}
+              onToggleSave={(e) => toggleSave(activeJob.id as number, e)}
             />
           ) : null}
         </div>
@@ -519,7 +631,8 @@ const JobsPage: React.FC = () => {
           {!isLoading && (
             <div className="jlist__header">
               <span className="jlist__count">
-                {sortedJobs.length} role{sortedJobs.length !== 1 ? "s" : ""}
+                {visibleJobs.length} role{visibleJobs.length !== 1 ? "s" : ""}
+                {showSaved && " · saved only"}
                 {filter.matchOnly && " · qualified only"}
                 {filter.search && ` · "${filter.search}"`}
               </span>
@@ -538,21 +651,23 @@ const JobsPage: React.FC = () => {
             <div className="jlist">
               {Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} i={i} />)}
             </div>
-          ) : sortedJobs.length === 0 ? (
+          ) : visibleJobs.length === 0 ? (
             <div className="empty-state" style={{ margin: "var(--space-8) 0" }}>
               <div className="empty-state-icon"><Icon name="work" size={32} label="" /></div>
-              <h3>No roles found</h3>
-              <p>Try loosening your filters or turning off "Qualified only".</p>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => setFilter({ search: "", jobType: "ALL", matchOnly: false })}
-              >
-                Clear filters
-              </button>
+              <h3>{showSaved ? "No saved jobs" : "No roles found"}</h3>
+              <p>{showSaved ? "Save jobs by clicking the bookmark icon — they'll appear here." : "Try loosening your filters or turning off \"Qualified only\"."}</p>
+              {!showSaved && (
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setFilter({ search: "", jobType: "ALL", matchOnly: false })}
+                >
+                  Clear filters
+                </button>
+              )}
             </div>
           ) : (
             <div className="jlist">
-              {sortedJobs.map((job, i) => (
+              {visibleJobs.map((job, i) => (
                 <JobRow
                   key={job.id}
                   job={job}
@@ -560,6 +675,8 @@ const JobsPage: React.FC = () => {
                   isActive={activeJob?.id === job.id}
                   onHover={() => setFocusedJob(job)}
                   onClick={() => navigate(`/jobs/${job.id}`)}
+                  isSaved={savedIds.has(job.id as number)}
+                  onToggleSave={(e) => toggleSave(job.id as number, e)}
                 />
               ))}
             </div>
@@ -956,8 +1073,32 @@ const styles = `
   margin-left: 2px;
 }
 
-/* CTA */
+/* Saved chip active state (amber) */
+.jchip--saved-active {
+  background: rgba(212,148,10,0.12);
+  border-color: rgba(212,148,10,0.45);
+  color: var(--color-warning);
+}
+
+/* Save button — row */
+.jrow__save-btn {
+  background: none;
+  border: none;
+  padding: 2px;
+  color: var(--color-text-disabled);
+  cursor: pointer;
+  transition: color 0.12s;
+  flex-shrink: 0;
+  line-height: 1;
+  display: flex;
+}
+.jrow__save-btn:hover { color: var(--color-warning); }
+.jrow__save-btn--saved { color: var(--color-warning); }
+
+/* CTA area */
 .jspot__cta-area { margin-top: auto; }
+
+
 .jspot__apply-btn {
   display: flex;
   align-items: center;

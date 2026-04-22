@@ -2,21 +2,27 @@
    AdminBottomDock.tsx
    Admin-specific bottom navigation dock.
    Same Framer Motion magnification pattern as other docks.
+   Collapse: click the pill handle to slide the dock off-screen.
    ============================================================ */
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   motion,
   useMotionValue,
   useSpring,
   useTransform,
+  AnimatePresence,
 } from "framer-motion";
 import { ADMIN_NAV_ITEMS, type AdminNavItem } from "./navItems";
 
 const ITEM_BASE = 48;
 const ITEM_MAG  = 68;
 const MAG_RANGE = 100;
+
+// Full dock height: 10px top pad + 48px items + 14px bottom pad = 72px
+// Plus the 22px handle pill on top = 94px total translateY to fully hide
+const DOCK_HIDDEN_Y = 94;
 
 interface DockItemProps {
   item:    AdminNavItem;
@@ -89,6 +95,7 @@ const AdminBottomDock = () => {
   const navigate     = useNavigate();
   const { pathname } = useLocation();
   const mouseX       = useMotionValue(-9999);
+  const [collapsed, setCollapsed] = useState(false);
 
   const isActive = (path: string) => {
     if (path === "/admin/overview") return pathname === path;
@@ -96,24 +103,56 @@ const AdminBottomDock = () => {
   };
 
   return (
-    <nav
-      className="bdock"
-      aria-label="Admin navigation"
-      onMouseMove={(e) => mouseX.set(e.clientX)}
-      onMouseLeave={() => mouseX.set(-9999)}
+    <motion.div
+      className="bdock-wrapper"
+      animate={{ y: collapsed ? DOCK_HIDDEN_Y : 0 }}
+      transition={{ type: "spring", stiffness: 340, damping: 32, mass: 0.8 }}
     >
-      <div className="bdock-inner">
-        {ADMIN_NAV_ITEMS.map((item) => (
-          <DockItem
-            key={item.id}
-            item={item}
-            active={isActive(item.path)}
-            mouseX={mouseX}
-            onClick={() => navigate(item.path)}
-          />
-        ))}
-      </div>
-    </nav>
+      {/* Collapse / expand handle pill */}
+      <button
+        className="bdock-collapse-handle"
+        onClick={() => setCollapsed((v) => !v)}
+        aria-label={collapsed ? "Expand navigation dock" : "Collapse navigation dock"}
+        aria-expanded={!collapsed}
+      >
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.svg
+            key={collapsed ? "up" : "down"}
+            width="12" height="12" viewBox="0 0 12 12" fill="none"
+            initial={{ opacity: 0, y: collapsed ? 4 : -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{   opacity: 0, y: collapsed ? -4 : 4 }}
+            transition={{ duration: 0.15 }}
+          >
+            <path
+              d={collapsed ? "M2 8l4-4 4 4" : "M2 4l4 4 4-4"}
+              stroke="currentColor" strokeWidth="1.5"
+              strokeLinecap="round" strokeLinejoin="round"
+            />
+          </motion.svg>
+        </AnimatePresence>
+      </button>
+
+      <nav
+        className="bdock"
+        aria-label="Admin navigation"
+        aria-hidden={collapsed}
+        onMouseMove={(e) => mouseX.set(e.clientX)}
+        onMouseLeave={() => mouseX.set(-9999)}
+      >
+        <div className="bdock-inner">
+          {ADMIN_NAV_ITEMS.map((item) => (
+            <DockItem
+              key={item.id}
+              item={item}
+              active={isActive(item.path)}
+              mouseX={mouseX}
+              onClick={() => navigate(item.path)}
+            />
+          ))}
+        </div>
+      </nav>
+    </motion.div>
   );
 };
 

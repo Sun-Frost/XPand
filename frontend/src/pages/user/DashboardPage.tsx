@@ -30,6 +30,7 @@ import {
 } from "../../hooks/user/useDashboard";
 
 import "../../assets/css/Dashboardpage.css";
+import { avatarSrc } from "../../components/ui/AvatarPicker";
 
 /* ── Motion presets ──────────────────────────────────────────────────────── */
 
@@ -323,8 +324,8 @@ const ArenaHeader: React.FC<{ data: DashboardData }> = ({ data }) => {
           />
         </svg>
         <div className="arena-av">
-          {data.profilePicture
-            ? <img src={data.profilePicture} alt="avatar" />
+          {avatarSrc(data.profilePicture)
+            ? <img src={avatarSrc(data.profilePicture)!} alt="avatar" />
             : <span>{data.firstName?.[0]?.toUpperCase() ?? "?"}</span>
           }
         </div>

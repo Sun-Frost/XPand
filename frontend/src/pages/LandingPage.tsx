@@ -9,8 +9,8 @@ const panels = [
     letter: "X",
     word: "eXpose",
     tagline: "Real Skills",
-    hook: "Stop listing skills.\nStart proving them.",
-    body: "Your abilities are visible, not buried in a resume. Verified badges in React, TypeScript, Node.js — earned through structured tests, shared directly with employers.",
+    hook: "Stop listing skills. Start proving them.",
+    body: "Your abilities are visible, not buried in a resume. Verified badges earned through structured tests.",
     userValue: ["Gold, Silver & Bronze badges per skill", "Badges shared directly with companies"],
     companyValue: ["Instantly see verified competency levels", "No resume keyword guessing"],
     accent: "violet",
@@ -20,9 +20,9 @@ const panels = [
     letter: "P",
     word: "Prove",
     tagline: "Your Ability",
-    hook: "Anyone can say it.\nFew can prove it.",
-    body: "15 questions. 15 minutes. Your result determines your badge level. 3 attempts per month — every attempt counts. Your score speaks before you do.",
-    userValue: ["Timed skill tests across Frontend, Backend, Data & Cloud", "3 monthly attempts — results are permanent"],
+    hook: "Anyone can say it. Few can prove it.",
+    body: "15 questions. 15 minutes. Your result determines your badge level. 3 attempts per month. Your score speaks before you do.",
+    userValue: ["Timed skill tests across Frontend, Backend, Data & Cloud", "3 monthly attempts & results are permanent"],
     companyValue: ["Trust candidates based on verified test results", "Filter by badge tier: Bronze → Silver → Gold"],
     accent: "cyan",
     previewType: "test",
@@ -31,10 +31,10 @@ const panels = [
     letter: "A",
     word: "Access",
     tagline: "Opportunities",
-    hook: "No more blind\napplications.",
-    body: "Jobs unlock based on your badge level. Earn XP through challenges and spend it in the XP Store — priority applications, salary insights, skill gap reports.",
-    userValue: ["Apply only when your badges meet the job requirements", "Spend XP on Priority Apply, Salary Insights & Reports"],
-    companyValue: ["Receive only badge-verified, qualified applicants", "Match score calculated from real skill data — not keywords"],
+    hook: "No more blind applications.",
+    body: "Jobs unlock based on your badge level. Earn XP through challenges and spend it in the XP Store — priority slots, AI mock interview, readiness reports.",
+    userValue: ["Apply only when your badges meet the job requirements", "Spend XP on Priority Apply, Mock Interviews & Reports"],
+    companyValue: ["Receive only badge-verified, qualified applicants", "Match score calculated from real skill data"],
     accent: "gold",
     previewType: "access",
   },
@@ -42,7 +42,7 @@ const panels = [
     letter: "N",
     word: "Navigate",
     tagline: "Your Growth",
-    hook: "No guessing.\nJust direction.",
+    hook: "No guessing. Just direction.",
     body: "Daily, Weekly, Streak, and Milestone challenges keep you moving. Mission tracks show exactly where you are and what to do next. XP is your fuel.",
     userValue: ["Daily Ops, Skill Path & Weekly Push mission tracks", "See your market coverage gaps instantly"],
     companyValue: ["Identify candidates with active growth momentum", "Track trajectory, not just current badge level"],
@@ -53,9 +53,9 @@ const panels = [
     letter: "D",
     word: "Differentiate",
     tagline: "Yourself",
-    hook: "Be seen for\nwhat you've done.",
+    hook: "Be seen for what you've done.",
     body: "Mock interviews with live sentiment analysis. AI interviewers in Good Cop or Bad Cop mode. Every completed challenge adds XP. Your profile is built entirely from proof.",
-    userValue: ["Live AI mock interviews with real-time sentiment tracking", "XP Store: priority access, reports & career perks"],
+    userValue: ["Live AI mock interviews with real-time sentiment tracking", "XP Store: priority slot access & reports"],
     companyValue: ["Discover top-tier, self-improving candidates fast", "Every profile is backed by test data, not claims"],
     accent: "purple",
     previewType: "interview",
@@ -410,8 +410,7 @@ export default function LandingPage() {
 
       <nav className="lp-nav">
         <div className="lp-nav__logo">
-          <span className="lp-nav__x">X</span>
-          <span className="lp-nav__pand">Pand</span>
+          <img src="/src/assets/logo.png" alt="XPand" className="lp-nav__logo-img" />
         </div>
         <div className="lp-nav__pills">
           {panels.map((p, i) => (
@@ -424,7 +423,10 @@ export default function LandingPage() {
             </button>
           ))}
         </div>
-        <a href="#" className="btn btn-primary lp-nav__cta">Get Started</a>
+        <div className="lp-nav__auth">
+          <a href="/login" className="btn btn-ghost lp-nav__cta">Login</a>
+          <a href="/register" className="btn btn-primary lp-nav__cta">Get Started</a>
+        </div>
       </nav>
 
       <div className="lp-progress-track" aria-hidden="true">
@@ -442,7 +444,7 @@ export default function LandingPage() {
             ))}
           </h1>
           <p className="lp-hero__sub">From invisible candidate to verified, visible, and hireable talent.</p>
-          <div className="lp-hero__scroll-hint" aria-hidden="true">
+          <div className="lp-hero__scroll-hint" aria-hidden="true" style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%" }}>
             <span>Scroll to unfold</span>
             <div className="lp-hero__scroll-arrow">↓</div>
           </div>
@@ -465,15 +467,17 @@ export default function LandingPage() {
                   <div className="lp-panel__letter-badge"><span>{panel.letter}</span></div>
 
                   <div className="lp-panel__word-group">
-                    <span className={`lp-panel__word lp-panel__word--${panel.accent}`}>{panel.word}</span>
-                    <span className="lp-panel__tagline"> {panel.tagline}</span>
+                    <h2 className="lp-panel__word-heading">
+                      <span className={`lp-panel__word lp-panel__word--${panel.accent}`}>{panel.word}</span>
+                      <span className="lp-panel__tagline"> {panel.tagline}</span>
+                    </h2>
                   </div>
 
-                  <h2 className="lp-panel__hook">
+                  <p className="lp-panel__hook lp-panel__hook--sub">
                     {panel.hook.split("\n").map((line, li) => (
                       <span key={li} className="lp-panel__hook-line">{line}</span>
                     ))}
-                  </h2>
+                  </p>
 
                   <p className="lp-panel__body">{panel.body}</p>
 
@@ -526,10 +530,14 @@ export default function LandingPage() {
             guides growth, unlocks opportunities, and makes talent visible.
           </p>
           <div className="lp-finale__actions">
-            <a href="#" className="btn btn-primary btn-lg">Start Your Journey</a>
-            <a href="#" className="btn btn-ghost btn-lg">For Employers →</a>
+            <a href="/register" className="btn btn-primary btn-lg">Start Your Journey</a>
           </div>
         </section>
+
+        {/* ── Footer ── */}
+        <footer className="lp-footer">
+          <p className="lp-footer__copy">© 2026 XPand. All rights reserved.</p>
+        </footer>
 
       </div>
     </div>

@@ -833,4 +833,170 @@
   .lp-panel__content > * { opacity: 1; transform: none; transition: none; }
   .lp-panel__preview { opacity: 1; transform: none; transition: none; }
   .prev-mi__scanline, .prev-mi__rec-dot, .prev-mi__sent-dot { animation: none; }
+}/* ══════════════════════════════════════════════════════════
+   XPAND LANDING PAGE — CSS PATCH
+   Add these rules to the BOTTOM of LandingPage.css
+   (they override existing declarations via specificity)
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Navbar auth buttons group ───────────────────────────── */
+.lp-nav__auth {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ── Footer copyright ────────────────────────────────────── */
+.lp-footer {
+  text-align: center;
+  padding: 2rem 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.lp-footer__copy {
+  font-size: 0.8rem;
+  color: var(--color-text-muted, rgba(255, 255, 255, 0.35));
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+
+.lp-nav__logo-img {
+  height: 36px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+
+/* ── Fix 3: Background letters — filled, not just outline ── */
+.lp-panel__bg-letter {
+  /* Override existing outline-only style */
+  -webkit-text-stroke: 0;
+  color: rgba(255, 255, 255, 0.06) !important;
+  paint-order: fill stroke;
+  /* Keep font-size and positioning from original */
+}
+
+/* Accent-tinted fills for each panel */
+.lp-panel--violet  .lp-panel__bg-letter { color: rgba(139, 92, 246, 0.08) !important; }
+.lp-panel--cyan    .lp-panel__bg-letter { color: rgba(34, 211, 238, 0.07) !important; }
+.lp-panel--gold    .lp-panel__bg-letter { color: rgba(251, 191, 36, 0.07) !important; }
+.lp-panel--green   .lp-panel__bg-letter { color: rgba(45, 212, 160, 0.07) !important; }
+.lp-panel--purple  .lp-panel__bg-letter { color: rgba(168, 85, 247, 0.08) !important; }
+
+/* ── Fix 4: Title hierarchy swap ─────────────────────────── */
+
+/* Word + tagline → now the BIG heading */
+.lp-panel__word-heading {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 800;
+  line-height: 1.1;
+  margin: 0 0 0.5rem;
+  letter-spacing: -0.02em;
+}
+
+.lp-panel__word {
+  /* keep accent colour classes working */
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.lp-panel__tagline {
+  font-size: inherit;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+/* Hook → now the smaller subtitle */
+.lp-panel__hook--sub {
+  display: flex;
+  flex-direction: column;
+  font-size: clamp(0.85rem, 1.4vw, 1rem) !important;
+  font-weight: 500 !important;
+  color: var(--color-text-secondary) !important;
+  line-height: 1.5 !important;
+  margin-bottom: 1rem !important;
+}
+
+/* ── Fix 2: Finale XPAND — XPand logo palette (blue→cyan→purple) */
+.lp-finale__char {
+  background: linear-gradient(
+    135deg,
+    #7b5fff 0%,
+    #38bdf8 35%,
+    #06b6d4 55%,
+    #a78bfa 80%,
+    #818cf8 100%
+  ) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  color: transparent !important;
+}
+
+/* ── Fix 6: XPAND centered + not cropped, scroll hint centered ── */
+
+/* Prevent horizontal scroll but allow hero content to breathe */
+.lp-scroll-container {
+  overflow-x: hidden;
+}
+
+.lp-hero {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  width: 100% !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  overflow: hidden;
+}
+
+.lp-hero__title {
+  width: 100% !important;
+  text-align: center !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: baseline !important;
+  /* Scale so all 5 letters fit without cropping */
+  font-size: clamp(4rem, 16vw, 14rem) !important;
+  overflow: visible !important;
+  padding: 0 !important;
+}
+
+.lp-hero__char {
+  font-size: inherit !important;
+}
+
+.lp-hero__eyebrow,
+.lp-hero__sub {
+  text-align: center !important;
+  width: 100% !important;
+}
+
+.lp-hero__scroll-hint {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  width: 100% !important;
+  position: absolute !important;
+  bottom: 2rem !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  right: auto !important;
+}
+
+/* Give hero enough height so XPAND + scroll hint don't collide */
+.lp-hero {
+  min-height: 100vh !important;
+  position: relative !important;
+  padding-bottom: 5rem !important;
+}
+
+/* Pull title up slightly so it has breathing room above scroll hint */
+.lp-hero__title {
+  margin-bottom: 0 !important;
 }

@@ -27,10 +27,10 @@
 :root {
   --d-s0:    #070A12;
   --d-s1:    rgba(10,12,22,0.97);
-  --d-s2:    rgba(14,17,30,0.94);
+  --d-s2:    rgba(14,17,30,0.96);
   --d-s3:    rgba(20,24,40,0.90);
-  --d-glass: rgba(255,255,255,0.025);
-  --d-glh:   rgba(255,255,255,0.046);
+  --d-glass: rgba(255,255,255,0.028);
+  --d-glh:   rgba(255,255,255,0.055);
 
   --d-vi:  #9B7CFF;
   --d-cy:  #22D3EE;
@@ -38,13 +38,12 @@
   --d-gr:  #2DD4A0;
   --d-da:  #F87171;
 
-  --d-br:  rgba(255,255,255,0.07);
-  --d-br-h:rgba(255,255,255,0.13);
+  --d-br:  rgba(255,255,255,0.08);
+  --d-br-h:rgba(255,255,255,0.15);
 
   --d-spring: cubic-bezier(0.22, 1, 0.36, 1);
   --d-snap:   cubic-bezier(0.34, 1.48, 0.64, 1);
   --d-ease:   cubic-bezier(0.4, 0, 0.2, 1);
-
 }
 
 /* ── §2  AMBIENT SCENE ───────────────────────────────────── */
@@ -283,12 +282,12 @@
 
 .deck-track {
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;  /* all cards same height in rest state */
   gap: 14px;
   overflow-x: auto;
   overflow-y: visible;
   /* generous bottom padding so expanded cards never get clipped */
-  padding: 14px 24px 60px;
+  padding: 14px 24px 80px;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
@@ -299,29 +298,36 @@
 
 .fc-scene {
   flex-shrink: 0;
-  width: 280px;          /* ALL cards same width */
+  width: 272px;          /* ALL cards same width */
   scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
   /* scene does NOT clip — card grows downward in normal flow */
 }
 
 .fc-card {
   position: relative;
   width: 100%;
-  min-height: 220px;     /* all cards same base height */
-  border-radius: 20px;
+  height: 240px;         /* uniform fixed height for all cards at rest */
+  min-height: 240px;
+  border-radius: 22px;
   cursor: pointer;
-  background: var(--d-s2);
+  background:
+    linear-gradient(160deg, rgba(22,16,42,0.98) 0%, rgba(10,13,24,0.97) 100%);
   border: 1px solid var(--d-br);
   overflow: hidden;
   display: flex;
   flex-direction: column;
 
   transition:
+    height        0.52s cubic-bezier(0.34, 1.12, 0.64, 1),
     transform     0.48s cubic-bezier(0.34, 1.18, 0.64, 1),
     box-shadow    0.48s var(--d-ease),
     border-color  0.28s var(--d-ease);
 
-  box-shadow: 0 8px 28px rgba(0,0,0,0.42);
+  box-shadow:
+    0 4px 16px rgba(0,0,0,0.48),
+    inset 0 1px 0 rgba(255,255,255,0.04);
   transform-origin: top center;
   transform-style: preserve-3d;
   /* z-index so expanded card renders above siblings in the row */
@@ -330,23 +336,28 @@
 
 /* Idle breathing */
 .fc-card:not(.fc-expanded) {
-  animation: cardBreath 5.5s ease-in-out infinite;
+  animation: cardBreath 6s ease-in-out infinite;
 }
 @keyframes cardBreath {
   0%,  100% { transform: translateY(0)    rotateY(0deg)    rotateX(0deg);    }
-  25%        { transform: translateY(-4px) rotateY(2.5deg)  rotateX(1.2deg);  }
-  60%        { transform: translateY(-2px) rotateY(-1.8deg) rotateX(0.6deg);  }
+  30%        { transform: translateY(-3px) rotateY(1.8deg)  rotateX(0.9deg);  }
+  65%        { transform: translateY(-1px) rotateY(-1.4deg) rotateX(0.5deg);  }
 }
 
 /* Expanded — lifts and glows; height grows naturally via back content */
 .fc-card.fc-expanded {
   animation: none;
-  transform: translateY(-6px) scale(1.02);
+  height: auto;
+  min-height: 240px;
+  transform: translateY(-8px) scale(1.025);
   border-color: var(--fc-accent);
+  background:
+    linear-gradient(160deg, rgba(28,18,52,0.99) 0%, rgba(10,13,24,0.98) 100%);
   box-shadow:
-    0 20px 50px rgba(0,0,0,0.62),
-    0  0   38px var(--fc-glow),
-    0  0    0 1px var(--fc-accent);
+    0 24px 60px rgba(0,0,0,0.70),
+    0  0   48px var(--fc-glow),
+    0  0    0 1px var(--fc-accent),
+    inset 0 1px 0 rgba(255,255,255,0.07);
   z-index: 20;
 }
 
@@ -354,45 +365,50 @@
 .fc-face {
   display: flex;
   flex-direction: column;
-  padding: 20px 18px 14px;
+  padding: 22px 20px 16px;
+  flex: 1;
 }
 
-.fc-front { /* baseline visible content */ }
+.fc-front {
+  height: 100%;
+}
 
 /* Back: hidden by default, max-height animated open */
 .fc-back {
   overflow: hidden;
   max-height: 0;
   opacity: 0;
+  padding-left: 20px;
+  padding-right: 20px;
   padding-top: 0;
   padding-bottom: 0;
   border-top: 0px solid transparent;
   transition:
-    max-height     0.46s cubic-bezier(0.34, 1.1, 0.64, 1),
-    opacity        0.30s var(--d-ease),
-    padding-top    0.36s var(--d-ease),
-    padding-bottom 0.36s var(--d-ease),
-    border-top     0.36s var(--d-ease);
+    max-height     0.50s cubic-bezier(0.34, 1.1, 0.64, 1),
+    opacity        0.32s var(--d-ease),
+    padding-top    0.38s var(--d-ease),
+    padding-bottom 0.38s var(--d-ease),
+    border-top     0.38s var(--d-ease);
 }
 
 .fc-card.fc-expanded .fc-back {
-  max-height: 600px;
+  max-height: 700px;
   opacity: 1;
-  padding-top: 12px;
-  padding-bottom: 18px;
-  border-top: 1px solid rgba(255,255,255,0.07);
+  padding-top: 14px;
+  padding-bottom: 22px;
+  border-top: 1px solid rgba(255,255,255,0.06);
 }
 
 /* Animated accent beam on top of card */
 .fc-top-beam {
   position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 2px;
+  top: 0; left: 10%; right: 10%;
+  height: 1px;
   background: linear-gradient(90deg, transparent 0%, var(--fc-accent) 50%, transparent 100%);
   background-size: 200% 100%;
-  animation: fcBeam 2.8s linear infinite;
-  border-radius: 20px 20px 0 0;
+  animation: fcBeam 3.2s linear infinite;
   pointer-events: none;
+  opacity: 0.7;
 }
 @keyframes fcBeam {
   0%   { background-position:  200% 0; }
@@ -402,66 +418,77 @@
 /* Corner glow blob */
 .fc-corner-glow {
   position: absolute;
-  bottom: -30px; right: -30px;
-  width: 100px; height: 100px;
+  bottom: -20px; right: -20px;
+  width: 80px; height: 80px;
   border-radius: 50%;
   background: var(--fc-glow);
   pointer-events: none;
-  opacity: 0.5;
-  transition: opacity 0.4s;
+  opacity: 0.4;
+  transition: opacity 0.4s, width 0.4s, height 0.4s;
+  filter: blur(4px);
 }
-.fc-card.fc-expanded .fc-corner-glow { opacity: 1.0; }
+.fc-card.fc-expanded .fc-corner-glow {
+  opacity: 0.85;
+  width: 120px;
+  height: 120px;
+}
 
 /* Card header — shared top row inside each face */
 .fc-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 .fc-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
   background: var(--fc-glow);
-  border: 1px solid var(--fc-accent);
+  border: 1px solid rgba(255,255,255,0.10);
   flex-shrink: 0;
   color: var(--fc-accent);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.30);
 }
 .fc-eyebrow {
   font-family: var(--font-mono);
-  font-size: 8.5px; font-weight: 700;
-  letter-spacing: 0.12em; text-transform: uppercase;
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--fc-accent);
+  opacity: 0.85;
 }
 
 /* Front body */
 .fc-front-body {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 /* Back body — rendered inside fc-back, which is height-animated */
 .fc-back-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 /* Hover hint shown at bottom of front when NOT expanded */
 .fc-flip-hint {
   font-family: var(--font-mono);
-  font-size: 7.5px;
-  color: rgba(255,255,255,0.18);
-  letter-spacing: 0.06em;
+  font-size: 8px;
+  color: rgba(255,255,255,0.16);
+  letter-spacing: 0.08em;
   text-align: right;
-  margin-top: 10px;
-  transition: opacity 0.2s;
+  margin-top: auto;
+  padding-top: 8px;
+  transition: opacity 0.2s, color 0.2s;
 }
-.fc-card.fc-expanded .fc-flip-hint { opacity: 0; }
+.fc-card:hover:not(.fc-expanded) .fc-flip-hint { color: rgba(255,255,255,0.32); }
+.fc-card.fc-expanded .fc-flip-hint { opacity: 0; height: 0; overflow: hidden; padding: 0; margin: 0; }
 
 /* ── §7a  MISSION CARD CONTENT ───────────────────────────── */
 
@@ -469,7 +496,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
+  gap: 6px;
   flex: 1;
 }
 
@@ -477,14 +504,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
   background: rgba(155,124,255,0.14);
-  border: 1px solid rgba(155,124,255,0.30);
+  border: 1px solid rgba(155,124,255,0.28);
   color: var(--d-vi);
-  margin-bottom: 6px;
-  box-shadow: 0 0 20px rgba(155,124,255,0.20);
+  margin-bottom: 4px;
+  box-shadow:
+    0 0 20px rgba(155,124,255,0.18),
+    inset 0 1px 0 rgba(255,255,255,0.06);
 }
 
 .fc-mission-eyebrow-sub {
@@ -493,13 +522,13 @@
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(155,124,255,0.75);
+  color: rgba(155,124,255,0.70);
   margin: 0;
 }
 
 .fc-mission-title-sm {
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 800;
   color: rgba(255,255,255,0.90);
   line-height: 1.3;
@@ -511,7 +540,7 @@
   display: inline-flex;
   align-items: center;
   font-family: var(--font-display);
-  font-size: 1.5rem;
+  font-size: 1.3rem;
   font-weight: 900;
   color: var(--d-go);
   letter-spacing: -0.04em;
@@ -536,7 +565,7 @@
 
 .fc-big-number {
   font-family: var(--font-display);
-  font-size: 3.4rem;
+  font-size: 2.9rem;
   font-weight: 900;
   line-height: 1;
   letter-spacing: -0.06em;
@@ -597,23 +626,28 @@
 .fc-stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
+  gap: 7px;
   flex: 1;
 }
 
 .fc-stat-mini {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  background: var(--d-glass);
+  gap: 4px;
+  background: rgba(255,255,255,0.03);
   border: 1px solid var(--d-br);
   border-radius: 12px;
-  padding: 12px 10px;
+  padding: 11px 9px;
+  transition: background 0.20s, border-color 0.20s;
+}
+.fc-stat-mini:hover {
+  background: rgba(255,255,255,0.05);
+  border-color: var(--d-br-h);
 }
 
 .fc-stat-val {
   font-family: var(--font-display);
-  font-size: 1.6rem;
+  font-size: 1.5rem;
   font-weight: 900;
   line-height: 1;
   letter-spacing: -0.04em;
@@ -621,11 +655,11 @@
 
 .fc-stat-lbl {
   font-family: var(--font-mono);
-  font-size: 7.5px;
+  font-size: 7px;
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: rgba(255,255,255,0.30);
+  color: rgba(255,255,255,0.28);
   line-height: 1.3;
 }
 

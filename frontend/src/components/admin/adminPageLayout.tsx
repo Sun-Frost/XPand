@@ -84,32 +84,38 @@ const AdminPageLayout = ({
   const { adminName } = getStoredAdmin();
 
   return (
-    <div className="pagelayout-root">
+    <>
+      <div className="pagelayout-root">
 
-      {!hideNav && (
-        <AdminNavbar
-          adminName={adminName}
-          onToggleTheme={handleToggleTheme}
-          isDarkMode={isDarkMode}
-        />
-      )}
+        {!hideNav && (
+          <AdminNavbar
+            adminName={adminName}
+            onToggleTheme={handleToggleTheme}
+            isDarkMode={isDarkMode}
+          />
+        )}
 
-      <div style={hideNav ? undefined : { paddingTop: "var(--layout-navbar-height)" }}>
-        <motion.main
-          className="pagelayout-content"
-          style={maxWidth ? { maxWidth } : undefined}
-          variants={pageVariants}
-          initial="initial"
-          animate="enter"
-          exit="exit"
-          transition={pageTransition}
-        >
-          {children}
-        </motion.main>
+        <div style={hideNav ? undefined : { paddingTop: "var(--layout-navbar-height)" }}>
+          <motion.main
+            className="pagelayout-content"
+            style={maxWidth ? { maxWidth } : undefined}
+            variants={pageVariants}
+            initial="initial"
+            animate="enter"
+            exit="exit"
+            transition={pageTransition}
+          >
+            {children}
+          </motion.main>
+        </div>
+
       </div>
 
+      {/* Rendered outside pagelayout-root so no ancestor transform
+          (e.g. from Framer Motion) can create a new containing block
+          and break position:fixed on the dock. */}
       {!hideNav && <AdminBottomDock />}
-    </div>
+    </>
   );
 };
 

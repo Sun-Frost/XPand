@@ -20,11 +20,9 @@
 
 /* ── Shell — spans the full viewport width ───────────────────── */
 .bdock {
-  position: fixed;
-  bottom:   0;
-  left:     0;
-  width:    100%;
-  z-index:  auto;              /* bdock-wrapper owns the stacking level */
+  /* position/bottom/left/z-index are set in the collapse-additions block
+     below — .bdock-wrapper owns fixed positioning, .bdock is static inside it. */
+  width:          100%;
   pointer-events: all;
 
   /* Safe area for iPhone home indicator */

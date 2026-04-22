@@ -159,8 +159,10 @@ const JobSpotlight: React.FC<{
           />
         </svg>
         <div className="jspot__score-inner">
-          <span className="jspot__score-num" style={{ color: match.color }}>{job.matchScore}</span>
-          <span className="jspot__score-pct">%</span>
+          <span style={{ display: "flex", alignItems: "baseline", gap: 1 }}>
+            <span className="jspot__score-num" style={{ color: match.color }}>{job.matchScore}</span>
+            <span className="jspot__score-pct">%</span>
+          </span>
         </div>
       </div>
 
@@ -928,10 +930,9 @@ const styles = `
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: center;
   gap: 1px;
-  padding-top: 18px;
 }
 .jspot__score-num {
   font-family: var(--font-display);

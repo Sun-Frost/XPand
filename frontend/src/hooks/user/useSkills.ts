@@ -31,11 +31,15 @@ export interface SkillWithVerification extends SkillItem {
   attemptsExhausted: boolean;
   /** Remaining attempts this month (0-3) */
   remainingAttempts: number;
+  /** True if the user has achieved the Gold badge — skill is complete, no re-attempts allowed */
+  isGoldVerified: boolean;
 }
 
 export interface SkillsData {
   skills: SkillWithVerification[];
   categories: string[];
+  /** Skill IDs the user self-reported knowing during onboarding registration */
+  onboardingSkillIds: Set<number>;
 }
 
 export interface UseSkillsReturn {
@@ -57,10 +61,6 @@ const MAX_MONTHLY_ATTEMPTS = 3;
 
 function getRemainingAttempts(v: UserSkillVerification | undefined): number {
   if (!v) return MAX_MONTHLY_ATTEMPTS;
-  // Backend tracks total attemptCount — remaining is MAX minus used this month.
-  // If backend provides a per-month count, use it directly.
-  // For now we treat isLocked as the authoritative "blocked" signal
-  // and show remaining = MAX - (attemptCount % MAX) as a proxy.
   if (v.isLocked) return 0;
   const usedThisMonth = v.attemptCount % MAX_MONTHLY_ATTEMPTS;
   return MAX_MONTHLY_ATTEMPTS - usedThisMonth;
@@ -84,8 +84,12 @@ export const useSkills = (): UseSkillsReturn => {
     Promise.all([
       get<SkillItem[]>("/skills"),
       get<UserSkillVerification[]>("/user/skills/verifications"),
+      // Fetch onboarding skill IDs saved during registration.
+      // Falls back to an empty array if the endpoint isn't available yet
+      // (e.g. the user registered before this feature was shipped).
+      get<number[]>("/user/skills/onboarding").catch(() => [] as number[]),
     ])
-      .then(([skills, verifications]) => {
+      .then(([skills, verifications, onboardingIds]) => {
         if (cancelled) return;
 
         // Build a map for O(1) verification lookup by skillId
@@ -95,17 +99,26 @@ export const useSkills = (): UseSkillsReturn => {
         const enriched: SkillWithVerification[] = skills.map((skill) => {
           const v = verificationMap.get(skill.id);
           const remaining = getRemainingAttempts(v);
+          const isGoldVerified = v?.currentBadge === "GOLD";
           return {
             ...skill,
             verification: v,
-            remainingAttempts: remaining,
-            attemptsExhausted: remaining === 0,
+            remainingAttempts: isGoldVerified ? 0 : remaining,
+            attemptsExhausted: isGoldVerified || remaining === 0,
+            isGoldVerified,
           };
         });
 
         const categories = Array.from(new Set(enriched.map((s) => s.category)));
 
-        setData({ skills: enriched, categories });
+        // Merge backend onboarding IDs with any still in localStorage
+        // (localStorage fallback is written when the user registers before the
+        // backend call in handleFinish succeeds, or pre-verify flows).
+        const localRaw = localStorage.getItem("onboarding_skill_ids");
+        const localIds: number[] = localRaw ? JSON.parse(localRaw).filter(Number.isFinite) : [];
+        const mergedOnboardingIds = new Set<number>([...onboardingIds, ...localIds]);
+
+        setData({ skills: enriched, categories, onboardingSkillIds: mergedOnboardingIds });
       })
       .catch((err: unknown) => {
         if (cancelled) return;

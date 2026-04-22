@@ -12,7 +12,6 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/user/DashboardPage";
 import ProfilePage from "./pages/user/ProfilePage";
-import EditProfilePage from "./pages/user/EditProfilePage";
 import SkillsLibraryPage from "./pages/user/SkillsLibraryPage";
 import SkillTestPage from "./pages/user/SkillTestPage";
 import TestResultPage from "./pages/user/TestResultPage";
@@ -100,7 +99,6 @@ const AppRoutes: React.FC = () => {
       {/* ── User-only routes ── */}
       <Route path="/dashboard"                      element={<UserRoute><DashboardPage /></UserRoute>} />
       <Route path="/profile"                        element={<UserRoute><ProfilePage /></UserRoute>} />
-      <Route path="/profile/edit"                   element={<UserRoute><EditProfilePage /></UserRoute>} />
       <Route path="/skills"                         element={<UserRoute><SkillsLibraryPage /></UserRoute>} />
       <Route path="/skills/test/:skillId"           element={<UserRoute><SkillTestPage /></UserRoute>} />
       <Route path="/skills/result"                  element={<UserRoute><TestResultPage /></UserRoute>} />

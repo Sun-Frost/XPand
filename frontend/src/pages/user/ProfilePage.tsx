@@ -14,6 +14,7 @@ import {
 import { useSkills, type BadgeLevel } from "../../hooks/user/useSkills";
 import { CITIES } from "../../constants/cities";
 import Modal from "../../components/ui/Modal";
+import AvatarPicker, { avatarSrc } from "../../components/ui/AvatarPicker";
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -90,6 +91,7 @@ const EditProfileModal: React.FC<{
   onClose: () => void;
 }> = ({ initial, isSaving, saveError, onSave, onClose }) => {
   const [form, setForm] = useState<UpdateProfilePayload>(initial);
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const set = (k: keyof UpdateProfilePayload) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm((p) => ({ ...p, [k]: e.target.value || null }));
@@ -98,46 +100,93 @@ const EditProfileModal: React.FC<{
     if (await onSave(form)) onClose();
   };
 
+  const selectedAvatarSrc = avatarSrc(form.profilePicture);
+
   return (
-    <ModalShell title="Edit Profile" onClose={onClose}>
-      <div className="modal-body prof-modal-grid">
-        <MField label="First Name"><input className="input" value={form.firstName ?? ""} onChange={set("firstName")} /></MField>
-        <MField label="Last Name"><input className="input" value={form.lastName ?? ""} onChange={set("lastName")} /></MField>
-        <MField label="Professional Title">
-          <input className="input" placeholder="e.g. Full Stack Developer" value={form.professionalTitle ?? ""} onChange={set("professionalTitle")} />
-        </MField>
-        <MField label="Profile Picture URL">
-          <input className="input" placeholder="https://…" value={form.profilePicture ?? ""} onChange={set("profilePicture")} />
-        </MField>
-        <MField label="Phone"><input className="input" placeholder="+961 XX XXX XXX" value={form.phoneNumber ?? ""} onChange={set("phoneNumber")} /></MField>
-        <MField label="Country"><input className="input" value={form.country ?? ""} onChange={set("country")} /></MField>
-        <MField label="City">
-          <select className="input" value={form.city ?? ""} onChange={set("city")}>
-            <option value="">Select a city…</option>
-            {CITIES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </MField>
-        <MField label="LinkedIn URL">
-          <input className="input" placeholder="https://linkedin.com/in/…" value={form.linkedinUrl ?? ""} onChange={set("linkedinUrl")} />
-        </MField>
-        <MField label="GitHub URL">
-          <input className="input" placeholder="https://github.com/…" value={form.githubUrl ?? ""} onChange={set("githubUrl")} />
-        </MField>
-        <MField label="Portfolio URL">
-          <input className="input" placeholder="https://…" value={form.portfolioUrl ?? ""} onChange={set("portfolioUrl")} />
-        </MField>
-        <div className="prof-modal-full">
-          <MField label="About Me">
-            <textarea className="input prof-textarea" rows={4} placeholder="A short bio…" value={form.aboutMe ?? ""} onChange={set("aboutMe")} />
+    <>
+      <ModalShell title="Edit Profile" onClose={onClose}>
+        <div className="modal-body prof-modal-grid">
+          <MField label="First Name"><input className="input" value={form.firstName ?? ""} onChange={set("firstName")} /></MField>
+          <MField label="Last Name"><input className="input" value={form.lastName ?? ""} onChange={set("lastName")} /></MField>
+          <MField label="Professional Title">
+            <input className="input" placeholder="e.g. Full Stack Developer" value={form.professionalTitle ?? ""} onChange={set("professionalTitle")} />
           </MField>
+
+          {/* ── Avatar picker trigger (replaces URL input) ── */}
+          <div className="prof-modal-full">
+            <MField label="Profile Picture">
+              <div className="prof-avatar-trigger-wrap">
+                <button
+                  type="button"
+                  className="prof-avatar-trigger"
+                  onClick={() => setShowAvatarPicker(true)}
+                >
+                  {selectedAvatarSrc ? (
+                    <img src={selectedAvatarSrc} alt="Selected avatar" className="prof-avatar-trigger__img" />
+                  ) : (
+                    <div className="prof-avatar-trigger__placeholder">
+                      <span className="prof-avatar-trigger__icon">＋</span>
+                      <span className="prof-avatar-trigger__label">Choose</span>
+                    </div>
+                  )}
+                </button>
+                <div className="prof-avatar-trigger__info">
+                  {selectedAvatarSrc ? (
+                    <>
+                      <p className="prof-avatar-trigger__name">Avatar selected ✓</p>
+                      <button type="button" className="prof-avatar-trigger__change" onClick={() => setShowAvatarPicker(true)}>
+                        Change avatar
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="prof-avatar-trigger__name">No avatar selected</p>
+                      <p className="prof-avatar-trigger__hint">Click to choose from our avatar library</p>
+                    </>
+                  )}
+                </div>
+              </div>
+            </MField>
+          </div>
+
+          <MField label="Phone"><input className="input" placeholder="+961 XX XXX XXX" value={form.phoneNumber ?? ""} onChange={set("phoneNumber")} /></MField>
+          <MField label="Country"><input className="input" value={form.country ?? ""} onChange={set("country")} /></MField>
+          <MField label="City">
+            <select className="input" value={form.city ?? ""} onChange={set("city")}>
+              <option value="">Select a city…</option>
+              {CITIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </MField>
+          <MField label="LinkedIn URL">
+            <input className="input" placeholder="https://linkedin.com/in/…" value={form.linkedinUrl ?? ""} onChange={set("linkedinUrl")} />
+          </MField>
+          <MField label="GitHub URL">
+            <input className="input" placeholder="https://github.com/…" value={form.githubUrl ?? ""} onChange={set("githubUrl")} />
+          </MField>
+          <MField label="Portfolio URL">
+            <input className="input" placeholder="https://…" value={form.portfolioUrl ?? ""} onChange={set("portfolioUrl")} />
+          </MField>
+          <div className="prof-modal-full">
+            <MField label="About Me">
+              <textarea className="input prof-textarea" rows={4} placeholder="A short bio…" value={form.aboutMe ?? ""} onChange={set("aboutMe")} />
+            </MField>
+          </div>
+          {parseSaveError(saveError) && <p className="prof-modal-error prof-modal-full">{parseSaveError(saveError)}</p>}
         </div>
-        {parseSaveError(saveError) && <p className="prof-modal-error prof-modal-full">{parseSaveError(saveError)}</p>}
-      </div>
-      <div className="modal-footer">
-        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={handleSave} disabled={isSaving}>{isSaving ? "Saving…" : "Save Changes"}</button>
-      </div>
-    </ModalShell>
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={isSaving}>{isSaving ? "Saving…" : "Save Changes"}</button>
+        </div>
+      </ModalShell>
+
+      {showAvatarPicker && (
+        <AvatarPicker
+          current={form.profilePicture ?? null}
+          onSelect={(key) => setForm((p) => ({ ...p, profilePicture: key }))}
+          onClose={() => setShowAvatarPicker(false)}
+        />
+      )}
+    </>
   );
 };
 
@@ -675,8 +724,8 @@ const ProfilePage: React.FC = () => {
           {/* Avatar + identity */}
           <div className="pg-hero__identity">
             <div className="pg-hero__avatar-wrap">
-              {profile.profilePicture ? (
-                <img src={profile.profilePicture} alt={profile.firstName} className="pg-hero__avatar-img" />
+              {avatarSrc(profile.profilePicture) ? (
+                <img src={avatarSrc(profile.profilePicture)!} alt={profile.firstName} className="pg-hero__avatar-img" />
               ) : (
                 <div className="pg-hero__avatar-initials">{getInitials(profile.firstName, profile.lastName)}</div>
               )}
@@ -1376,6 +1425,55 @@ const pageStyles = `
   .prof-empty-cta { background:none;border:1px dashed var(--color-border-default);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);color:var(--color-text-muted);font-size:var(--text-sm);font-family:var(--font-body);cursor:pointer;width:100%;text-align:center;transition:all var(--duration-fast); }
   .prof-empty-cta:hover { border-color:var(--color-premium,var(--color-primary-400));color:var(--color-premium,var(--color-primary-400)); }
 
+  /* ── AVATAR TRIGGER (Edit Profile Modal) ── */
+  .prof-avatar-trigger-wrap {
+    display: flex; align-items: center; gap: var(--space-4);
+  }
+  .prof-avatar-trigger {
+    width: 72px; height: 72px; flex-shrink: 0;
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    border: 2px dashed var(--color-border-default);
+    background: var(--color-bg-overlay);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.18s, background 0.18s;
+    padding: 0;
+  }
+  .prof-avatar-trigger:hover {
+    border-color: var(--color-primary-400, #A78BFA);
+    background: var(--color-primary-glow);
+  }
+  .prof-avatar-trigger__img {
+    width: 100%; height: 100%; object-fit: cover;
+    border-radius: var(--radius-full);
+  }
+  .prof-avatar-trigger__placeholder {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+  }
+  .prof-avatar-trigger__icon {
+    font-size: 20px; color: var(--color-text-disabled); line-height: 1;
+  }
+  .prof-avatar-trigger__label {
+    font-size: 9px; font-family: var(--font-mono);
+    letter-spacing: var(--tracking-wider); text-transform: uppercase;
+    color: var(--color-text-disabled);
+  }
+  .prof-avatar-trigger__info { display: flex; flex-direction: column; gap: 4px; }
+  .prof-avatar-trigger__name {
+    font-size: var(--text-sm); font-weight: var(--weight-medium);
+    color: var(--color-text-secondary); margin: 0;
+  }
+  .prof-avatar-trigger__hint {
+    font-size: var(--text-xs); color: var(--color-text-disabled); margin: 0;
+  }
+  .prof-avatar-trigger__change {
+    background: none; border: none; padding: 0;
+    color: var(--color-primary-400, #A78BFA); font-size: var(--text-xs);
+    font-family: var(--font-body); cursor: pointer;
+  }
+  .prof-avatar-trigger__change:hover { text-decoration: underline; }
+
   /* Field errors */
   .prof-field-error { display:block;color:var(--color-danger);font-size:var(--text-xs);margin-top:3px; }
   .input-error { border-color:var(--color-danger) !important;outline-color:var(--color-danger); }
@@ -1386,10 +1484,24 @@ const pageStyles = `
   .prof-modal-full { grid-column:1/-1; }
   .prof-textarea { resize:vertical;min-height:80px;font-family:var(--font-body); }
   .prof-modal-error { color:var(--color-danger);font-size:var(--text-sm); }
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    z-index: var(--z-modal, 9000);
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(4px);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: var(--space-6) var(--space-4);
+    overflow-y: auto;
+  }
+  .modal {
+    position: relative;
+    background: var(--color-bg-elevated);
     border-radius: var(--radius-2xl);
     box-shadow: var(--shadow-xl);
-    width: 100%; max-width: 560px; max-height: 100%;
-    overflow-y: auto;
+    width: 100%; max-width: 560px;
+    max-height: calc(100vh - var(--space-12, 48px));
+    display: flex; flex-direction: column;
+    overflow: hidden;
     animation: modal-in 0.22s cubic-bezier(0.34,1.56,0.64,1);
     margin: auto;
   }
@@ -1398,17 +1510,17 @@ const pageStyles = `
     display:flex;align-items:center;justify-content:space-between;
     padding:var(--space-5) var(--space-6);
     border-bottom:1px solid var(--color-border-subtle);
-    position:sticky;top:0;
+    flex-shrink: 0;
     background:var(--color-bg-elevated);
     z-index:1;
     border-radius:var(--radius-2xl) var(--radius-2xl) 0 0;
   }
-  .modal-body { padding:var(--space-5) var(--space-6); }
+  .modal-body { padding:var(--space-5) var(--space-6); overflow-y: auto; flex: 1; }
   .modal-footer {
     display:flex;align-items:center;justify-content:flex-end;gap:var(--space-3);
     padding:var(--space-4) var(--space-6);
     border-top:1px solid var(--color-border-subtle);
-    position:sticky;bottom:0;
+    flex-shrink: 0;
     background:var(--color-bg-elevated);
     z-index:1;
     border-radius:0 0 var(--radius-2xl) var(--radius-2xl);

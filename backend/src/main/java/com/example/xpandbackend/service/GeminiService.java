@@ -43,11 +43,9 @@ public class GeminiService {
     private final CertificationRepository         certificationRepository;
     private final WebClient.Builder               webClientBuilder;
     private final ObjectMapper objectMapper;
+
     // ─────────────────────────────────────────────────────────────────────────
     // START INTERVIEW
-    // Builds enriched profile context, returns session record.
-    // The questionsText field is set to a JSON string representing the FIRST
-    // question only; subsequent questions arrive via /next-question.
     // ─────────────────────────────────────────────────────────────────────────
 
     @Transactional
@@ -60,14 +58,23 @@ public class GeminiService {
 
         String profileContext = buildRichProfileContext(userId, user, job);
 
-        // Determine initial tone hint from image if provided
         String toneHint = (base64Image != null)
                 ? "An image of the candidate is attached. Briefly assess their visual demeanour "
                 + "(nervous, confident, relaxed…) and let that influence your opening tone."
                 : "No image provided — start with a neutral, welcoming tone.";
 
         String prompt =
-                "You are an expert interviewer conducting a real job interview. "
+                "You are a professional technical interviewer conducting a real job interview.\n"
+                        + "Your goal is to:\n"
+                        + "- Evaluate both the QUALITY of the answer and the BEHAVIOR of the candidate\n"
+                        + "- Adapt your tone and next question based on the candidate's confidence, clarity, and emotional state\n\n"
+                        + "Behavior rules:\n"
+                        + "- If the candidate shows nervousness → be slightly supportive but still professional\n"
+                        + "- If confident → challenge them deeper\n"
+                        + "- If strong answer → escalate difficulty\n"
+                        + "- If weak answer → simplify or probe fundamentals\n\n"
+                        + "You must behave like a real human interviewer, not an AI assistant.\n"
+                        + "Keep responses natural, conversational, and slightly concise.\n\n"
                         + "You will ask " + TOTAL_QUESTIONS + " questions across the session, "
                         + "mixing TECHNICAL questions (based on the required skills and job) "
                         + "with PERSONAL questions (based on the candidate's background, experience, projects, and about-me). "
@@ -86,7 +93,6 @@ public class GeminiService {
         String rawJson = callGeminiApi(prompt, base64Image, mimeType);
         String cleanJson = stripJsonFences(rawJson);
 
-        // Store the raw JSON as questionsText so the session is resumable
         MockInterview interview = new MockInterview();
         interview.setPurchase(purchase);
         interview.setQuestionsText(cleanJson);
@@ -123,7 +129,7 @@ public class GeminiService {
             }
         }
 
-        int nextNumber   = (req.getAnsweredIndex() != null ? req.getAnsweredIndex() : 0) + 2; // human-readable
+        int nextNumber   = (req.getAnsweredIndex() != null ? req.getAnsweredIndex() : 0) + 2;
         int total        = (req.getTotalQuestions() != null ? req.getTotalQuestions() : TOTAL_QUESTIONS);
         boolean isLast   = (nextNumber == total);
 
@@ -145,15 +151,44 @@ public class GeminiService {
             typeGuidance = "Choose the question type (technical or personal) that best fits the flow.";
         }
 
-        String toneGuidance = buildToneGuidance(sentimentLabel, sentimentConfidence, req.getHistory());
+        // Build enriched behavioral analysis block
+        String behaviorAnalysis = buildBehaviorAnalysis(sentimentLabel, sentimentConfidence, req.getHistory());
+        String toneGuidance     = buildToneGuidance(sentimentLabel, sentimentConfidence, req.getHistory());
+
+        // Pull the last answer text for the prompt so Gemini can reference it specifically
+        String lastAnswer = "";
+        String lastQuestion = "";
+        if (req.getHistory() != null && !req.getHistory().isEmpty()) {
+            NextQuestionRequest.QARound last = req.getHistory().get(req.getHistory().size() - 1);
+            lastQuestion = last.getQuestion() != null ? last.getQuestion() : "";
+            lastAnswer   = last.getAnswer()   != null ? truncate(last.getAnswer(), 300) : "";
+        }
 
         String prompt =
-                "You are an adaptive interviewer mid-session.\n\n"
+                "You are a professional technical interviewer conducting a real job interview.\n"
+                        + "Your goal is to:\n"
+                        + "- Evaluate both the QUALITY of the answer and the BEHAVIOR of the candidate\n"
+                        + "- Adapt your tone and next question based on the candidate's confidence, clarity, and emotional state\n\n"
+                        + "Behavior rules:\n"
+                        + "- If the candidate shows nervousness → be slightly supportive but still professional\n"
+                        + "- If confident → challenge them deeper\n"
+                        + "- If strong answer → escalate difficulty\n"
+                        + "- If weak answer → simplify or probe fundamentals\n\n"
+                        + "You must behave like a real human interviewer, not an AI assistant.\n"
+                        + "Keep responses natural, conversational, and slightly concise.\n\n"
                         + "CANDIDATE PROFILE:\n" + profileContext + "\n\n"
                         + "SESSION SO FAR (" + req.getAnsweredIndex() + " answered, " + total + " total):\n"
                         + (historySb.length() > 0 ? historySb.toString() : "No questions answered yet.\n")
-                        + "LATEST SENTIMENT: " + sentimentLabel
-                        + " (" + Math.round(sentimentConfidence * 100) + "% confidence)\n\n"
+                        + "QUESTION:\n" + lastQuestion + "\n\n"
+                        + "CANDIDATE ANSWER:\n" + lastAnswer + "\n\n"
+                        + "BEHAVIOR ANALYSIS:\n" + behaviorAnalysis + "\n\n"
+                        + "INSTRUCTIONS:\n"
+                        + "1. Evaluate the technical quality of the answer\n"
+                        + "2. Consider the behavioral signals when forming your response\n"
+                        + "3. Respond like a real interviewer:\n"
+                        + "   - Give brief feedback (1–2 sentences max)\n"
+                        + "   - Then ask the next question\n"
+                        + "4. Adapt difficulty and tone based on BOTH answer quality and behavior\n\n"
                         + "TONE DIRECTIVE:\n" + toneGuidance + "\n\n"
                         + "QUESTION TYPE DIRECTIVE:\n" + typeGuidance + "\n\n"
                         + "CONSTRAINTS:\n"
@@ -188,9 +223,8 @@ public class GeminiService {
             return resp;
         } catch (Exception e) {
             log.error("Failed to parse next-question JSON: {}", cleanJson, e);
-            // Graceful fallback — never crash the interview
             NextQuestionResponse fallback = new NextQuestionResponse();
-            fallback.setQuestion(cleanJson); // raw text as question
+            fallback.setQuestion(cleanJson);
             fallback.setQuestionType("technical");
             fallback.setTone("neutral");
             fallback.setLastQuestion(isLast);
@@ -212,7 +246,6 @@ public class GeminiService {
 
         interview.setUserAnswersText(request.getUserAnswersText());
 
-        // Build sentiment journey summary for the prompt
         StringBuilder sentimentSb = new StringBuilder();
         if (request.getSentimentHistory() != null && !request.getSentimentHistory().isEmpty()) {
             sentimentSb.append("PER-ANSWER SENTIMENT JOURNEY:\n");
@@ -312,11 +345,6 @@ public class GeminiService {
 
     private static final int TOTAL_QUESTIONS = 5;
 
-    /**
-     * Builds a rich, multi-section profile string including work history,
-     * education, projects, certifications, and about-me — giving Gemini
-     * enough material to ask genuine personal questions.
-     */
     private String buildRichProfileContext(Integer userId, User user, JobPosting job) {
         StringBuilder sb = new StringBuilder();
 
@@ -327,7 +355,6 @@ public class GeminiService {
         if (user.getAboutMe() != null && !user.getAboutMe().isBlank())
             sb.append("About: ").append(user.getAboutMe()).append("\n");
 
-        // Verified skills
         List<UserSkillVerification> skills = verificationRepository.findVerifiedByUserId(userId);
         if (!skills.isEmpty()) {
             sb.append("Verified Skills: ");
@@ -337,7 +364,6 @@ public class GeminiService {
             sb.append("\n");
         }
 
-        // Work experience
         List<WorkExperience> workExps = workExperienceRepository.findByUserId(userId);
         if (!workExps.isEmpty()) {
             sb.append("\nWORK EXPERIENCE:\n");
@@ -353,7 +379,6 @@ public class GeminiService {
             }
         }
 
-        // Education
         List<Education> educations = educationRepository.findByUserId(userId);
         if (!educations.isEmpty()) {
             sb.append("\nEDUCATION:\n");
@@ -365,7 +390,6 @@ public class GeminiService {
             }
         }
 
-        // Projects
         List<Project> projects = projectRepository.findByUserId(userId);
         if (!projects.isEmpty()) {
             sb.append("\nPROJECTS:\n");
@@ -379,7 +403,6 @@ public class GeminiService {
             }
         }
 
-        // Certifications
         List<Certification> certs = certificationRepository.findByUserId(userId);
         if (!certs.isEmpty()) {
             sb.append("\nCERTIFICATIONS:\n");
@@ -390,7 +413,6 @@ public class GeminiService {
             }
         }
 
-        // Target job
         if (job != null) {
             sb.append("\n=== TARGET JOB ===\n");
             sb.append("Title: ").append(job.getTitle()).append("\n");
@@ -410,13 +432,128 @@ public class GeminiService {
     }
 
     /**
+     * Builds a rich, human-readable BEHAVIOR ANALYSIS block that mirrors the
+     * example prompt format from the product spec:
+     *
+     *   BEHAVIOR ANALYSIS:
+     *   - Emotional timeline: <narrative description of sentiment arc>
+     *   - Final dominant state: <label>
+     *   - Confidence score: <0.0–1.0>
+     *   - Flags:
+     *     - Nervous detected: true/false
+     *     - Confidence recovered: true/false
+     *     - Inconsistency detected: true/false
+     *
+     * This gives Gemini the same rich context a human interviewer would have
+     * from watching a candidate's body language throughout their answer.
+     */
+    private String buildBehaviorAnalysis(String currentSentimentLabel, double confidence,
+                                         List<NextQuestionRequest.QARound> history) {
+
+        List<String> sentimentTimeline = new ArrayList<>();
+        if (history != null) {
+            for (NextQuestionRequest.QARound r : history) {
+                if (r.getSentiment() != null) sentimentTimeline.add(r.getSentiment().toLowerCase());
+            }
+        }
+        // Add the current (latest) sentiment at the end
+        if (currentSentimentLabel != null && !currentSentimentLabel.isBlank()) {
+            sentimentTimeline.add(currentSentimentLabel.toLowerCase());
+        }
+
+        // --- Derive flags ---
+        boolean nervousDetected = sentimentTimeline.contains("nervous");
+        boolean confidentDetected = sentimentTimeline.contains("confident") || sentimentTimeline.contains("happy");
+
+        // Confidence recovered: started nervous, ended confident/happy
+        boolean confidenceRecovered = false;
+        if (!sentimentTimeline.isEmpty()) {
+            String first = sentimentTimeline.get(0);
+            String last  = sentimentTimeline.get(sentimentTimeline.size() - 1);
+            confidenceRecovered = "nervous".equals(first)
+                    && ("confident".equals(last) || "happy".equals(last));
+        }
+
+        // Inconsistency: sentiment flip-flopped (e.g. nervous → confident → nervous)
+        boolean inconsistencyDetected = false;
+        if (sentimentTimeline.size() >= 3) {
+            for (int i = 1; i < sentimentTimeline.size() - 1; i++) {
+                String prev = sentimentTimeline.get(i - 1);
+                String curr = sentimentTimeline.get(i);
+                String next = sentimentTimeline.get(i + 1);
+                if (!curr.equals(prev) && !curr.equals(next) && !prev.equals(next)) {
+                    inconsistencyDetected = true;
+                    break;
+                }
+            }
+        }
+
+        // --- Build the narrative timeline description ---
+        String timelineNarrative = buildTimelineNarrative(sentimentTimeline, confidenceRecovered, inconsistencyDetected);
+
+        // --- Final dominant state (last label in timeline) ---
+        String finalDominant = sentimentTimeline.isEmpty()
+                ? currentSentimentLabel
+                : sentimentTimeline.get(sentimentTimeline.size() - 1);
+
+        return "- Emotional timeline: " + timelineNarrative + "\n"
+                + "- Final dominant state: " + finalDominant + "\n"
+                + "- Confidence score: " + String.format("%.2f", confidence) + "\n"
+                + "- Flags:\n"
+                + "  - Nervous detected: " + nervousDetected + "\n"
+                + "  - Confidence recovered: " + confidenceRecovered + "\n"
+                + "  - Inconsistency detected: " + inconsistencyDetected;
+    }
+
+    /**
+     * Produces the human-readable sentence that describes how the candidate's
+     * sentiment evolved — matching the four narrative cases from the spec.
+     */
+    private String buildTimelineNarrative(List<String> timeline, boolean recovered, boolean inconsistent) {
+        if (timeline.isEmpty()) {
+            return "No behavioral data collected yet.";
+        }
+
+        String first = timeline.get(0);
+        String last  = timeline.get(timeline.size() - 1);
+
+        // Case 4: Fluctuating (highest priority — check before the simpler patterns)
+        if (inconsistent) {
+            return "Candidate showed fluctuating confidence, with moments of hesitation during the response.";
+        }
+
+        // Case 1: Nervous at start → confident/happy at end
+        if ("nervous".equals(first) && ("confident".equals(last) || "happy".equals(last))) {
+            return "Candidate appeared nervous at the start, then gradually became more confident while answering.";
+        }
+
+        // Case 3: Neutral → Confident
+        if ("neutral".equals(first) && ("confident".equals(last) || "happy".equals(last))) {
+            return "Candidate maintained a neutral tone and became more confident toward the end.";
+        }
+
+        // Case 2: Always nervous (all entries are nervous)
+        boolean alwaysNervous = timeline.stream().allMatch("nervous"::equals);
+        if (alwaysNervous) {
+            return "Candidate showed consistent signs of nervousness throughout the response.";
+        }
+
+        // Generic description for other arcs (e.g. confident throughout, or neutral throughout)
+        if (timeline.stream().allMatch(s -> s.equals(last))) {
+            return "Candidate maintained a consistent " + last + " demeanour throughout the response.";
+        }
+
+        // Multi-segment arc — describe it naturally
+        return "Candidate's emotional state shifted from " + first + " to " + last + " during the response.";
+    }
+
+    /**
      * Decides the tone directive to inject into the next-question prompt
      * based on the latest sentiment and the trajectory of previous answers.
      */
     private String buildToneGuidance(String sentimentLabel, double confidence,
                                      List<NextQuestionRequest.QARound> history) {
 
-        // Count consecutive nervous rounds
         int consecutiveNervous = 0;
         if (history != null) {
             for (int i = history.size() - 1; i >= 0; i--) {
@@ -425,7 +562,6 @@ public class GeminiService {
             }
         }
 
-        // Last answer quality (for escalation decisions)
         String lastQuality = (history != null && !history.isEmpty())
                 ? history.get(history.size() - 1).getAnswerQuality()
                 : "moderate";
@@ -565,10 +701,6 @@ public class GeminiService {
         return purchase;
     }
 
-    /**
-     * Used by getNextQuestion — purchase may already be "used" mid-session
-     * (we set it used on final submit), so we only check ownership + type here.
-     */
     private UserPurchase getPurchaseAndValidateForRead(Integer userId, Integer purchaseId) {
         UserPurchase purchase = userPurchaseRepository.findById(purchaseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Purchase record not found."));
@@ -614,7 +746,6 @@ public class GeminiService {
         return (s == null || s.isBlank()) ? fallback : s;
     }
 
-    /** Strips ```json ... ``` fences that Gemini sometimes adds despite instructions. */
     private static String stripJsonFences(String raw) {
         if (raw == null) return "{}";
         String s = raw.strip();

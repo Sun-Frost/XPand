@@ -24,6 +24,7 @@ public class UserService {
     private final ProjectRepository projectRepository;
     private final ProjectSkillRepository projectSkillRepository;
     private final SkillRepository skillRepository;
+    private final UserOnboardingSkillRepository onboardingSkillRepository;
 
     public UserProfileResponse getProfile(Integer userId) {
         User user = findUser(userId);
@@ -48,6 +49,37 @@ public class UserService {
         return mapToProfileResponse(user);
     }
 
+    // -------- Onboarding skills --------
+
+    /**
+     * Persists the skill IDs the user self-reported knowing at registration step 3.
+     * Duplicate inserts (same user + skill) are silently ignored so the endpoint is safe
+     * to call multiple times (e.g. if the user re-completes setup via the post-verify flow).
+     */
+    @Transactional
+    public void saveOnboardingSkills(Integer userId, List<Integer> skillIds) {
+        if (skillIds == null || skillIds.isEmpty()) return;
+        User user = findUser(userId);
+        for (Integer skillId : skillIds) {
+            // Skip if already recorded
+            if (onboardingSkillRepository.existsByUserIdAndSkillId(userId, skillId)) continue;
+            Skill skill = skillRepository.findById(skillId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Skill not found: " + skillId));
+            UserOnboardingSkill entry = new UserOnboardingSkill();
+            entry.setUser(user);
+            entry.setSkill(skill);
+            onboardingSkillRepository.save(entry);
+        }
+    }
+
+    /**
+     * Returns the list of skill IDs recorded during onboarding for the given user.
+     * The Skills Library uses this to show the "verify your skills" nudge popup.
+     */
+    public List<Integer> getOnboardingSkillIds(Integer userId) {
+        return onboardingSkillRepository.findSkillIdsByUserId(userId);
+    }
+
     // -------- Education --------
     public List<EducationResponse> getEducations(Integer userId) {
         return educationRepository.findByUserId(userId).stream()
@@ -61,7 +93,6 @@ public class UserService {
         education.setUser(user);
         setEducationFields(education, request);
         educationRepository.save(education);
-        // Education does not have its own challenge type — no evaluation needed
         return mapToEducationResponse(education);
     }
 
@@ -263,6 +294,7 @@ public class UserService {
         r.setCreatedAt(user.getCreatedAt());
         return r;
     }
+
     private EducationResponse mapToEducationResponse(Education e) {
         EducationResponse r = new EducationResponse();
         r.setId(e.getId());

@@ -31,6 +31,32 @@ public class UserController {
         return ResponseEntity.ok(userService.updateProfile(principal.getId(), request));
     }
 
+    // -------- Onboarding skills (selected during registration step 3) --------
+
+    /**
+     * Saves the skill IDs the user self-reported knowing during registration.
+     * Idempotent — re-submitting the same IDs is safe (duplicates are ignored).
+     * The Skills Library reads these via GET /api/user/skills/onboarding
+     * and shows a nudge popup prompting the user to verify each one.
+     */
+    @PostMapping("/skills/onboarding")
+    public ResponseEntity<Void> saveOnboardingSkills(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @RequestBody OnboardingSkillsRequest request) {
+        userService.saveOnboardingSkills(principal.getId(), request.getSkillIds());
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Returns the skill IDs saved during onboarding.
+     * Used by the Skills Library to know which skills need the verification nudge.
+     */
+    @GetMapping("/skills/onboarding")
+    public ResponseEntity<List<Integer>> getOnboardingSkillIds(
+            @AuthenticationPrincipal AuthenticatedUser principal) {
+        return ResponseEntity.ok(userService.getOnboardingSkillIds(principal.getId()));
+    }
+
     // -------- Education --------
     @GetMapping("/education")
     public ResponseEntity<List<EducationResponse>> getEducations(@AuthenticationPrincipal AuthenticatedUser principal) {
@@ -65,20 +91,20 @@ public class UserController {
 
     @PostMapping("/work-experience")
     public ResponseEntity<WorkExperienceResponse> addWorkExperience(@AuthenticationPrincipal AuthenticatedUser principal,
-                                                                     @RequestBody WorkExperienceRequest request) {
+                                                                    @RequestBody WorkExperienceRequest request) {
         return ResponseEntity.ok(userService.addWorkExperience(principal.getId(), request));
     }
 
     @PutMapping("/work-experience/{id}")
     public ResponseEntity<WorkExperienceResponse> updateWorkExperience(@AuthenticationPrincipal AuthenticatedUser principal,
-                                                                        @PathVariable Integer id,
-                                                                        @RequestBody WorkExperienceRequest request) {
+                                                                       @PathVariable Integer id,
+                                                                       @RequestBody WorkExperienceRequest request) {
         return ResponseEntity.ok(userService.updateWorkExperience(principal.getId(), id, request));
     }
 
     @DeleteMapping("/work-experience/{id}")
     public ResponseEntity<Void> deleteWorkExperience(@AuthenticationPrincipal AuthenticatedUser principal,
-                                                      @PathVariable Integer id) {
+                                                     @PathVariable Integer id) {
         userService.deleteWorkExperience(principal.getId(), id);
         return ResponseEntity.noContent().build();
     }
@@ -91,20 +117,20 @@ public class UserController {
 
     @PostMapping("/certifications")
     public ResponseEntity<CertificationResponse> addCertification(@AuthenticationPrincipal AuthenticatedUser principal,
-                                                                   @RequestBody CertificationRequest request) {
+                                                                  @RequestBody CertificationRequest request) {
         return ResponseEntity.ok(userService.addCertification(principal.getId(), request));
     }
 
     @PutMapping("/certifications/{id}")
     public ResponseEntity<CertificationResponse> updateCertification(@AuthenticationPrincipal AuthenticatedUser principal,
-                                                                      @PathVariable Integer id,
-                                                                      @RequestBody CertificationRequest request) {
+                                                                     @PathVariable Integer id,
+                                                                     @RequestBody CertificationRequest request) {
         return ResponseEntity.ok(userService.updateCertification(principal.getId(), id, request));
     }
 
     @DeleteMapping("/certifications/{id}")
     public ResponseEntity<Void> deleteCertification(@AuthenticationPrincipal AuthenticatedUser principal,
-                                                     @PathVariable Integer id) {
+                                                    @PathVariable Integer id) {
         userService.deleteCertification(principal.getId(), id);
         return ResponseEntity.noContent().build();
     }
@@ -134,6 +160,7 @@ public class UserController {
         userService.deleteProject(principal.getId(), id);
         return ResponseEntity.noContent().build();
     }
+
     @GetMapping("/dashboard")
     public ResponseEntity<DashboardResponse> getDashboard(@AuthenticationPrincipal AuthenticatedUser principal) {
         return ResponseEntity.ok(dashboardService.getDashboard(principal.getId()));

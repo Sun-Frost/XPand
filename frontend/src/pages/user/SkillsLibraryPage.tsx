@@ -9,10 +9,17 @@
 //   · Tier labels use text weight + opacity hierarchy, not color overload.
 //   · Layout mirrors JobsPage: sticky spotlight left, ranked list right.
 //
-// LOGIC / HOOKS: 100% identical to original. Zero behaviour changed.
+// ONBOARDING NUDGE LOGIC:
+//   · Onboarding skill IDs come from the backend (GET /user/skills/onboarding)
+//     via useSkills, merged with any localStorage fallback.
+//   · Popup shows on every fresh login session whenever there are still unverified
+//     onboarding skills. "Remind me later" hides it for the rest of that login
+//     session only — no persistent trigger button is shown afterward.
+//   · Dismissal is keyed to the current access token so a new login always
+//     re-shows the popup (assuming skills are still pending).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import PageLayout from "../../components/user/PageLayout";
 import { Icon, type IconName } from "../../components/ui/Icon";
@@ -115,6 +122,122 @@ function enrichSkills(skills: SkillWithVerification[]): EnrichedSkill[] {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// OnboardingNudgePopup — shown when the user has unverified onboarding skills
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface OnboardingNudgePopupProps {
+  skills: EnrichedSkill[];
+  onVerify: (skill: EnrichedSkill) => void;
+  onDismiss: () => void;
+}
+
+const OnboardingNudgePopup: React.FC<OnboardingNudgePopupProps> = ({ skills, onVerify, onDismiss }) => {
+  const unverified = skills.filter((s) => !s.badge && !s.raw.isGoldVerified);
+  const verified   = skills.filter((s) =>  s.badge ||  s.raw.isGoldVerified);
+
+  if (skills.length === 0) return null;
+
+  return (
+    /* Backdrop */
+    <div className="onb-backdrop" role="dialog" aria-modal="true" aria-label="Verify your skills" onClick={(e) => { if (e.target === e.currentTarget) onDismiss(); }}>
+      <div className="onb-modal">
+
+        {/* Header */}
+        <div className="onb-header">
+          <div className="onb-header__icon">🎯</div>
+          <div className="onb-header__text">
+            <h2 className="onb-title">You have skills to verify!</h2>
+            <p className="onb-subtitle">
+              During registration you told us you know these skills.
+              Verify them to make them appear on your CV — unverified skills are hidden from employers.
+            </p>
+          </div>
+          <button className="onb-close" onClick={onDismiss} aria-label="Dismiss">✕</button>
+        </div>
+
+        {/* Progress mini bar */}
+        {verified.length > 0 && (
+          <div className="onb-progress">
+            <div className="onb-progress__track">
+              <div
+                className="onb-progress__fill"
+                style={{ width: `${Math.round((verified.length / skills.length) * 100)}%` }}
+              />
+            </div>
+            <span className="onb-progress__label">
+              {verified.length} / {skills.length} verified
+            </span>
+          </div>
+        )}
+
+        {/* Already verified section */}
+        {verified.length > 0 && (
+          <div className="onb-section">
+            <div className="onb-section__label">✅ Already verified</div>
+            <div className="onb-chips">
+              {verified.map((s) => (
+                <div key={s.raw.id} className="onb-chip onb-chip--done"
+                  style={{ borderColor: s.badge?.border, color: s.badge?.color, background: s.badge?.bg }}>
+                  {s.badge && <Icon name={s.badge.icon} size={11} label="" />}
+                  {s.raw.name}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Pending verification section */}
+        {unverified.length > 0 && (
+          <div className="onb-section">
+            <div className="onb-section__label">⚠️ Not yet verified — won't show on your CV</div>
+            <div className="onb-skill-list">
+              {unverified.map((s) => {
+                const icon = CATEGORY_ICONS[s.raw.category] ?? "cat-default";
+                const isLocked = s.raw.attemptsExhausted || (s.raw.verification?.isLocked ?? false);
+                return (
+                  <div key={s.raw.id} className="onb-skill-row">
+                    <div className="onb-skill-row__icon">
+                      <Icon name={icon} size={14} label="" />
+                    </div>
+                    <div className="onb-skill-row__info">
+                      <span className="onb-skill-row__name">{s.raw.name}</span>
+                      <span className="onb-skill-row__cat">{s.raw.category} · {s.tierConfig.label}</span>
+                    </div>
+                    <button
+                      className={`onb-skill-row__btn ${isLocked ? "onb-skill-row__btn--locked" : ""}`}
+                      disabled={isLocked || !s.raw.isActive}
+                      onClick={() => onVerify(s)}
+                    >
+                      {isLocked ? "Locked" : !s.raw.isActive ? "Soon" : "Verify →"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Footer actions */}
+        <div className="onb-footer">
+          <button className="btn btn-ghost btn-sm" onClick={onDismiss}>
+            Remind me later
+          </button>
+          {unverified.length > 0 && (
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => onVerify(unverified[0])}
+            >
+              Start with {unverified[0].raw.name} →
+            </button>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CoverageBar — replaces InsightsBar, cleaner and monochrome
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -180,13 +303,14 @@ const SkillSpotlight: React.FC<{
   const icon       = CATEGORY_ICONS[raw.category] ?? "cat-default";
 
   let ctaLabel = "Start Verification";
-  if (isLocked) {
+  if (raw.isGoldVerified) {
+    ctaLabel = "🥇 Gold Achieved — Nothing left to prove";
+  } else if (isLocked) {
     ctaLabel = lockedUntil ? `Locked · ${lockedUntil}`
              : raw.attemptsExhausted ? "No attempts left this month"
              : "Cooldown active";
   } else if (badge) {
-    ctaLabel = badge.label === "Gold" ? "Re-attempt Gold"
-             : `Improve to ${badge.label === "Silver" ? "Gold" : "Silver"}`;
+    ctaLabel = `Improve to ${badge.label === "Silver" ? "Gold" : "Silver"}`;
   }
 
   const remainingLabel = !isLocked && raw.remainingAttempts < 3
@@ -258,10 +382,12 @@ const SkillSpotlight: React.FC<{
 
       {/* CTA */}
       <button
-        className={`sspt__cta ${isLocked ? "sspt__cta--locked" : ""}`}
-        style={ctaStyle}
+        className={`sspt__cta ${isLocked || raw.isGoldVerified ? "sspt__cta--locked" : ""}`}
+        style={raw.isGoldVerified
+          ? { background: "var(--color-gold-bg)", borderColor: "var(--color-gold-border)", color: "var(--color-gold-light)", opacity: 1 }
+          : ctaStyle}
         onClick={onAction}
-        disabled={isLocked || !raw.isActive}
+        disabled={raw.isGoldVerified || isLocked || !raw.isActive}
       >
         {!raw.isActive ? "Coming soon" : ctaLabel}
       </button>
@@ -429,6 +555,48 @@ const SkeletonRow: React.FC<{ i: number }> = ({ i }) => (
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GoldAchievementsPanel — showcase of mastered (Gold) skills
+// ─────────────────────────────────────────────────────────────────────────────
+
+const GoldAchievementsPanel: React.FC<{ skills: EnrichedSkill[] }> = ({ skills }) => {
+  if (skills.length === 0) return null;
+  return (
+    <div className="sgold">
+      {/* Corner badge + header */}
+      <div className="sgold__header">
+        <div className="sgold__crown">🏆</div>
+        <div>
+          <div className="sgold__title">Gold Achievements</div>
+          <div className="sgold__sub">Mastered · {skills.length} skill{skills.length !== 1 ? "s" : ""} — no further attempts needed</div>
+        </div>
+        <div className="sgold__corner-badge">
+          <Icon name="badge-gold" size={32} label="" />
+        </div>
+      </div>
+
+      {/* Skill chips */}
+      <div className="sgold__list">
+        {skills.map((s) => {
+          const icon = CATEGORY_ICONS[s.raw.category] ?? "cat-default";
+          return (
+            <div key={s.raw.id} className="sgold__chip">
+              <div className="sgold__chip-icon">
+                <Icon name={icon} size={14} label="" />
+              </div>
+              <div className="sgold__chip-info">
+                <span className="sgold__chip-name">{s.raw.name}</span>
+                <span className="sgold__chip-cat">{s.raw.category}</span>
+              </div>
+              <span className="sgold__chip-medal">🥇</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -440,13 +608,90 @@ const SkillsLibraryPage: React.FC = () => {
   const [activeFilter,   setActiveFilter]   = useState<"all" | "verified" | "unverified">("all");
   const [spotlightSkill, setSpotlightSkill] = useState<EnrichedSkill | null>(null);
 
+  // ── Onboarding nudge popup ─────────────────────────────────────────────────
+  // showNudge=true  → modal open
+  // showNudge=false → dismissed for this login session
+  //
+  // Dismissal is stored in sessionStorage keyed to the current access token.
+  // This means:
+  //   · "Remind me later" hides the popup AND the trigger button for the rest
+  //     of this login session.
+  //   · On every NEW login (new token) the popup reappears if skills are pending.
+  //   · Navigating away and back within the same session keeps it hidden.
+  const [showNudge, setShowNudge] = useState<boolean>(false);
+
+  // Derive the dismissal key from the login token so it resets on each login.
+  const getNudgeDismissedKey = useCallback((): string => {
+    const token = localStorage.getItem("access_token") ?? "anon";
+    // Use a short hash of the token — just enough to distinguish login sessions.
+    const shortKey = token.slice(-16);
+    return `onboarding_nudge_dismissed_${shortKey}`;
+  }, []);
+
+  // Once skills data arrives, decide whether to show the nudge.
+  // Runs whenever data loads (and on refetch).
+  useEffect(() => {
+    if (!data || isLoading) return;
+    const hasPending = data.onboardingSkillIds.size > 0 &&
+      [...data.onboardingSkillIds].some((id) => {
+        const skill = enriched.find((s) => s.raw.id === id);
+        return skill && !skill.badge && !skill.raw.isGoldVerified;
+      });
+    if (!hasPending) {
+      setShowNudge(false);
+      return;
+    }
+    // Only show if not already dismissed this login session.
+    const dismissedKey = getNudgeDismissedKey();
+    const alreadyDismissed = sessionStorage.getItem(dismissedKey) === "1";
+    if (!alreadyDismissed) setShowNudge(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, isLoading]);
+
+  const dismissNudge = useCallback(() => {
+    // Hide the popup for the rest of this login session.
+    // No trigger button is shown — on next login, the popup reappears
+    // automatically if there are still unverified onboarding skills.
+    const dismissedKey = getNudgeDismissedKey();
+    sessionStorage.setItem(dismissedKey, "1");
+    setShowNudge(false);
+  }, [getNudgeDismissedKey]);
+
+  // ── Derived data ───────────────────────────────────────────────────────────
+
   const enriched = useMemo<EnrichedSkill[]>(() => {
     if (!data?.skills.length) return [];
     return enrichSkills(data.skills);
   }, [data]);
 
+  // Onboarding skills cross-referenced against the enriched list
+  const onboardingSkills = useMemo<EnrichedSkill[]>(() => {
+    if (!data?.onboardingSkillIds.size) return [];
+    return enriched.filter((s) => data.onboardingSkillIds.has(s.raw.id));
+  }, [enriched, data]);
+
+  // If all onboarding skills are now verified, auto-dismiss and clean up localStorage
+  useEffect(() => {
+    if (onboardingSkills.length === 0) return;
+    const allVerified = onboardingSkills.every((s) => s.badge !== null || s.raw.isGoldVerified);
+    if (allVerified) {
+      localStorage.removeItem("onboarding_skill_ids");
+      setShowNudge(false);
+    }
+  }, [onboardingSkills]);
+
+  const goldSkills = useMemo(
+    () => enriched.filter((s) => s.raw.isGoldVerified),
+    [enriched]
+  );
+
+  const nonGoldEnriched = useMemo(
+    () => enriched.filter((s) => !s.raw.isGoldVerified),
+    [enriched]
+  );
+
   const filtered = useMemo(() => {
-    let list = enriched;
+    let list = nonGoldEnriched;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter((s) => s.raw.name.toLowerCase().includes(q) || s.raw.category.toLowerCase().includes(q));
@@ -454,7 +699,7 @@ const SkillsLibraryPage: React.FC = () => {
     if (activeFilter === "verified")   list = list.filter((s) => s.badge !== null);
     if (activeFilter === "unverified") list = list.filter((s) => s.badge === null);
     return list;
-  }, [enriched, searchQuery, activeFilter]);
+  }, [nonGoldEnriched, searchQuery, activeFilter]);
 
   const byTier = useMemo(() => {
     const map = new Map<DemandTier, EnrichedSkill[]>();
@@ -483,10 +728,16 @@ const SkillsLibraryPage: React.FC = () => {
   const activeSpotlight = spotlightSkill ?? filtered[0] ?? null;
 
   const goToTest = (skill: EnrichedSkill) => {
-    if (skill.raw.attemptsExhausted || skill.raw.verification?.isLocked) return;
+    if (skill.raw.isGoldVerified || skill.raw.attemptsExhausted || skill.raw.verification?.isLocked) return;
     navigate(`/skills/test/${skill.raw.id}`, {
       state: { skillName: skill.raw.name, skillCategory: skill.raw.category },
     });
+  };
+
+  // Navigate to test from the nudge popup
+  const handleNudgeVerify = (skill: EnrichedSkill) => {
+    setShowNudge(false);
+    goToTest(skill);
   };
 
   if (error) {
@@ -504,6 +755,15 @@ const SkillsLibraryPage: React.FC = () => {
 
   return (
     <PageLayout pageTitle="Skills">
+
+      {/* ── Onboarding nudge popup ───────────────────── */}
+      {showNudge && !isLoading && onboardingSkills.length > 0 && (
+        <OnboardingNudgePopup
+          skills={onboardingSkills}
+          onVerify={handleNudgeVerify}
+          onDismiss={dismissNudge}
+        />
+      )}
 
       {/* ── Page header ───────────────────────────── */}
       <PageHeader
@@ -546,6 +806,9 @@ const SkillsLibraryPage: React.FC = () => {
 
       {/* ── Coverage bar ──────────────────────────── */}
       {!isLoading && <CoverageBar {...stats} />}
+
+      {/* ── Gold achievements panel ────────────────── */}
+      {!isLoading && <GoldAchievementsPanel skills={goldSkills} />}
 
       {/* ── Recommended strip ─────────────────────── */}
       {!isLoading && recommended.length > 0 && activeFilter !== "verified" && !searchQuery && (
@@ -639,6 +902,358 @@ const SkillsLibraryPage: React.FC = () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const styles = `
+
+/* ── Onboarding nudge popup ─────────────────────────────── */
+.onb-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  animation: onb-fade-in 0.18s ease;
+}
+@keyframes onb-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.onb-modal {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-2xl);
+  padding: var(--space-6);
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  box-shadow: 0 24px 80px rgba(0,0,0,0.40);
+  animation: onb-slide-up 0.22s cubic-bezier(0.16,1,0.3,1);
+  position: relative;
+}
+@keyframes onb-slide-up {
+  from { transform: translateY(24px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.onb-modal::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--gradient-primary, linear-gradient(90deg, #7B5EA7, #A78BFA));
+  border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+}
+
+/* Header */
+.onb-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.onb-header__icon {
+  font-size: 1.8rem;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-top: 2px;
+}
+.onb-header__text { flex: 1; }
+.onb-title {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 800;
+  color: var(--color-text-primary);
+  letter-spacing: -0.02em;
+  margin: 0 0 var(--space-1);
+}
+.onb-subtitle {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: var(--leading-relaxed);
+  margin: 0;
+}
+.onb-close {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: var(--text-base);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  transition: color 0.12s, background 0.12s;
+  line-height: 1;
+}
+.onb-close:hover {
+  background: var(--color-bg-active);
+  color: var(--color-text-primary);
+}
+
+/* Progress bar */
+.onb-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.onb-progress__track {
+  flex: 1;
+  height: 5px;
+  background: var(--color-bg-active);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+.onb-progress__fill {
+  height: 100%;
+  background: var(--color-primary-400);
+  border-radius: var(--radius-full);
+  transition: width 0.6s cubic-bezier(0.16,1,0.3,1);
+}
+.onb-progress__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* Section label */
+.onb-section { display: flex; flex-direction: column; gap: var(--space-2); }
+.onb-section__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* Already verified chips */
+.onb-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.onb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border-default);
+  font-size: var(--text-xs);
+  font-family: var(--font-body);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-overlay);
+}
+.onb-chip--done {
+  /* colors injected via inline style from badge config */
+}
+
+/* Skill rows */
+.onb-skill-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.onb-skill-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3);
+  background: var(--color-bg-overlay);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  transition: border-color 0.12s, background 0.12s;
+}
+.onb-skill-row:has(.onb-skill-row__btn:not(:disabled)):hover {
+  border-color: rgba(155,124,255,0.28);
+  background: var(--color-bg-active);
+}
+.onb-skill-row__icon {
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--color-primary-glow);
+  border: 1px solid rgba(155,124,255,0.18);
+  border-radius: var(--radius-md);
+  color: var(--color-primary-400);
+  flex-shrink: 0;
+}
+.onb-skill-row__info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.onb-skill-row__name {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.onb-skill-row__cat {
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+.onb-skill-row__btn {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(155,124,255,0.28);
+  background: var(--color-primary-glow);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-primary-400);
+  cursor: pointer;
+  transition: background 0.12s, filter 0.12s;
+  white-space: nowrap;
+}
+.onb-skill-row__btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+.onb-skill-row__btn--locked,
+.onb-skill-row__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: none;
+}
+
+/* Footer */
+.onb-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+/* Trigger button (shown in page header when popup is dismissed) */
+.onb-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(155,124,255,0.28);
+  background: var(--color-primary-glow);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-primary-400);
+  cursor: pointer;
+  transition: filter 0.12s;
+  white-space: nowrap;
+  animation: onb-pulse 2.5s ease-in-out infinite;
+}
+.onb-trigger-btn:hover { filter: brightness(1.1); }
+@keyframes onb-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(155,124,255,0.20); }
+  50%       { box-shadow: 0 0 0 5px rgba(155,124,255,0.00); }
+}
+
+/* ── Gold Achievements Panel ───────────────────────────── */
+.sgold {
+  position: relative;
+  background: linear-gradient(135deg, var(--color-gold-bg) 0%, rgba(255,196,0,0.04) 100%);
+  border: 1px solid var(--color-gold-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-5);
+  overflow: hidden;
+}
+.sgold::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2.5px;
+  background: linear-gradient(90deg, var(--color-gold-light), #ffd700, var(--color-gold-light));
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+.sgold__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.sgold__crown {
+  font-size: 22px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.sgold__title {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 800;
+  color: var(--color-gold-light);
+  letter-spacing: -0.01em;
+}
+.sgold__sub {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+.sgold__corner-badge {
+  margin-left: auto;
+  color: var(--color-gold-light);
+  opacity: 0.35;
+  flex-shrink: 0;
+}
+.sgold__list {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+  flex-wrap: wrap;
+}
+.sgold__list::-webkit-scrollbar { display: none; }
+.sgold__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px 7px 8px;
+  background: var(--color-gold-bg);
+  border: 1px solid var(--color-gold-border);
+  border-radius: var(--radius-lg);
+  flex-shrink: 0;
+  cursor: default;
+}
+.sgold__chip-icon {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,196,0,0.12);
+  border: 1px solid var(--color-gold-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-gold-light);
+  flex-shrink: 0;
+}
+.sgold__chip-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sgold__chip-name {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.sgold__chip-cat {
+  font-size: 9px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.sgold__chip-medal {
+  font-size: 14px;
+  flex-shrink: 0;
+}
 
 /* ── Search + filter controls (in PageHeader right slot) ── */
 .sctrl__search {
@@ -1190,9 +1805,12 @@ const styles = `
   .ssplit__left { position: static; }
   .scov { flex-direction: column; }
   .sctrl__search { width: 100%; }
+  .onb-modal { padding: var(--space-4); }
 }
 @media (max-width: 560px) {
   .scov__stats { gap: var(--space-3); }
+  .onb-footer { flex-direction: column-reverse; }
+  .onb-footer .btn { width: 100%; }
 }
 `;
 

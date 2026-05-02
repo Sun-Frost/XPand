@@ -1,7 +1,9 @@
+import xpandLogo from "../assets/xpand.svg";
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useLogin } from "../hooks/useLogin";
 import { post } from "../api/axios";
+import { Icon } from "../components/ui/Icon";
 
 // The OAuth button must point directly to the backend, not the Vite dev server.
 const BACKEND_URL = import.meta.env.VITE_API_URL
@@ -138,7 +140,7 @@ const InlineVerifyPanel: React.FC<{
       </div>
 
       {status === "success" && (
-        <p className="login-verify-panel__success">✅ Verified! Redirecting…</p>
+        <p className="login-verify-panel__success"><Icon name="check" size={14} label="" style={{verticalAlign:'middle',marginRight:4}} /> Verified! Redirecting…</p>
       )}
 
       {verifyError && (
@@ -157,7 +159,7 @@ const InlineVerifyPanel: React.FC<{
       </button>
 
       {resendSent ? (
-        <p className="login-verify-panel__resent">✅ New code sent! Check your inbox.</p>
+        <p className="login-verify-panel__resent"><Icon name="check" size={14} label="" style={{verticalAlign:'middle',marginRight:4}} /> New code sent! Check your inbox.</p>
       ) : (
         <p className="login-verify-panel__resend-hint">
           Didn't receive it?{" "}
@@ -301,7 +303,7 @@ const LoginPage: React.FC = () => {
         <div className="login-card card card-accent-top animate-fade-in">
           <div className="login-card__header">
             <div className="login-logo">
-              <div className="logo-mark"><span className="login-logo__symbol">XP</span></div>
+              <img src={xpandLogo} alt="XPand" className="login-logo__img" />
               <span className="login-logo__wordmark logo-wordmark">XPand</span>
             </div>
           </div>
@@ -339,9 +341,7 @@ const LoginPage: React.FC = () => {
         {/* Header */}
         <div className="login-card__header">
           <div className="login-logo">
-            <div className="logo-mark">
-              <span className="login-logo__symbol">XP</span>
-            </div>
+            <img src={xpandLogo} alt="XPand" className="login-logo__img" />
             <span className="login-logo__wordmark logo-wordmark">XPand</span>
           </div>
           <h1 className="login-card__title">Welcome back</h1>
@@ -353,7 +353,7 @@ const LoginPage: React.FC = () => {
         {/* Company pending notice */}
         {companyPending && (
           <div className="login-info-banner" role="status">
-            <span>🕐</span>
+            <Icon name="pending" size={16} label="" />
             <span>Your company account has been submitted and is pending admin approval.</span>
           </div>
         )}
@@ -361,7 +361,7 @@ const LoginPage: React.FC = () => {
         {/* OAuth failure notice */}
         {oauthFailed && (
           <div className="login-error-banner" role="alert">
-            <span className="login-error-banner__icon">⚠</span>
+            <Icon name="warning" size={16} label="" />
             <span>Google sign-in failed. Please try again or use email/password.</span>
           </div>
         )}
@@ -371,7 +371,7 @@ const LoginPage: React.FC = () => {
           {/* API-level error banner */}
           {error && (
             <div className="login-error-banner" role="alert">
-              <span className="login-error-banner__icon">⚠</span>
+              <Icon name="warning" size={16} label="" />
               <div className="login-error-banner__content">
                 <span>{error}</span>
 
@@ -391,7 +391,7 @@ const LoginPage: React.FC = () => {
                     {/* Secondary: resend a fresh code and then open the panel */}
                     {resendSent ? (
                       <p className="login-verify-sent">
-                        ✅ New code sent! Check your inbox.
+                        <Icon name="check" size={14} label="" style={{verticalAlign:'middle',marginRight:4}} /> New code sent! Check your inbox.
                       </p>
                     ) : (
                       <button
@@ -468,7 +468,7 @@ const LoginPage: React.FC = () => {
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 tabIndex={-1}
               >
-                {showPassword ? "🙈" : "👁"}
+                {showPassword ? <Icon name="close" size={16} label={showPassword ? "Hide password" : "Show password"} /> : <Icon name="profile" size={16} label="Show password" />}
               </button>
             </div>
             {fieldErrors.password && (
@@ -494,7 +494,7 @@ const LoginPage: React.FC = () => {
             )}
           </button>
 
-          <div className="divider-with-text">or</div>
+          <div className="login-divider"><span>or</span></div>
 
           <a
             href={GOOGLE_OAUTH_URL}
@@ -574,6 +574,11 @@ const pageStyles = `
   .login-logo__symbol {
     font-family: var(--font-display); font-weight: var(--weight-bold);
     font-size: var(--text-sm); color: #fff; letter-spacing: var(--tracking-wider);
+  }
+  
+  .login-logo__img {
+    width: 36px; height: 36px; object-fit: contain;
+    border-radius: var(--radius-md);
   }
   .login-logo__wordmark {
     font-family: var(--font-display); font-size: var(--text-2xl);
@@ -691,6 +696,14 @@ const pageStyles = `
     background: transparent; border: none;
     color: var(--color-text-muted); font-size: var(--text-base);
     cursor: pointer; display: flex; align-items: center;
+  }
+  .login-divider {
+    display: flex; align-items: center; gap: var(--space-3);
+    color: var(--color-text-muted); font-size: var(--text-sm);
+  }
+  .login-divider::before,
+  .login-divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--color-border);
   }
   .login-submit { margin-top: var(--space-2); font-family: var(--font-display); font-size: var(--text-md); letter-spacing: var(--tracking-wider); }
   .login-spinner {

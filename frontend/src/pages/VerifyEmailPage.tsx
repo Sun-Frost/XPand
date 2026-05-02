@@ -1,6 +1,8 @@
+import xpandLogo from "../assets/xpand.svg";
 import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { post } from "../api/axios";
+import { Icon } from "../components/ui/Icon";
 
 // ---------------------------------------------------------------------------
 // VerifyEmailPage
@@ -154,10 +156,12 @@ const VerifyEmailPage: React.FC = () => {
       <div className="verify-card card card-accent-top animate-fade-in">
         <div className="verify-card__inner">
 
+          <img src={xpandLogo} alt="XPand" className="verify-logo" />
+
           {/* ── Success ── */}
           {status === "success" ? (
             <>
-              <div className="verify-icon verify-icon--success" aria-hidden="true">✓</div>
+              <div className="verify-icon verify-icon--success" aria-hidden="true"><Icon name="success" size={28} label="" /></div>
               <h1 className="verify-title">Email Verified!</h1>
               <p className="verify-subtitle">Your account is now active. You can sign in.</p>
               <button
@@ -169,7 +173,7 @@ const VerifyEmailPage: React.FC = () => {
             </>
           ) : (
             <>
-              <div className="verify-icon verify-icon--code" aria-hidden="true">✉️</div>
+              <div className="verify-icon verify-icon--code" aria-hidden="true"><Icon name="contact" size={30} label="" /></div>
               <h1 className="verify-title">Enter your code</h1>
               <p className="verify-subtitle">
                 We sent a 6-digit code to your email address.
@@ -236,7 +240,7 @@ const VerifyEmailPage: React.FC = () => {
 
               {resendSent ? (
                 <p className="verify-resend-success">
-                  ✅ A new code has been sent. Check your inbox (and spam folder).
+                  <Icon name="check" size={14} label="" style={{verticalAlign:'middle',marginRight:4}} /> A new code has been sent. Check your inbox (and spam folder).
                 </p>
               ) : (
                 <form className="verify-resend-form" onSubmit={handleResend} noValidate>
@@ -292,6 +296,12 @@ const pageStyles = `
   .verify-bg__orb--2 {
     width: 300px; height: 300px; bottom: -80px; right: -60px;
     background: var(--color-accent-500); animation-delay: -5s;
+  }
+  
+  .verify-logo {
+    width: 48px; height: 48px; object-fit: contain;
+    border-radius: var(--radius-lg);
+    margin-bottom: calc(var(--space-2) * -1);
   }
   .verify-card {
     position: relative; z-index: 1; width: 100%; max-width: 460px;

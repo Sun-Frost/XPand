@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { post } from "../api/axios";
+import { Icon } from "../components/ui/Icon";
 
 // ---------------------------------------------------------------------------
 // ForgotPasswordPage
@@ -73,7 +74,7 @@ const PasswordRequirements: React.FC<{ password: string }> = ({ password }) => {
     <ul className="fp-pw-requirements">
       {checks.map(({ label, met }) => (
         <li key={label} className={`fp-pw-req ${met ? "fp-pw-req--met" : ""}`}>
-          <span className="fp-pw-req__icon">{met ? "✓" : "○"}</span>
+          <span className="fp-pw-req__icon">{met ? <Icon name="check" size={10} label="" /> : "○"}</span>
           {label}
         </li>
       ))}
@@ -152,7 +153,7 @@ const StepEmail: React.FC<{
   return (
     <Card>
       <div className="fp-step-header">
-        <div className="fp-step-icon">🔑</div>
+        <div className="fp-step-icon"><Icon name="password" size={36} label="" /></div>
         <h1 className="fp-title">Forgot your password?</h1>
         <p className="fp-subtitle">
           Enter the email address you registered with and we'll send you a
@@ -286,7 +287,7 @@ const StepCode: React.FC<{
   return (
     <Card>
       <div className="fp-step-header">
-        <div className="fp-step-icon">✉️</div>
+        <div className="fp-step-icon"><Icon name="contact" size={36} label="" /></div>
         <h1 className="fp-title">Check your email</h1>
         <p className="fp-subtitle">
           We sent a 6-digit code to <strong>{email}</strong>.
@@ -330,7 +331,7 @@ const StepCode: React.FC<{
       </button>
 
       {resendSent ? (
-        <p className="fp-resend-sent">✅ New code sent! Check your inbox.</p>
+        <p className="fp-resend-sent"><Icon name="check" size={14} label="" style={{verticalAlign:'middle',marginRight:4}} /> New code sent! Check your inbox.</p>
       ) : (
         <p className="fp-resend-hint">
           Didn't receive it?{" "}
@@ -404,7 +405,7 @@ const StepNewPassword: React.FC<{
   return (
     <Card>
       <div className="fp-step-header">
-        <div className="fp-step-icon">🔒</div>
+        <div className="fp-step-icon"><Icon name="lock" size={36} label="" /></div>
         <h1 className="fp-title">Set new password</h1>
         <p className="fp-subtitle">
           Choose a strong password for <strong>{email}</strong>.
@@ -434,7 +435,7 @@ const StepNewPassword: React.FC<{
               tabIndex={-1}
               aria-label={showPw ? "Hide password" : "Show password"}
             >
-              {showPw ? "🙈" : "👁"}
+              <Icon name="profile" size={16} label="" />
             </button>
           </div>
         </div>
@@ -478,7 +479,7 @@ const StepNewPassword: React.FC<{
               onClick={() => setShowCf(v => !v)}
               tabIndex={-1}
             >
-              {showCf ? "🙈" : "👁"}
+              <Icon name="profile" size={16} label="" />
             </button>
           </div>
           {confirm && pw !== confirm && (
@@ -513,7 +514,7 @@ const StepNewPassword: React.FC<{
 const StepSuccess: React.FC<{ onGoToLogin: () => void }> = ({ onGoToLogin }) => (
   <Card>
     <div className="fp-success">
-      <div className="fp-success__icon">🎉</div>
+      <div className="fp-success__icon"><Icon name="success" size={48} label="" /></div>
       <h1 className="fp-title">Password updated!</h1>
       <p className="fp-subtitle">
         Your password has been changed successfully. You can now sign in with

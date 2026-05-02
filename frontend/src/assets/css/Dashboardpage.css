@@ -990,3 +990,200 @@
   }
   .fc-card.fc-expanded { transform: translateY(-4px) scale(1.01); }
 }
+
+
+/* ══════════════════════════════════════════════════════════
+   §13  LIGHT MODE OVERRIDES
+   Activates when [data-theme="light"] is on the root.
+   Strategy: override the local --d-* dashboard tokens so
+   every rule that references them automatically adapts.
+   Hardcoded rgba(255,255,255,…) glass values are also
+   overridden via targeted selectors below.
+   ══════════════════════════════════════════════════════════ */
+
+[data-theme="light"] {
+  /* ── Dashboard surface tokens ─────────────────────────── */
+  --d-s0:    #E8EAF4;
+  --d-s1:    rgba(242,243,248,0.98);
+  --d-s2:    rgba(248,249,252,0.97);
+  --d-s3:    rgba(235,237,246,0.94);
+  --d-glass: rgba(255,255,255,0.65);
+  --d-glh:   rgba(255,255,255,0.85);
+
+  /* Semantic accent tokens — stay vivid but darken for legibility */
+  --d-vi:  #6B50CC;
+  --d-cy:  #0891B2;
+  --d-go:  #B87708;
+  --d-gr:  #0B9E78;
+  --d-da:  #DC2626;
+
+  /* Border tokens */
+  --d-br:   rgba(0,0,0,0.09);
+  --d-br-h: rgba(0,0,0,0.16);
+}
+
+/* ── Ambient scene — softer on light ───────────────────── */
+[data-theme="light"] .dash-scene::before {
+  background:
+    radial-gradient(ellipse 55% 45% at 5%   5%,  rgba(107,80,204,0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 36% at 95%  82%, rgba(8,145,178,0.05)  0%, transparent 55%),
+    radial-gradient(ellipse 30% 28% at 52%  52%, rgba(184,119,8,0.03)  0%, transparent 50%);
+}
+
+/* ── Arena header ───────────────────────────────────────── */
+[data-theme="light"] .arena-header {
+  background: linear-gradient(
+    150deg,
+    rgba(230,225,248,0.96) 0%,
+    rgba(242,243,248,0.97) 55%,
+    rgba(214,237,248,0.60) 100%
+  );
+  border-color: rgba(107,80,204,0.20);
+}
+[data-theme="light"] .arena-header::after {
+  background:
+    radial-gradient(ellipse 50% 60% at -2% -2%, rgba(107,80,204,0.10) 0%, transparent 52%),
+    radial-gradient(ellipse 36% 40% at 104% 104%, rgba(8,145,178,0.07) 0%, transparent 50%);
+}
+
+/* Status pills */
+[data-theme="light"] .arena-status-msg.status-urgent { background:rgba(107,80,204,0.08); border-color:rgba(107,80,204,0.24); }
+[data-theme="light"] .arena-status-msg.status-warn   { background:rgba(184,119,8,0.08);  border-color:rgba(184,119,8,0.24); }
+[data-theme="light"] .arena-status-msg.status-ok     { background:rgba(11,158,120,0.08); border-color:rgba(11,158,120,0.22); }
+[data-theme="light"] .arena-status-msg.status-danger { background:rgba(220,38,38,0.07);  border-color:rgba(220,38,38,0.20); }
+
+/* Tags */
+[data-theme="light"] .arena-tag-tier { background:rgba(0,0,0,0.05);  border-color:rgba(0,0,0,0.12); }
+[data-theme="light"] .arena-tag-xp   { background:rgba(184,119,8,0.09);  border-color:rgba(184,119,8,0.26); }
+[data-theme="light"] .arena-tag-loc  { background:rgba(8,145,178,0.07);   border-color:rgba(8,145,178,0.20); }
+
+/* Avatar */
+[data-theme="light"] .arena-av-outer-ring { border-color:rgba(107,80,204,0.14); }
+
+/* XP display */
+[data-theme="light"] .arena-xp-value            { text-shadow: 0 0 20px rgba(184,119,8,0.28); }
+[data-theme="light"] .arena-xp-label,
+[data-theme="light"] .arena-xp-sub-label,
+[data-theme="light"] .arena-vis-label,
+[data-theme="light"] .arena-xp-next-hint         { color:rgba(0,0,0,0.38); }
+[data-theme="light"] .arena-xp-progress-track    { background:rgba(0,0,0,0.08); }
+[data-theme="light"] .arena-xp-progress-fill::after {
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.50),transparent);
+}
+
+/* Tier badge border */
+[data-theme="light"] .arena-tier-badge { border-color:var(--color-bg-base,#F2F3F8); }
+
+/* ── Flip cards ─────────────────────────────────────────── */
+[data-theme="light"] .fc-card {
+  background: linear-gradient(160deg, rgba(240,237,252,0.98) 0%, rgba(248,249,252,0.97) 100%);
+  border-color: rgba(0,0,0,0.09);
+  box-shadow:
+    0 2px 10px rgba(15,20,33,0.07),
+    inset 0 1px 0 rgba(255,255,255,0.80);
+}
+[data-theme="light"] .fc-card.fc-expanded {
+  background: linear-gradient(160deg, rgba(235,230,252,0.99) 0%, rgba(245,247,252,0.98) 100%);
+  box-shadow:
+    0 20px 50px rgba(15,20,33,0.12),
+    0  0   40px var(--fc-glow),
+    0  0    0 1px var(--fc-accent),
+    inset 0 1px 0 rgba(255,255,255,0.90);
+}
+[data-theme="light"] .fc-card.fc-expanded .fc-back { border-top-color:rgba(0,0,0,0.07); }
+[data-theme="light"] .fc-icon { border-color:rgba(0,0,0,0.08); box-shadow:0 1px 4px rgba(15,20,33,0.08); }
+
+/* Flip hint */
+[data-theme="light"] .fc-flip-hint                               { color:rgba(0,0,0,0.22); }
+[data-theme="light"] .fc-card:hover:not(.fc-expanded) .fc-flip-hint { color:rgba(0,0,0,0.40); }
+
+/* ── §7a Mission ────────────────────────────────────────── */
+[data-theme="light"] .fc-mission-icon-big {
+  background:rgba(107,80,204,0.10); border-color:rgba(107,80,204,0.22);
+  box-shadow:0 0 14px rgba(107,80,204,0.10);
+}
+[data-theme="light"] .fc-mission-eyebrow-sub  { color:rgba(107,80,204,0.65); }
+[data-theme="light"] .fc-mission-title-sm     { color:var(--color-text-primary); }
+[data-theme="light"] .fc-mission-reward-preview { text-shadow:0 0 14px rgba(184,119,8,0.28); }
+
+/* ── §7b Market Presence ────────────────────────────────── */
+[data-theme="light"] .fc-big-denom          { color:rgba(0,0,0,0.32); }
+[data-theme="light"] .fc-stext              { color:rgba(0,0,0,0.60); }
+[data-theme="light"] .fc-readiness-badge.fc-ready     { background:rgba(11,158,120,0.09);  border-color:rgba(11,158,120,0.24); }
+[data-theme="light"] .fc-readiness-badge.fc-not-ready { background:rgba(220,38,38,0.07);   border-color:rgba(220,38,38,0.20); }
+
+/* ── §7c Stats ──────────────────────────────────────────── */
+[data-theme="light"] .fc-stat-mini            { background:rgba(0,0,0,0.03); border-color:rgba(0,0,0,0.08); }
+[data-theme="light"] .fc-stat-mini:hover      { background:rgba(0,0,0,0.055); border-color:rgba(0,0,0,0.14); }
+[data-theme="light"] .fc-stat-lbl             { color:rgba(0,0,0,0.38); }
+[data-theme="light"] .fc-stat-row             { border-color:rgba(0,0,0,0.08); }
+[data-theme="light"] .fc-stat-row:hover       { background:rgba(0,0,0,0.04); border-color:rgba(0,0,0,0.14); }
+[data-theme="light"] .fc-stat-row-lbl         { color:rgba(0,0,0,0.40); }
+
+/* ── §7d Market Intel ───────────────────────────────────── */
+[data-theme="light"] .fc-market-preview-row  { border-bottom-color:rgba(0,0,0,0.08); }
+[data-theme="light"] .fc-market-skill-name   { color:var(--color-text-primary); }
+[data-theme="light"] .fc-market-jobs-cnt     { color:rgba(0,0,0,0.35); }
+[data-theme="light"] .fc-market-bar-name     { color:rgba(0,0,0,0.75); }
+[data-theme="light"] .fc-market-bar-row:hover .fc-market-bar-name { color:rgba(0,0,0,0.95); }
+[data-theme="light"] .have-yes { color:#0B9E78; }
+[data-theme="light"] .have-no  { color:#DC2626; }
+
+/* ── §7e My Skills ──────────────────────────────────────── */
+[data-theme="light"] .fc-skill-preview,
+[data-theme="light"] .fc-skill-row          { border-bottom-color:rgba(0,0,0,0.08); }
+[data-theme="light"] .fc-skill-name         { color:var(--color-text-primary); }
+[data-theme="light"] .fc-skill-cat          { color:rgba(0,0,0,0.38); }
+[data-theme="light"] .fc-badge-gold         { background:rgba(184,119,8,0.09);   border-color:rgba(184,119,8,0.26); }
+[data-theme="light"] .fc-badge-silver       { background:rgba(90,110,130,0.09);  border-color:rgba(90,110,130,0.22); color:#5A6E82; }
+[data-theme="light"] .fc-badge-bronze       { background:rgba(181,98,28,0.09);   border-color:rgba(181,98,28,0.22);  color:#B5621C; }
+[data-theme="light"] .fc-more-hint          { color:rgba(0,0,0,0.28); }
+
+/* ── §7f Quick Actions ──────────────────────────────────── */
+[data-theme="light"] .fc-qa-top             { background:rgba(0,0,0,0.03); border-color:rgba(0,0,0,0.08); }
+[data-theme="light"] .fc-qa-top-title       { color:var(--color-text-primary); }
+[data-theme="light"] .fc-qa-top-sub         { color:rgba(0,0,0,0.40); }
+[data-theme="light"] .fc-qa-btn             { border-color:rgba(0,0,0,0.08); }
+[data-theme="light"] .fc-qa-btn:hover       { border-color:rgba(0,0,0,0.14); }
+[data-theme="light"] .fc-qa-title           { color:var(--color-text-primary); }
+[data-theme="light"] .fc-qa-sub             { color:rgba(0,0,0,0.35); }
+[data-theme="light"] .fc-qa-headline        { color:rgba(0,0,0,0.38); }
+
+/* ── §7g Activity ───────────────────────────────────────── */
+[data-theme="light"] .fc-act-preview        { border-bottom-color:rgba(0,0,0,0.08); }
+[data-theme="light"] .fc-act-row            { background:rgba(0,0,0,0.03); border-color:rgba(0,0,0,0.07); }
+[data-theme="light"] .fc-act-icon-box       { background:rgba(0,0,0,0.04); border-color:rgba(0,0,0,0.07); }
+[data-theme="light"] .fc-act-label          { color:var(--color-text-primary); }
+[data-theme="light"] .fc-act-detail,
+[data-theme="light"] .fc-act-time,
+[data-theme="light"] .fc-act-time-sm        { color:rgba(0,0,0,0.32); }
+
+/* ── §8 Shared primitives ───────────────────────────────── */
+[data-theme="light"] .fc-detail-desc        { color:var(--color-text-secondary); }
+[data-theme="light"] .fc-tension            { background:rgba(220,38,38,0.07); border-color:rgba(220,38,38,0.20); }
+[data-theme="light"] .fc-progress-meta      { color:rgba(0,0,0,0.38); }
+[data-theme="light"] .fc-progress-track     { background:rgba(0,0,0,0.08); }
+[data-theme="light"] .fc-cta-btn {
+  background:linear-gradient(135deg,rgba(107,80,204,0.88) 0%,rgba(107,80,204,1) 100%);
+  border-color:rgba(107,80,204,0.35);
+}
+[data-theme="light"] .fc-cta-btn:hover      { box-shadow:0 6px 20px rgba(107,80,204,0.28); }
+[data-theme="light"] .fc-link-btn:hover     { color:rgba(0,0,0,0.90); }
+[data-theme="light"] .fc-label-muted        { color:rgba(0,0,0,0.32); }
+[data-theme="light"] .fc-empty-hint         { color:rgba(0,0,0,0.38); }
+
+/* ── §10 Skeleton ───────────────────────────────────────── */
+[data-theme="light"] .dash-skel { background:rgba(0,0,0,0.04); }
+[data-theme="light"] .dash-skel::after {
+  background:linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255,255,255,0.55) 40%,
+    rgba(255,255,255,0.80) 50%,
+    rgba(255,255,255,0.55) 60%,
+    transparent 100%
+  );
+}
+
+/* ── §9 XP burst ────────────────────────────────────────── */
+[data-theme="light"] .xp-burst-float { text-shadow:0 0 16px rgba(184,119,8,0.50); }

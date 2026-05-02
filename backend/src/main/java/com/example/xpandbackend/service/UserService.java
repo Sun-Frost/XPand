@@ -340,16 +340,6 @@ public class UserService {
         r.setStartDate(p.getStartDate());
         r.setEndDate(p.getEndDate());
         r.setCreatedAt(p.getCreatedAt());
-        if (p.getSkills() != null) {
-            r.setSkills(p.getSkills().stream().map(ps -> {
-                SkillResponse sr = new SkillResponse();
-                sr.setId(ps.getSkill().getId());
-                sr.setName(ps.getSkill().getName());
-                sr.setCategory(ps.getSkill().getCategory());
-                sr.setIsActive(ps.getSkill().getIsActive());
-                return sr;
-            }).collect(Collectors.toList()));
-        }
         return r;
     }
 }

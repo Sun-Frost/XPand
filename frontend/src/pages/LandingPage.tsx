@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from "react";
+import xpandLogo from "../assets/xpand.svg";
 import "../assets/css/LandingPage.css";
 
 /* ─────────────────────────────────────────────
@@ -410,7 +411,7 @@ export default function LandingPage() {
 
       <nav className="lp-nav">
         <div className="lp-nav__logo">
-          <img src="/src/assets/logo.png" alt="XPand" className="lp-nav__logo-img" />
+          <img src={xpandLogo} alt="XPand" className="lp-nav__logo-img" />
         </div>
         <div className="lp-nav__pills">
           {panels.map((p, i) => (
@@ -443,7 +444,7 @@ export default function LandingPage() {
               <span key={i} className="lp-hero__char" style={{ animationDelay: `${i * 80}ms` }}>{char}</span>
             ))}
           </h1>
-          <p className="lp-hero__sub">From invisible candidate to verified, visible, and hireable talent.</p>
+          <p className="lp-hero__sub"><br />From invisible candidate to verified, visible, and hireable talent.</p>
           <div className="lp-hero__scroll-hint" aria-hidden="true" style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%" }}>
             <span>Scroll to unfold</span>
             <div className="lp-hero__scroll-arrow">↓</div>

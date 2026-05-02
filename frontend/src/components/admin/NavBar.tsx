@@ -7,6 +7,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { Icon } from "../../components/ui/Icon";
 
 interface AdminNavbarProps {
   adminName:     string | null;
@@ -69,7 +70,7 @@ const AdminNavbar: React.FC<AdminNavbarProps> = ({
         {/* Centre — admin badge */}
         <div className="an-centre">
           <div className="an-badge">
-            <span className="an-shield">⚔</span>
+            <span className="an-shield"><Icon name="account" size={12} /></span>
             <span className="an-badge-text">System Administrator</span>
           </div>
         </div>
@@ -81,7 +82,7 @@ const AdminNavbar: React.FC<AdminNavbarProps> = ({
             onClick={onToggleTheme}
             aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
           >
-            {isDarkMode ? "☀️" : "🌙"}
+            <Icon name={isDarkMode ? "sun" : "moon"} size={16} />
           </button>
 
           <div className="navbar__dropdown-anchor" ref={menuRef}>
@@ -104,16 +105,16 @@ const AdminNavbar: React.FC<AdminNavbarProps> = ({
                 <div className="divider" style={{ margin: 0 }} />
                 <ul className="navbar__menu-list">
                   {[
-                    { label: "Overview",    path: "/admin/overview",    icon: "🗂️" },
-                    { label: "Users",       path: "/admin/users",       icon: "👥" },
-                    { label: "Companies",   path: "/admin/companies",   icon: "🏢" },
-                    { label: "Challenges",  path: "/admin/challenges",  icon: "⭐" },
-                    { label: "XP Store",   path: "/admin/store",       icon: "🛍️" },
-                    { label: "Skills",      path: "/admin/skills",      icon: "📡" },
+                    { label: "Overview",   path: "/admin/overview",   icon: "activity"   as const },
+                    { label: "Users",      path: "/admin/users",      icon: "profile"    as const },
+                    { label: "Companies",  path: "/admin/companies",  icon: "work"       as const },
+                    { label: "Challenges", path: "/admin/challenges", icon: "trophy"     as const },
+                    { label: "XP Store",  path: "/admin/store",      icon: "store"      as const },
+                    { label: "Skills",     path: "/admin/skills",     icon: "skills"     as const },
                   ].map((item) => (
                     <li key={item.path} role="menuitem">
                       <button className="navbar__menu-item" onClick={() => go(item.path)}>
-                        <span className="navbar__menu-icon">{item.icon}</span>
+                        <span className="navbar__menu-icon"><Icon name={item.icon} size={16} /></span>
                         {item.label}
                       </button>
                     </li>
@@ -122,7 +123,7 @@ const AdminNavbar: React.FC<AdminNavbarProps> = ({
                 <div className="divider" style={{ margin: 0 }} />
                 <div className="navbar__menu-footer">
                   <button className="navbar__menu-item navbar__menu-item--danger" onClick={handleSignOut}>
-                    <span className="navbar__menu-icon">🚪</span>
+                    <span className="navbar__menu-icon"><Icon name="logout" size={16} /></span>
                     Sign Out
                   </button>
                 </div>
@@ -177,7 +178,9 @@ const styles = `
     padding: 4px 12px;
   }
   .an-shield {
-    font-size: 12px;
+    display: flex;
+    align-items: center;
+    color: var(--color-danger);
   }
   .an-badge-text {
     font-family: var(--font-mono);
@@ -207,7 +210,7 @@ const styles = `
   .navbar__logo-text { font-family:var(--font-display);font-size:11px;font-weight:var(--weight-bold);color:#fff;letter-spacing:0.05em; }
   .navbar__brand-name { font-size:var(--text-xl); }
   .navbar__right { display:flex;align-items:center;gap:var(--space-2);flex-shrink:0; }
-  .navbar__icon-btn { color:var(--color-text-muted);position:relative; }
+  .navbar__icon-btn { color:var(--color-text-muted);position:relative;display:flex;align-items:center;justify-content:center; }
   .navbar__icon-btn:hover { color:var(--color-text-primary); }
   .navbar__avatar-btn { display:flex;align-items:center;gap:var(--space-2);background:none;border:1px solid var(--color-border-default);border-radius:var(--radius-full);padding:3px var(--space-2) 3px 3px;cursor:pointer;color:var(--color-text-muted);transition:border-color var(--duration-base),background var(--duration-base); }
   .navbar__avatar-btn:hover { border-color:var(--color-border-strong);background:var(--color-bg-hover);color:var(--color-text-primary); }
@@ -222,7 +225,7 @@ const styles = `
   .navbar__menu-item:hover { background:var(--color-bg-hover);color:var(--color-text-primary); }
   .navbar__menu-item--danger { color:var(--color-danger); }
   .navbar__menu-item--danger:hover { background:var(--color-danger-bg);color:var(--color-danger); }
-  .navbar__menu-icon { font-size:var(--text-base);width:20px;text-align:center; }
+  .navbar__menu-icon { display:flex;align-items:center;justify-content:center;width:20px; }
   .navbar__menu-footer { padding:var(--space-2) 0; }
   @media(max-width:768px) { .an-centre { display:none; } .navbar__brand-name { display:none; } }
 `;

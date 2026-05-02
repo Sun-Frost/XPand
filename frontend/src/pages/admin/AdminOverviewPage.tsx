@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AdminPageLayout from "../../components/admin/adminPageLayout";
+import { Icon } from "../../components/ui/Icon";
 import {
   adminGetAllUsers,
   adminGetAllCompanies,
@@ -24,7 +25,7 @@ import {
 interface StatCardProps {
   label:    string;
   value:    number | string;
-  icon:     string;
+  icon:     React.ReactNode;
   accent:   string;
   sub?:     string;
   onClick?: () => void;
@@ -76,8 +77,8 @@ const AdminOverviewPage = () => {
     }).catch(console.error).finally(() => setLoading(false));
   }, []);
 
-  const approvedCompanies  = companies.filter(c => c.isApproved).length;
-  const activeSkills       = skills.filter(s => s.isActive).length;
+  const approvedCompanies = companies.filter(c => c.isApproved).length;
+  const activeSkills      = skills.filter(s => s.isActive).length;
 
   return (
     <AdminPageLayout pageTitle="Admin Overview">
@@ -87,7 +88,7 @@ const AdminOverviewPage = () => {
         <div className="admin-page-header">
           <div>
             <h1 className="admin-page-title">
-              <span className="admin-title-icon">⚔</span>
+              <span className="admin-title-icon"><Icon name="account" size={22} /></span>
               System Overview
             </h1>
             <p className="admin-page-subtitle">Real-time platform health and key metrics</p>
@@ -110,7 +111,7 @@ const AdminOverviewPage = () => {
               <StatCard
                 label="Total Users"
                 value={users.length}
-                icon="👥"
+                icon={<Icon name="profile" size={28} />}
                 accent="var(--color-cyan-400)"
                 sub="Registered accounts"
                 onClick={() => navigate("/admin/users")}
@@ -118,7 +119,7 @@ const AdminOverviewPage = () => {
               <StatCard
                 label="Total Companies"
                 value={companies.length}
-                icon="🏢"
+                icon={<Icon name="work" size={28} />}
                 accent="var(--color-green-400)"
                 sub={`${approvedCompanies} approved`}
                 onClick={() => navigate("/admin/companies")}
@@ -126,7 +127,7 @@ const AdminOverviewPage = () => {
               <StatCard
                 label="Pending Approval"
                 value={pending.length}
-                icon="⏳"
+                icon={<Icon name="pending" size={28} />}
                 accent="var(--color-gold-400)"
                 sub="Awaiting review"
                 onClick={() => navigate("/admin/companies")}
@@ -134,7 +135,7 @@ const AdminOverviewPage = () => {
               <StatCard
                 label="Active Challenges"
                 value={challenges.length}
-                icon="⭐"
+                icon={<Icon name="trophy" size={28} />}
                 accent="var(--color-primary-400)"
                 sub="XP-earning challenges"
                 onClick={() => navigate("/admin/challenges")}
@@ -142,7 +143,7 @@ const AdminOverviewPage = () => {
               <StatCard
                 label="Store Items"
                 value={storeItems.length}
-                icon="🛍️"
+                icon={<Icon name="store" size={28} />}
                 accent="var(--color-purple-400)"
                 sub="Purchasable items"
                 onClick={() => navigate("/admin/store")}
@@ -150,7 +151,7 @@ const AdminOverviewPage = () => {
               <StatCard
                 label="Active Skills"
                 value={activeSkills}
-                icon="📡"
+                icon={<Icon name="skills" size={28} />}
                 accent="var(--color-danger)"
                 sub={`${skills.length} total`}
                 onClick={() => navigate("/admin/skills")}
@@ -160,7 +161,7 @@ const AdminOverviewPage = () => {
             {/* Pending companies alert */}
             {pending.length > 0 && (
               <div className="admin-alert admin-alert--warning">
-                <span className="admin-alert-icon">⚠️</span>
+                <span className="admin-alert-icon"><Icon name="warning" size={20} /></span>
                 <div className="admin-alert-body">
                   <strong>{pending.length} company registration{pending.length > 1 ? "s" : ""} awaiting approval.</strong>
                   <span> Review and approve or reject to maintain platform integrity.</span>
@@ -213,7 +214,7 @@ const AdminOverviewPage = () => {
                 <div className="admin-panel-body">
                   {pending.length === 0 ? (
                     <div className="admin-empty-state">
-                      <span>✅</span>
+                      <Icon name="success" size={24} />
                       <p>No pending companies</p>
                     </div>
                   ) : (
@@ -246,7 +247,7 @@ const pageStyles = `
   .admin-page { padding: var(--space-8); max-width: 1200px; margin: 0 auto; }
   .admin-page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom: var(--space-8); }
   .admin-page-title { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: var(--weight-bold); color: var(--color-text-primary); margin:0 0 var(--space-1) 0; display:flex; align-items:center; gap: var(--space-3); }
-  .admin-title-icon { color: var(--color-danger); }
+  .admin-title-icon { color: var(--color-danger); display:flex; align-items:center; }
   .admin-page-subtitle { font-size: var(--text-sm); color: var(--color-text-muted); margin:0; }
   .admin-header-meta { display:flex; flex-direction:column; align-items:flex-end; gap:2px; }
   .admin-meta-label { font-size: 10px; color: var(--color-text-muted); text-transform:uppercase; letter-spacing:0.08em; }
@@ -260,7 +261,7 @@ const pageStyles = `
   .admin-stat-card { position:relative; overflow:hidden; background: var(--color-bg-surface); border:1px solid var(--color-border-default); border-radius: var(--radius-xl); padding: var(--space-5); display:flex; align-items:center; gap: var(--space-4); cursor:pointer; transition: border-color var(--duration-base), transform var(--duration-fast); text-align:left; width:100%; }
   .admin-stat-card:hover { border-color: var(--card-accent); transform: translateY(-2px); }
   .admin-stat-card:hover .admin-stat-glow { opacity:1; }
-  .admin-stat-icon { font-size: 28px; flex-shrink:0; }
+  .admin-stat-icon { font-size: 28px; flex-shrink:0; display:flex; align-items:center; color: var(--card-accent); }
   .admin-stat-info { display:flex; flex-direction:column; gap:2px; }
   .admin-stat-value { font-family: var(--font-mono); font-size: var(--text-2xl); font-weight: var(--weight-bold); color: var(--card-accent); line-height:1; }
   .admin-stat-label { font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--color-text-primary); }
@@ -268,8 +269,7 @@ const pageStyles = `
   .admin-stat-glow { position:absolute; inset:0; background: radial-gradient(ellipse at 0% 50%, color-mix(in srgb, var(--card-accent) 8%, transparent), transparent 70%); opacity:0; transition: opacity var(--duration-base); pointer-events:none; }
 
   .admin-alert { display:flex; align-items:center; gap: var(--space-4); background: var(--color-warning-bg); border:1px solid var(--color-warning-border); border-radius: var(--radius-xl); padding: var(--space-4) var(--space-5); margin-bottom: var(--space-6); }
-  .admin-alert--warning { }
-  .admin-alert-icon { font-size: 20px; flex-shrink:0; }
+  .admin-alert-icon { display:flex; align-items:center; color: var(--color-warning); flex-shrink:0; }
   .admin-alert-body { flex:1; font-size: var(--text-sm); color: var(--color-text-primary); }
 
   .admin-panels-grid { display:grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); }

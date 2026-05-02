@@ -2,7 +2,8 @@
    AdminBottomDock.tsx
    Admin-specific bottom navigation dock.
    Same Framer Motion magnification pattern as other docks.
-   Collapse: click the pill handle to slide the dock off-screen.
+   Collapse: click the pill handle to slide the dock off-screen
+   while keeping the handle visible so the user can re-expand.
    ============================================================ */
 
 import { useRef, useState } from "react";
@@ -20,9 +21,13 @@ const ITEM_BASE = 48;
 const ITEM_MAG  = 68;
 const MAG_RANGE = 100;
 
-// Full dock height: 10px top pad + 48px items + 14px bottom pad = 72px
-// Plus the 22px handle pill on top = 94px total translateY to fully hide
-const DOCK_HIDDEN_Y = 94;
+// Only translate the dock STRIP off-screen (≈72px).
+// The handle pill (22px) sits above the strip and must stay visible
+// so the user can tap it to re-expand. We do NOT include the handle
+// height in the hidden offset — the wrapper's flex-column layout
+// keeps the handle above the strip, so translating by the strip
+// height alone hides the strip while the handle peeks above the fold.
+const DOCK_STRIP_HEIGHT = 72; // 10px top pad + 48px item + 14px bottom pad
 
 interface DockItemProps {
   item:    AdminNavItem;
@@ -105,7 +110,9 @@ const AdminBottomDock = () => {
   return (
     <motion.div
       className="bdock-wrapper"
-      animate={{ y: collapsed ? DOCK_HIDDEN_Y : 0 }}
+      // Translate DOWN by just the strip height so the strip hides
+      // below the viewport edge while the handle pill stays visible.
+      animate={{ y: collapsed ? DOCK_STRIP_HEIGHT : 0 }}
       transition={{ type: "spring", stiffness: 340, damping: 32, mass: 0.8 }}
     >
       {/* Collapse / expand handle pill */}

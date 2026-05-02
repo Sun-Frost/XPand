@@ -84,6 +84,38 @@ function xpLevel(xp: number): { level: number; title: string; color: string } {
 }
 
 // ---------------------------------------------------------------------------
+// Badge strength scoring (for regular applicant ordering)
+// Formula: (goldCount × 3) + (silverCount × 2) + (bronzeCount × 1)
+// e.g. 3 gold + 4 silver + 2 bronze = 9 + 8 + 2 = 19
+// Data comes from GET /company/user/{userId}/skill-verifications
+// ---------------------------------------------------------------------------
+
+type BadgeTier = "GOLD" | "SILVER" | "BRONZE";
+
+// UserSkillVerificationResponse shape (mirrors backend DTO)
+interface ApplicantVerification {
+  verificationId: number;
+  skillId: number;
+  skillName: string;
+  category: string;
+  currentBadge: BadgeTier | null;
+  attemptCount: number;
+  isLocked: boolean;
+  lockExpiry: string | null;
+  verifiedDate: string | null;
+}
+
+function badgeScore(verifications: ApplicantVerification[]): number {
+  let gold = 0, silver = 0, bronze = 0;
+  for (const v of verifications) {
+    if (v.currentBadge === "GOLD")        gold++;
+    else if (v.currentBadge === "SILVER") silver++;
+    else if (v.currentBadge === "BRONZE") bronze++;
+  }
+  return gold * 3 + silver * 2 + bronze * 1;
+}
+
+// ---------------------------------------------------------------------------
 // StatusBadge
 // ---------------------------------------------------------------------------
 
@@ -628,7 +660,9 @@ const ApplicantCard: React.FC<{
             onClick={onViewCV}
             disabled={isBeforeDeadline}
           >{app.userFullName}</button>
-          <span className="ja-row__date">Applied {fmtDate(app.appliedAt)}</span>
+          <div className="ja-row__meta">
+            <span className="ja-row__date">Applied {fmtDate(app.appliedAt)}</span>
+          </div>
         </div>
         <StatusBadge status={app.status} size="md" />
         <div className="ja-row__actions">
@@ -666,6 +700,127 @@ const ApplicantCard: React.FC<{
 };
 
 // ---------------------------------------------------------------------------
+// PriorityCard — horizontal card shown in the post-deadline priority grid
+// ---------------------------------------------------------------------------
+
+const PRIORITY_RANK_CONFIG = {
+  1: {
+    icon: "🥇",
+    label: "1st Priority",
+    perk: "CV opens automatically · Can't skip",
+    borderColor: "rgba(252,211,77,.55)",
+    glowColor: "rgba(252,211,77,.12)",
+    stripGradient: "linear-gradient(90deg,#B45309,#FCD34D,#B45309)",
+    textColor: "#FCD34D",
+    bgColor: "rgba(252,211,77,.06)",
+  },
+  2: {
+    icon: "🥈",
+    label: "2nd Priority",
+    perk: "Must Review before dismiss",
+    borderColor: "rgba(96,165,250,.45)",
+    glowColor: "rgba(96,165,250,.08)",
+    stripGradient: "linear-gradient(90deg,#1D4ED8,#93C5FD)",
+    textColor: "#93C5FD",
+    bgColor: "rgba(96,165,250,.05)",
+  },
+  3: {
+    icon: "🥉",
+    label: "3rd Priority",
+    perk: "Priority section · Priority strip badge",
+    borderColor: "rgba(245,158,11,.35)",
+    glowColor: "rgba(245,158,11,.06)",
+    stripGradient: "linear-gradient(90deg,#D97706,#FCD34D)",
+    textColor: "#F59E0B",
+    bgColor: "rgba(245,158,11,.04)",
+  },
+} as const;
+
+const PriorityCard: React.FC<{
+  app: ApplicationResponse;
+  onViewCV: () => void;
+  onStatusChange: (id: number, status: ApplicationStatus) => Promise<void>;
+  isUpdating: boolean;
+  isViewed: boolean;
+}> = ({ app, onViewCV, onStatusChange, isUpdating, isViewed }) => {
+  const rank = (app.prioritySlotRank ?? 3) as 1 | 2 | 3;
+  const cfg = PRIORITY_RANK_CONFIG[rank];
+  const initials = getInitials(app.userFullName);
+  const nextStatuses = NEXT_STATUSES[app.status] ?? [];
+  const canAct = nextStatuses.length > 0 && app.status !== "WITHDRAWN";
+  const reviewed = app.status !== "PENDING";
+
+  return (
+    <div
+      className="ja-priority-card"
+      style={{
+        borderColor: cfg.borderColor,
+        boxShadow: `0 0 0 1px ${cfg.glowColor}, 0 4px 24px ${cfg.glowColor}`,
+        background: `var(--color-bg-surface)`,
+      }}
+    >
+      {/* Top gradient strip */}
+      <div className="ja-priority-card__strip" style={{ background: cfg.stripGradient }} />
+
+      {/* Rank badge */}
+      <div className="ja-priority-card__rank-badge" style={{ color: cfg.textColor, borderColor: cfg.borderColor, background: cfg.bgColor }}>
+        <span>{cfg.icon}</span>
+        <span>{cfg.label}</span>
+      </div>
+
+      {/* Avatar + identity */}
+      <div className="ja-priority-card__identity">
+        <div className="ja-priority-card__avatar">{initials}</div>
+        <div className="ja-priority-card__name">{app.userFullName}</div>
+        <div className="ja-priority-card__date">Applied {fmtDate(app.appliedAt)}</div>
+      </div>
+
+      {/* Perk description */}
+      <div className="ja-priority-card__perk" style={{ color: cfg.textColor }}>
+        {cfg.perk}
+      </div>
+
+      {/* Status */}
+      <div className="ja-priority-card__status-row">
+        <StatusBadge status={app.status} size="sm" />
+        {reviewed && <span className="ja-priority-card__reviewed">✓ Reviewed</span>}
+      </div>
+
+      {/* Actions */}
+      <div className="ja-priority-card__actions">
+        <button
+          className="ja-priority-card__cv-btn"
+          style={{ borderColor: cfg.borderColor, color: cfg.textColor, background: cfg.bgColor }}
+          onClick={onViewCV}
+        >
+          {rank === 1 && !isViewed ? "📋 View CV (Required)" : "View CV →"}
+        </button>
+        {canAct && (
+          <div className="ja-priority-card__quick-actions">
+            {nextStatuses.map((s) => {
+              const isShortlist = s === "SHORTLISTED";
+              return (
+                <button
+                  key={s}
+                  className={`ja-row__quick-btn ${isShortlist ? "ja-row__quick-btn--shortlist" : "ja-row__quick-btn--reject"}`}
+                  onClick={() => onStatusChange(app.id, s)}
+                  disabled={isUpdating}
+                  title={STATUS_CONFIG[s].label}
+                >
+                  {isUpdating
+                    ? <span className="ja-spinner" />
+                    : isShortlist ? <Icon name="check" size={12} label="" /> : <Icon name="close" size={12} label="" />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // JobApplicantsPage
 // ---------------------------------------------------------------------------
 
@@ -691,8 +846,9 @@ const JobApplicantsPage: React.FC = () => {
       if (!a.prioritySlotRank && b.prioritySlotRank) return 1;
       // Among priority applicants: rank 1 (most expensive) comes first
       if (a.prioritySlotRank && b.prioritySlotRank) return a.prioritySlotRank - b.prioritySlotRank;
-      // Among regular applicants: sort by status weight
-      return (STATUS_WEIGHT[a.status] ?? 9) - (STATUS_WEIGHT[b.status] ?? 9);
+      // Regular applicants: insertion order preserved here;
+      // badge-score sort happens in profileFilteredRegularApps once verifications load
+      return 0;
     });
     return {
       priorityApps: sorted.filter((a) => a.prioritySlotRank !== null),
@@ -707,47 +863,33 @@ const JobApplicantsPage: React.FC = () => {
     priorityApps.filter((a) => a.status === "PENDING").length, [priorityApps]);
 
   // ── Profile filter for regular applicants ────────────────────────────────
-  type ProfileFilter = "ALL" | "HAS_WORK_EXP" | "HAS_EDUCATION" | "HAS_CERTIFICATIONS" | "HAS_PROJECTS";
-  const [profileFilter, setProfileFilter] = useState<ProfileFilter>("ALL");
+  // Cache of fetched skill verifications for regular applicants (userId → verifications)
+  const [regularVerifications, setRegularVerifications] = useState<Record<number, ApplicantVerification[]>>({});
 
-  // Cache of fetched regular applicant profiles (userId → profile data)
-  const [regularProfiles, setRegularProfiles] = useState<Record<number, CompanyUserFullProfileResponse | null>>({});
-
-  // Fetch profiles for all regular applicants so we can filter by them
+  // Fetch skill verifications for all regular applicants (used for badge-score sorting)
   useEffect(() => {
     if (regularApps.length === 0) return;
     regularApps.forEach((app) => {
-      if (regularProfiles[app.userId] !== undefined) return; // already fetched or in-flight
-      setRegularProfiles((prev) => ({ ...prev, [app.userId]: null })); // mark in-flight
-      get<CompanyUserFullProfileResponse>(`/company/user/${app.userId}`)
-        .then((res) => setRegularProfiles((prev) => ({ ...prev, [app.userId]: res })))
-        .catch(() => setRegularProfiles((prev) => ({ ...prev, [app.userId]: null })));
+      if (!(app.userId in regularVerifications)) {
+        setRegularVerifications((prev) => ({ ...prev, [app.userId]: [] }));
+        get<ApplicantVerification[]>(`/company/user/${app.userId}/skill-verifications`)
+          .then((res) => setRegularVerifications((prev) => ({ ...prev, [app.userId]: res })))
+          .catch(() => setRegularVerifications((prev) => ({ ...prev, [app.userId]: [] })));
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [regularApps]);
 
   const profileFilteredRegularApps = useMemo(() => {
-    if (profileFilter === "ALL") return regularApps;
-    return regularApps.filter((app) => {
-      const rp = regularProfiles[app.userId];
-      if (!rp) return false; // profile not yet loaded → hide until ready
-      switch (profileFilter) {
-        case "HAS_WORK_EXP": return rp.workExperiences.length > 0;
-        case "HAS_EDUCATION": return rp.educations.length > 0;
-        case "HAS_CERTIFICATIONS": return rp.certifications.length > 0;
-        case "HAS_PROJECTS": return rp.projects.length > 0;
-        default: return true;
-      }
+    // Sort by badge score descending: (goldCount×3) + (silverCount×2) + (bronzeCount×1)
+    // Falls back to status weight when scores are tied.
+    return [...regularApps].sort((a, b) => {
+      const scoreA = badgeScore(regularVerifications[a.userId] ?? []);
+      const scoreB = badgeScore(regularVerifications[b.userId] ?? []);
+      if (scoreB !== scoreA) return scoreB - scoreA;
+      return (STATUS_WEIGHT[a.status] ?? 9) - (STATUS_WEIGHT[b.status] ?? 9);
     });
-  }, [regularApps, regularProfiles, profileFilter]);
-
-  const profileFilterOptions: { value: ProfileFilter; label: string; icon: string }[] = [
-    { value: "ALL", label: "All", icon: "👥" },
-    { value: "HAS_WORK_EXP", label: "Work Exp", icon: "💼" },
-    { value: "HAS_EDUCATION", label: "Education", icon: "🎓" },
-    { value: "HAS_CERTIFICATIONS", label: "Certified", icon: "🏅" },
-    { value: "HAS_PROJECTS", label: "Projects", icon: "🛠" },
-  ];
+  }, [regularApps, regularVerifications]);
 
   // Deadline gate: CV and actions are locked until the job deadline has passed
   const isBeforeDeadline = useMemo(() => {
@@ -926,17 +1068,36 @@ const JobApplicantsPage: React.FC = () => {
               : <span className="ja-group__pending-badge">{pendingPriorityCount} pending</span>
             }
           </div>
-          <div className="ja-list">
-            {priorityApps.map((app) => (
-              <ApplicantCard key={app.id} app={app}
-                onStatusChange={handleStatusChange}
-                isUpdating={updatingId === app.id}
-                isLocked={false}
-                isBeforeDeadline={isBeforeDeadline}
-                onViewCV={() => { if (!isBeforeDeadline) setCvApp(app); }}
-              />
-            ))}
-          </div>
+
+          {/* Post-deadline: show as horizontal priority cards */}
+          {!isBeforeDeadline ? (
+            <div className="ja-priority-cards-grid">
+              {priorityApps.map((app) => (
+                <PriorityCard
+                  key={app.id}
+                  app={app}
+                  onViewCV={() => setCvApp(app)}
+                  onStatusChange={handleStatusChange}
+                  isUpdating={updatingId === app.id}
+                  isViewed={app.status !== "PENDING"}
+                />
+              ))}
+            </div>
+          ) : (
+            /* Pre-deadline: show as regular rows (locked) */
+            <div className="ja-list">
+              {priorityApps.map((app) => (
+                <ApplicantCard key={app.id} app={app}
+                  onStatusChange={handleStatusChange}
+                  isUpdating={updatingId === app.id}
+                  isLocked={false}
+                  isBeforeDeadline={isBeforeDeadline}
+                  onViewCV={() => { if (!isBeforeDeadline) setCvApp(app); }}
+                  
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -949,56 +1110,23 @@ const JobApplicantsPage: React.FC = () => {
             {priorityApps.length > 0 && !allPriorityDone && (
               <span className="ja-group__locked-note"><span className="ja-inline-icon-text"><Icon name="locked" size={12} label="" /> Review priority first</span></span>
             )}
-          </div>
-
-          {/* Profile-based filter chips */}
-          <div className="ja-profile-filter">
-            {profileFilterOptions.map((opt) => {
-              const count = opt.value === "ALL"
-                ? regularApps.length
-                : regularApps.filter((app) => {
-                  const rp = regularProfiles[app.userId];
-                  if (!rp) return false;
-                  switch (opt.value) {
-                    case "HAS_WORK_EXP": return rp.workExperiences.length > 0;
-                    case "HAS_EDUCATION": return rp.educations.length > 0;
-                    case "HAS_CERTIFICATIONS": return rp.certifications.length > 0;
-                    case "HAS_PROJECTS": return rp.projects.length > 0;
-                    default: return true;
-                  }
-                }).length;
-              const active = profileFilter === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  className={`ja-profile-chip ${active ? "ja-profile-chip--active" : ""}`}
-                  onClick={() => setProfileFilter(opt.value)}
-                  disabled={priorityApps.length > 0 && !allPriorityDone}
-                >
-                  <span>{opt.icon}</span>
-                  {opt.label}
-                  <span className="ja-profile-chip__count">{count}</span>
-                </button>
-              );
-            })}
+            {(!priorityApps.length || allPriorityDone) && regularApps.length > 0 && (
+              <span className="ja-group__badge-sort-note">🏅 Sorted highest to lowest badge strength</span>
+            )}
           </div>
 
           <div className={`ja-list ${priorityApps.length > 0 && !allPriorityDone ? "ja-list--locked" : ""}`}>
-            {profileFilteredRegularApps.length === 0 && profileFilter !== "ALL" ? (
-              <div className="ja-empty" style={{ padding: "32px 24px" }}>
-                <p className="ja-empty__title" style={{ fontSize: 14 }}>No applicants match this filter</p>
-              </div>
-            ) : (
-              profileFilteredRegularApps.map((app) => (
+            {profileFilteredRegularApps.map((app) => (
                 <ApplicantCard key={app.id} app={app}
                   onStatusChange={handleStatusChange}
                   isUpdating={updatingId === app.id}
                   isLocked={priorityApps.length > 0 && !allPriorityDone}
                   isBeforeDeadline={isBeforeDeadline}
                   onViewCV={() => { if (!isBeforeDeadline) setCvApp(app); }}
+                  
                 />
               ))
-            )}
+            }
             {priorityApps.length > 0 && !allPriorityDone && (
               <div className="ja-list__lock-cover">
                 <div className="ja-lock-cover__inner">
@@ -1031,6 +1159,7 @@ const JobApplicantsPage: React.FC = () => {
               isLocked={!app.prioritySlotRank && priorityApps.length > 0 && !allPriorityDone}
               isBeforeDeadline={isBeforeDeadline}
               onViewCV={() => { if (!isBeforeDeadline) setCvApp(app); }}
+              
             />
           ))}
         </div>
@@ -1062,13 +1191,29 @@ const styles = `
   /* ─── Inline icon + text utility ─── */
   .ja-inline-icon-text { display:inline-flex; align-items:center; gap:5px; vertical-align:middle; }
 
-  /* ─── Profile filter chips (regular applicants) ─── */
-  .ja-profile-filter { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
-  .ja-profile-chip { display:inline-flex; align-items:center; gap:6px; padding:5px 13px; border-radius:999px; border:1px solid var(--color-border-subtle); background:var(--color-bg-surface); font-size:12px; font-family:var(--font-body); color:var(--color-text-secondary); cursor:pointer; transition:all 130ms; white-space:nowrap; }
-  .ja-profile-chip:hover:not(:disabled) { border-color:var(--color-border-strong); color:var(--color-text-primary); }
-  .ja-profile-chip--active { border-color:var(--color-primary-400,#A78BFA); background:rgba(167,139,250,.1); color:var(--color-primary-400,#A78BFA); font-weight:var(--weight-medium); }
-  .ja-profile-chip:disabled { opacity:.4; cursor:not-allowed; }
-  .ja-profile-chip__count { font-family:var(--font-mono); font-size:10px; padding:1px 6px; background:var(--color-bg-overlay); border-radius:999px; color:var(--color-text-muted); }
+  /* ─── Priority cards grid (post-deadline) ─── */
+  .ja-priority-cards-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-bottom:8px; }
+  @media (max-width:900px) { .ja-priority-cards-grid { grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); } }
+  @media (max-width:600px) { .ja-priority-cards-grid { grid-template-columns:1fr; } }
+
+  .ja-priority-card { border:1px solid; border-radius:16px; overflow:hidden; display:flex; flex-direction:column; gap:12px; padding:16px; transition:all 160ms; position:relative; }
+  .ja-priority-card:hover { transform:translateY(-2px); box-shadow:0 8px 32px rgba(0,0,0,.22) !important; }
+  .ja-priority-card__strip { height:3px; margin:-16px -16px 0; }
+  .ja-priority-card__rank-badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:999px; border:1px solid; font-family:var(--font-mono); font-size:10px; font-weight:var(--weight-bold); align-self:flex-start; margin-top:4px; }
+  .ja-priority-card__identity { display:flex; flex-direction:column; align-items:center; gap:6px; padding:8px 0; }
+  .ja-priority-card__avatar { width:52px; height:52px; border-radius:50%; background:var(--color-bg-overlay); border:2px solid var(--color-border-default); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-size:16px; font-weight:var(--weight-bold); color:var(--color-text-secondary); flex-shrink:0; }
+  .ja-priority-card__name { font-family:var(--font-display); font-size:15px; font-weight:var(--weight-semibold); color:var(--color-text-primary); text-align:center; }
+  .ja-priority-card__date { font-family:var(--font-mono); font-size:10px; color:var(--color-text-muted); }
+  .ja-priority-card__perk { font-family:var(--font-mono); font-size:10px; text-align:center; opacity:.85; padding:4px 8px; border-radius:8px; background:rgba(255,255,255,.04); }
+  .ja-priority-card__status-row { display:flex; align-items:center; justify-content:center; gap:8px; }
+  .ja-priority-card__reviewed { font-family:var(--font-mono); font-size:10px; color:#34D399; }
+  .ja-priority-card__actions { display:flex; flex-direction:column; gap:8px; margin-top:auto; }
+  .ja-priority-card__cv-btn { display:flex; align-items:center; justify-content:center; gap:6px; padding:9px 14px; border-radius:10px; border:1px solid; font-size:13px; font-family:var(--font-body); font-weight:var(--weight-semibold); cursor:pointer; transition:all 130ms; }
+  .ja-priority-card__cv-btn:hover { opacity:.85; transform:scale(1.02); }
+  .ja-priority-card__quick-actions { display:flex; align-items:center; justify-content:center; gap:8px; }
+
+  /* ─── Badge sort label ─── */
+  .ja-group__badge-sort-note { font-family:var(--font-mono); font-size:10px; color:var(--color-text-muted); margin-left:4px; padding:1px 8px; border-radius:999px; background:var(--color-bg-overlay); border:1px solid var(--color-border-subtle); }
   .ja-profile-chip--active .ja-profile-chip__count { background:rgba(167,139,250,.18); color:var(--color-primary-400,#A78BFA); }
 
   /* ─── Page header ─── */

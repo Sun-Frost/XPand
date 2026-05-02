@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import { Icon } from "../components/ui/Icon";
 
 // ---------------------------------------------------------------------------
 // OAuthCallbackPage
@@ -63,7 +64,7 @@ const OAuthCallbackPage: React.FC = () => {
       <div className="oauth-callback-page">
         <div className="oauth-callback-card card">
           <div className="oauth-callback-inner">
-            <div className="oauth-error-icon">✕</div>
+            <div className="oauth-error-icon"><Icon name="close" size={24} label="" /></div>
             <h1>Login Failed</h1>
             <p>{error}</p>
             <button className="btn btn-primary" onClick={() => navigate("/login")}>

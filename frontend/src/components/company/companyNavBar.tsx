@@ -1,17 +1,8 @@
-/* ============================================================
-   CompanyNavbar.tsx
-   Top navbar for authenticated company users.
-   Same visual pattern as user Navbar but company-specific:
-   - "Company" branding accent in avatar
-   - Menu links go to /company/* routes
-   - No XP balance (companies don't earn XP)
-   - Shows company name and approval status
-   ============================================================ */
-
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Icon } from "../ui/Icon";
 import { NavbarPageTitle } from "../ui/PageHeader";
+import xpandLogo from "../../assets/xpand.svg";
 
 interface CompanyNavbarProps {
   companyName: string | null;
@@ -50,9 +41,15 @@ const CompanyNavbar: React.FC<CompanyNavbarProps> = ({
     navigate("/login", { replace: true });
   };
 
+  // Real initials from company name — "…" while loading (null)
   const initials = companyName
-    ? companyName.slice(0, 2).toUpperCase()
-    : "CO";
+    ? companyName
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((w) => w.charAt(0).toUpperCase())
+        .join("")
+    : "…";
 
   return (
     <>
@@ -62,15 +59,13 @@ const CompanyNavbar: React.FC<CompanyNavbarProps> = ({
         <div className="navbar__left">
           <button className="navbar-brand" onClick={() => go("/company/dashboard")} aria-label="XPand home">
             <div className="navbar-brand-mark">
-              <div className="navbar__logo-inner">
-                <span className="navbar__logo-text">XP</span>
-              </div>
+              <img src={xpandLogo} alt="XPand" className="navbar__logo-svg" />
             </div>
             <span className="logo-wordmark navbar__brand-name">XPand</span>
           </button>
         </div>
 
-        {/* Centre — scrolled-in page title (same mechanism as user Navbar) */}
+        {/* Centre */}
         <div className="navbar__centre">
           <NavbarPageTitle />
         </div>
@@ -79,9 +74,11 @@ const CompanyNavbar: React.FC<CompanyNavbarProps> = ({
         <div className="navbar__right">
 
           {/* Theme toggle */}
-          <button className="btn btn-ghost btn-icon navbar__icon-btn"
+          <button
+            className="btn btn-ghost btn-icon navbar__icon-btn"
             onClick={onToggleTheme}
-            aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}>
+            aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+          >
             {isDarkMode ? <Icon name="sun" size={14} label="" /> : <Icon name="moon" size={14} label="" />}
           </button>
 
@@ -102,16 +99,15 @@ const CompanyNavbar: React.FC<CompanyNavbarProps> = ({
                 <div className="navbar__user-info">
                   <p className="navbar__user-name">{companyName ?? "Company"}</p>
                   <p className="navbar__user-email">Company Account</p>
-                  
                 </div>
                 <div className="divider" style={{ margin: 0 }} />
                 <ul className="navbar__menu-list">
                   {[
-                    { label: "Dashboard",     path: "/company/dashboard", icon: <Icon name="market-intel" size={14} label="" /> },
-                    { label: "Manage Jobs",   path: "/company/jobs",      icon: <Icon name="briefcase" size={14} label="" /> },
-                    { label: "Post New Job",  path: "/company/jobs/new",  icon: <Icon name="add-job" size={14} label="" /> },
-                    { label: "Market Insights", path: "/company/insights", icon: <Icon name="filter-growing" size={14} label="" /> },
-                    { label: "Company Profile", path: "/company/profile",  icon: <Icon name="profile" size={14} label="" /> },
+                    { label: "Dashboard",       path: "/company/dashboard", icon: <Icon name="market-intel"    size={14} label="" /> },
+                    { label: "Manage Jobs",      path: "/company/jobs",      icon: <Icon name="briefcase"       size={14} label="" /> },
+                    { label: "Post New Job",     path: "/company/jobs/new",  icon: <Icon name="add-job"         size={14} label="" /> },
+                    { label: "Market Insights",  path: "/company/insights",  icon: <Icon name="filter-growing"  size={14} label="" /> },
+                    { label: "Company Profile",  path: "/company/profile",   icon: <Icon name="profile"         size={14} label="" /> },
                   ].map((item) => (
                     <li key={item.path} role="menuitem">
                       <button className="navbar__menu-item" onClick={() => go(item.path)}>
@@ -162,11 +158,15 @@ const styles = `
     color: #fff;
     flex-shrink: 0;
   }
-  /* Reuse user navbar base styles that already exist in theme */
-  .navbar__centre { flex:1;display:flex;justify-content:center;padding:0 var(--space-6);max-width:520px;margin:0 auto; }align-items:center;gap:var(--space-3);flex-shrink:0; }
+  .navbar-brand-mark {
+    width: 32px; height: 32px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .navbar__logo-svg {
+    width: 32px; height: 32px; object-fit: contain; border-radius: var(--radius-md); display: block;
+  }
+  .navbar__centre { flex:1;display:flex;justify-content:center;padding:0 var(--space-6);max-width:520px;margin:0 auto; }
   .navbar-brand { display:flex;align-items:center;gap:var(--space-3);background:none;border:none;cursor:pointer;text-decoration:none;font-family:var(--font-display);font-size:var(--text-xl);font-weight:var(--weight-bold);letter-spacing:var(--tracking-wide);color:var(--color-text-primary); }
-  .navbar__logo-inner { width:100%;height:100%;background:var(--gradient-primary);display:flex;align-items:center;justify-content:center;border-radius:var(--radius-md); }
-  .navbar__logo-text { font-family:var(--font-display);font-size:11px;font-weight:var(--weight-bold);color:#fff;letter-spacing:0.05em; }
   .navbar__brand-name { font-size:var(--text-xl); }
   .navbar__right { display:flex;align-items:center;gap:var(--space-2);flex-shrink:0; }
   .navbar__icon-btn { color:var(--color-text-muted);position:relative; }
@@ -186,8 +186,7 @@ const styles = `
   .navbar__menu-item--danger:hover { background:var(--color-danger-bg);color:var(--color-danger); }
   .navbar__menu-icon { font-size:var(--text-base);width:20px;text-align:center; }
   .navbar__menu-footer { padding:var(--space-2) 0; }
-  .badge-warning { background:var(--color-warning-bg);border-color:var(--color-warning-border);color:var(--color-warning); }
-  @media(max-width:768px) { .cn-centre,.navbar__brand-name { display:none; } }
+  @media(max-width:768px) { .navbar__centre,.navbar__brand-name { display:none; } }
 `;
 
 export default CompanyNavbar;

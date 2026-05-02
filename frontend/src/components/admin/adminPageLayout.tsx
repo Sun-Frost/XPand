@@ -11,7 +11,7 @@
 import { type ReactNode, useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import AdminNavbar from "./NavBar";
-import AdminBottomDock from "./navigation/bottomdock";
+import AdminBottomDock from "./navigation/Adminbottomdock";
 
 // ── Theme helpers ─────────────────────────────────────────────
 const THEME_KEY = "xpand_theme";

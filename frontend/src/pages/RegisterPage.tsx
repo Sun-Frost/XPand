@@ -1,3 +1,4 @@
+import xpandLogo from "../assets/xpand.svg";
 // RegisterPage.tsx  — UPDATED
 // Changes vs original:
 //  • Step 2 "Profile Picture URL" field replaced with AvatarPicker modal trigger
@@ -10,6 +11,7 @@ import { useRegister } from "../hooks/useRegister";
 import { put, get, post } from "../api/axios";
 import { CITIES } from "../constants/cities";
 import AvatarPicker, { avatarSrc } from "../components/ui/AvatarPicker";
+import { Icon } from "../components/ui/Icon";
 
 // ---------------------------------------------------------------------------
 // Types (unchanged)
@@ -102,7 +104,7 @@ const PasswordRequirements: React.FC<{ password: string }> = ({ password }) => {
     <ul className="reg-pw-requirements">
       {checks.map(({ label, met }) => (
         <li key={label} className={`reg-pw-req ${met ? "reg-pw-req--met" : ""}`}>
-          <span className="reg-pw-req__icon">{met ? "✓" : "○"}</span>
+          <span className="reg-pw-req__icon">{met ? <Icon name="check" size={10} label="" /> : "○"}</span>
           {label}
         </li>
       ))}
@@ -224,7 +226,7 @@ const StepIndicator: React.FC<{ current: number }> = ({ current }) => (
       return (
         <React.Fragment key={label}>
           <div className={`reg-step ${active ? "reg-step--active" : done ? "reg-step--done" : "reg-step--upcoming"}`}>
-            <span className="reg-step__dot">{done ? "✓" : n}</span>
+            <span className="reg-step__dot">{done ? <Icon name="check" size={12} label="" /> : n}</span>
             <span className="reg-step__label">{label}</span>
           </div>
           {i < STEPS.length - 1 && (
@@ -258,7 +260,7 @@ const RolePicker: React.FC<{ onSelect: (r: Role) => void; onSignIn: () => void }
     <div className="register-card card card-accent-top animate-fade-in">
       <div className="register-card__header">
         <div className="register-logo">
-          <div className="logo-mark"><span className="register-logo__symbol">XP</span></div>
+          <img src={xpandLogo} alt="XPand" className="register-logo__img" />
           <span className="register-logo__wordmark logo-wordmark">XPand</span>
         </div>
         <h1 className="register-card__title">Join XPand</h1>
@@ -267,28 +269,30 @@ const RolePicker: React.FC<{ onSelect: (r: Role) => void; onSignIn: () => void }
 
       <div className="register-card__body card-body">
         <button className="reg-role-card" onClick={() => onSelect("user")}>
-          <span className="reg-role-card__icon">🧑‍💻</span>
+          <span className="reg-role-card__icon"><Icon name="work" size={28} label="" /></span>
           <div className="reg-role-card__content">
             <div className="reg-role-card__title">Job Seeker / Professional</div>
             <div className="reg-role-card__desc">
               Build your verified skill profile, earn XP badges, and apply for jobs.
             </div>
           </div>
-          <span className="reg-role-card__arrow">→</span>
+          <span className="reg-role-card__arrow"><Icon name="apply" size={16} label="" /></span>
         </button>
 
         <button className="reg-role-card" onClick={() => onSelect("company")}>
-          <span className="reg-role-card__icon">🏢</span>
+          <span className="reg-role-card__icon"><Icon name="job-type-full-time" size={28} label="" /></span>
           <div className="reg-role-card__content">
             <div className="reg-role-card__title">Company / Employer</div>
             <div className="reg-role-card__desc">
               Post jobs, find verified talent, and manage your hiring pipeline.
             </div>
           </div>
-          <span className="reg-role-card__arrow">→</span>
+          <span className="reg-role-card__arrow"><Icon name="apply" size={16} label="" /></span>
         </button>
 
-        <div className="divider-with-text">already have an account?</div>
+        <div className="reg-already-account">
+          <span>already have an account?</span>
+        </div>
         <p className="register-login-cta">
           <button type="button" className="register-login-link" onClick={onSignIn}>Sign in instead</button>
         </p>
@@ -352,7 +356,7 @@ const CompanyRegisterForm: React.FC<{
       <div className="register-card card card-accent-top animate-fade-in" style={{ maxWidth: 560 }}>
         <div className="register-card__header">
           <div className="register-logo">
-            <div className="logo-mark"><span className="register-logo__symbol">XP</span></div>
+            <img src={xpandLogo} alt="XPand" className="register-logo__img" />
             <span className="register-logo__wordmark logo-wordmark">XPand</span>
           </div>
           <h1 className="register-card__title">Register your company</h1>
@@ -532,7 +536,7 @@ const SixDigitVerify: React.FC<{
       <Orbs />
       <div className="register-card card card-accent-top animate-fade-in">
         <div className="register-success">
-          <div className="register-success__icon">✉️</div>
+          <div className="register-success__icon"><Icon name="contact" size={40} label="" /></div>
           <h2 className="register-success__title">{title}</h2>
           <p className="register-success__message">{subtitle}</p>
           <div className="reg-verify-digits" onPaste={handlePaste}>
@@ -561,7 +565,7 @@ const SixDigitVerify: React.FC<{
               : submitLabel}
           </button>
           {resendSent ? (
-            <p className="register-resend-sent">✅ New code sent! Check your inbox.</p>
+            <p className="register-resend-sent"><Icon name="check" size={14} label="" style={{verticalAlign:'middle',marginRight:4}} /> New code sent! Check your inbox.</p>
           ) : (
             <p className="register-resend-hint">
               Didn't receive it?{" "}
@@ -595,7 +599,7 @@ const UserVerifyPending: React.FC<{
         <Orbs />
         <div className="register-card card card-accent-top animate-fade-in">
           <div className="register-success">
-            <div className="register-success__icon">🎉</div>
+            <div className="register-success__icon"><Icon name="trophy" size={40} label="" /></div>
             <h2 className="register-success__title">Email Verified!</h2>
             <p className="register-success__message">
               Your account is active! Complete your profile and select skills to get discovered by employers faster.
@@ -640,7 +644,7 @@ const CompanyVerifyPending: React.FC<{
         <Orbs />
         <div className="register-card card card-accent-top animate-fade-in">
           <div className="register-success">
-            <div className="register-success__icon">⏳</div>
+            <div className="register-success__icon"><Icon name="pending" size={40} label="" /></div>
             <h2 className="register-success__title">Application Submitted!</h2>
             <p className="register-success__message">
               Your email has been verified. Your company account is now pending admin approval.
@@ -857,7 +861,7 @@ const RegisterPage: React.FC = () => {
 
         <div className="register-card__header">
           <div className="register-logo">
-            <div className="logo-mark"><span className="register-logo__symbol">XP</span></div>
+            <img src={xpandLogo} alt="XPand" className="register-logo__img" />
             <span className="register-logo__wordmark logo-wordmark">XPand</span>
           </div>
           <h1 className="register-card__title">
@@ -988,7 +992,7 @@ const RegisterPage: React.FC = () => {
               </button>
               {selectedAvatarSrc && (
                 <div className="reg-avatar-trigger__info">
-                  <p className="reg-avatar-trigger__name">Avatar selected ✓</p>
+                  <p className="reg-avatar-trigger__name">Avatar selected <Icon name="check" size={12} label="" /></p>
                   <button
                     type="button"
                     className="reg-avatar-trigger__change"
@@ -1073,7 +1077,7 @@ const RegisterPage: React.FC = () => {
         {step === 3 && (
           <div className="register-card__body card-body">
             <div className="reg-skills-info-banner">
-              <span className="reg-skills-info-banner__icon">💡</span>
+              <span className="reg-skills-info-banner__icon"><Icon name="xp" size={18} label="" /></span>
               <p>
                 Select the skills you <strong>already know</strong>. When you open the Skills Library
                 after logging in, we'll remind you to verify each one.
@@ -1095,7 +1099,7 @@ const RegisterPage: React.FC = () => {
                           <button key={skill.id} type="button"
                             className={`reg-skill-chip ${sel ? "reg-skill-chip--selected" : ""}`}
                             onClick={() => toggleSkill(skill.id)}>
-                            {sel && <span className="reg-skill-chip__check">✓</span>}
+                            {sel && <span className="reg-skill-chip__check"><Icon name="check" size={10} label="" /></span>}
                             {skill.name}
                           </button>
                         );
@@ -1155,6 +1159,11 @@ const pageStyles = `
   .register-card { position: relative; z-index: 1; width: 100%; max-width: 480px; }
   .register-card__header { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-8) var(--space-8) var(--space-4); text-align: center; }
   .register-logo { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
+  
+  .register-logo__img {
+    width: 36px; height: 36px; object-fit: contain;
+    border-radius: var(--radius-md);
+  }
   .register-logo__symbol { font-family: var(--font-mono); font-weight: var(--weight-black); font-size: var(--text-sm); letter-spacing: -0.05em; }
   .register-logo__wordmark { font-size: var(--text-lg); }
   .register-card__title { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: var(--weight-bold); color: var(--color-text-primary); margin: 0; letter-spacing: -0.02em; }
@@ -1198,6 +1207,15 @@ const pageStyles = `
   .register-submit { font-family: var(--font-display); font-size: var(--text-md); letter-spacing: var(--tracking-wider); margin-top: var(--space-1); }
   .register-spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; }
   .register-login-cta { text-align: center; }
+  .reg-already-account {
+    display: flex; align-items: center; gap: var(--space-3);
+    color: var(--color-text-muted); font-size: var(--text-sm);
+    margin-top: var(--space-2);
+  }
+  .reg-already-account::before,
+  .reg-already-account::after {
+    content: ''; flex: 1; height: 1px; background: var(--color-border);
+  }
   .register-login-link { background: none; border: none; padding: 0; color: var(--color-primary-400,#A78BFA); font-weight: var(--weight-semibold); font-size: var(--text-sm); font-family: var(--font-body); cursor: pointer; }
   .register-google-btn { display: flex; align-items: center; justify-content: center; gap: var(--space-3); text-decoration: none; }
   .register-google-icon { width: 18px; height: 18px; }

@@ -26,10 +26,63 @@ const BADGE_CONFIG = {
   LIMITED: { label: "LIMITED", bg: "var(--color-warning-bg)",     border: "var(--color-warning-border)", text: "var(--color-warning)"  },
 };
 
-const CATEGORY_ACCENT: Record<string, { color: string; glow: string; gradient: string; darkGrad: string; heroLine: string }> = {
-  REPORT:     { color: "var(--color-primary-400)", glow: "var(--color-primary-glow)", gradient: "linear-gradient(135deg,#2D1C68,#1A1430)", darkGrad: "linear-gradient(160deg,#1a1030 0%,#0d0f17 100%)", heroLine: "Know exactly where you stand."    },
-  INTERVIEW:  { color: "var(--color-primary-400)", glow: "var(--color-primary-glow)", gradient: "linear-gradient(135deg,#2D1C68,#1A1430)", darkGrad: "linear-gradient(160deg,#1a1030 0%,#0d0f17 100%)", heroLine: "Practice until perfect."           },
-  VISIBILITY: { color: "var(--color-primary-400)", glow: "var(--color-primary-glow)", gradient: "linear-gradient(135deg,#2D1C68,#1A1430)", darkGrad: "linear-gradient(160deg,#1a1030 0%,#0d0f17 100%)", heroLine: "Get seen first."                   },
+const CATEGORY_ACCENT: Record<string, { color: string; glow: string; gradient: string; darkGrad: string; lightGrad: string; heroLine: string; shape: string }> = {
+  REPORT: {
+    color:     "var(--color-primary-400)",
+    glow:      "var(--color-primary-glow)",
+    gradient:  "linear-gradient(135deg,#2D1C68,#1A1430)",
+    darkGrad:  "linear-gradient(160deg,#0f0b2a 0%,#1a1040 50%,#0a0820 100%)",
+    lightGrad: "linear-gradient(160deg,#e8e4ff 0%,#f0edff 50%,#ddd6ff 100%)",
+    heroLine:  "Know exactly where you stand.",
+    /* Scatter-plot dots SVG for "analytics" feel */
+    shape: `<svg viewBox='0 0 200 120' xmlns='http://www.w3.org/2000/svg' opacity='0.18'>
+      <circle cx='30' cy='90' r='5' fill='%239b7cff'/>
+      <circle cx='55' cy='72' r='4' fill='%239b7cff'/>
+      <circle cx='80' cy='55' r='6' fill='%239b7cff'/>
+      <circle cx='108' cy='40' r='4' fill='%239b7cff'/>
+      <circle cx='135' cy='28' r='5' fill='%239b7cff'/>
+      <circle cx='162' cy='18' r='3' fill='%239b7cff'/>
+      <polyline points='30,90 55,72 80,55 108,40 135,28 162,18' fill='none' stroke='%239b7cff' stroke-width='1.5' stroke-dasharray='4 3' opacity='0.5'/>
+      <rect x='20' y='100' width='160' height='1' fill='%239b7cff' opacity='0.2'/>
+      <rect x='20' y='10' width='1' height='95' fill='%239b7cff' opacity='0.2'/>
+    </svg>`,
+  },
+  INTERVIEW: {
+    color:     "#10B981",
+    glow:      "#10B98122",
+    gradient:  "linear-gradient(135deg,#064E3B,#022c22)",
+    darkGrad:  "linear-gradient(160deg,#052d1f 0%,#073d2b 50%,#021a14 100%)",
+    lightGrad: "linear-gradient(160deg,#d1fae5 0%,#ecfdf5 50%,#a7f3d0 100%)",
+    heroLine:  "Practice until perfect.",
+    /* Mic + sound-wave SVG */
+    shape: `<svg viewBox='0 0 200 120' xmlns='http://www.w3.org/2000/svg' opacity='0.18'>
+      <rect x='92' y='18' width='16' height='42' rx='8' fill='%2310B981'/>
+      <path d='M76 50 Q76 72 100 72 Q124 72 124 50' fill='none' stroke='%2310B981' stroke-width='2'/>
+      <line x1='100' y1='72' x2='100' y2='88' stroke='%2310B981' stroke-width='2'/>
+      <line x1='82' y1='88' x2='118' y2='88' stroke='%2310B981' stroke-width='2'/>
+      <line x1='30' y1='60' x2='30' y2='60' stroke='none'/>
+      <path d='M28,65 Q32,55 36,65 Q40,75 44,65 Q48,55 52,65' fill='none' stroke='%2310B981' stroke-width='1.5' opacity='0.6'/>
+      <path d='M148,65 Q152,55 156,65 Q160,75 164,65 Q168,55 172,65' fill='none' stroke='%2310B981' stroke-width='1.5' opacity='0.6'/>
+    </svg>`,
+  },
+  VISIBILITY: {
+    color:     "#F59E0B",
+    glow:      "#F59E0B22",
+    gradient:  "linear-gradient(135deg,#78350F,#451a03)",
+    darkGrad:  "linear-gradient(160deg,#2d1500 0%,#3d1e00 50%,#1a0d00 100%)",
+    lightGrad: "linear-gradient(160deg,#fef3c7 0%,#fffbeb 50%,#fde68a 100%)",
+    heroLine:  "Get seen first.",
+    /* Podium + star SVG */
+    shape: `<svg viewBox='0 0 200 120' xmlns='http://www.w3.org/2000/svg' opacity='0.18'>
+      <rect x='80' y='40' width='40' height='70' rx='3' fill='%23F59E0B'/>
+      <rect x='40' y='62' width='38' height='48' rx='3' fill='%23F59E0B' opacity='0.7'/>
+      <rect x='122' y='72' width='38' height='38' rx='3' fill='%23F59E0B' opacity='0.5'/>
+      <text x='100' y='22' text-anchor='middle' font-size='18' fill='%23F59E0B'>★</text>
+      <text x='59' y='58' text-anchor='middle' font-size='13' fill='%23F59E0B' opacity='0.7'>2</text>
+      <text x='141' y='68' text-anchor='middle' font-size='13' fill='%23F59E0B' opacity='0.5'>3</text>
+      <text x='100' y='36' text-anchor='middle' font-size='13' fill='%23F59E0B'>1</text>
+    </svg>`,
+  },
 };
 
 const PRIORITY_SLOT_RANKS = [
@@ -303,9 +356,18 @@ const StoreCard: React.FC<{
       <div className="sc__border-glow" />
 
       {/* ── Top panel ───────────────────────────── */}
-      <div className="sc__top" style={{ background: accent.darkGrad }}>
+      <div className="sc__top sc__top--themed"
+        style={{
+          "--dark-grad": accent.darkGrad,
+          "--light-grad": accent.lightGrad,
+        } as React.CSSProperties}
+      >
         <div className="sc__noise" />
         <div className="sc__orb" />
+        <div
+          className="sc__shape"
+          style={{ backgroundImage: `url("data:image/svg+xml,${accent.shape.replace(/\n\s*/g, " ")}")` }}
+        />
 
         {badgeCfg && (
           <div
@@ -493,14 +555,17 @@ const StorePage: React.FC = () => {
   right={
     <div className="sph__balance">
       <div className="sph__balance-inner">
-        <div className="sph__balance-orb" />
-        <span className="sph__balance-label">BALANCE</span>
-        <span className="sph__balance-amount">
-          {isLoading ? "—" : xpBalance.toLocaleString()}
-        </span>
-        <span className="sph__balance-unit">XP</span>
+        <div className="sph__balance-text">
+          <span className="sph__balance-label">BALANCE</span>
+          <div className="sph__balance-row">
+            <span className="sph__balance-amount">
+              {isLoading ? "—" : xpBalance.toLocaleString()}
+            </span>
+            <span className="sph__balance-unit">XP</span>
+          </div>
+        </div>
         <button className="sph__earn-btn" onClick={() => navigate("/challenges")}>
-          + Earn more XP →
+          + Earn XP →
         </button>
       </div>
     </div>
@@ -608,13 +673,42 @@ const styles = `
   /* ── Page header ─────────────────────────── */
  
   .sph__balance { flex-shrink:0; }
-  .sph__balance-inner { position:relative; padding:20px 28px; background:linear-gradient(150deg,#2a1900,#150e00); border:1px solid #FCD34D28; border-radius:20px; display:flex; flex-direction:column; align-items:center; min-width:160px; overflow:hidden; }
-  .sph__balance-orb { position:absolute; top:-50px; right:-50px; width:130px; height:130px; border-radius:50%; background:radial-gradient(circle,#FCD34D18,transparent 70%); pointer-events:none; }
-  .sph__balance-label { font-family:var(--font-mono); font-size:9px; font-weight:700; letter-spacing:.22em; color:#FCD34D44; margin-bottom:4px; }
-  .sph__balance-amount { font-family:var(--font-mono); font-size:2.6rem; font-weight:700; color:#FCD34D; line-height:1; text-shadow:0 0 28px #FCD34D44; }
-  .sph__balance-unit { font-family:var(--font-mono); font-size:11px; color:#FCD34D66; letter-spacing:.15em; margin-top:2px; }
-  .sph__earn-btn { background:none; border:none; font-family:var(--font-mono); font-size:10px; color:#FCD34D44; cursor:pointer; margin-top:8px; transition:color .15s; letter-spacing:.05em; padding:0; }
-  .sph__earn-btn:hover { color:#FCD34D; }
+  .sph__balance-inner {
+    position:relative; display:flex; align-items:center; gap:10px;
+    padding:9px 16px 9px 14px;
+    background:var(--color-bg-elevated);
+    border:1px solid var(--color-border-default);
+    border-radius:14px; overflow:hidden;
+    box-shadow:0 2px 12px rgba(0,0,0,.08);
+  }
+  /* Dark-mode: rich gold tint */
+  .dark .sph__balance-inner,
+  [data-theme="dark"] .sph__balance-inner {
+    background:linear-gradient(135deg,#1e1400 0%,#0f0a00 100%);
+    border-color:#FCD34D22;
+    box-shadow:0 0 20px #FCD34D0a;
+  }
+  .sph__balance-orb { display:none; }
+  .sph__balance-text { display:flex; flex-direction:column; gap:1px; }
+  .sph__balance-label { font-family:var(--font-mono); font-size:9px; font-weight:700; letter-spacing:.18em; color:var(--color-text-disabled); }
+  .sph__balance-row { display:flex; align-items:baseline; gap:4px; }
+  .sph__balance-amount { font-family:var(--font-mono); font-size:1.35rem; font-weight:700; color:#D97706; line-height:1; }
+  .dark .sph__balance-amount,
+  [data-theme="dark"] .sph__balance-amount { color:#FCD34D; text-shadow:0 0 16px #FCD34D33; }
+  .sph__balance-unit { font-family:var(--font-mono); font-size:10px; font-weight:600; color:#D9770688; letter-spacing:.12em; }
+  .dark .sph__balance-unit,
+  [data-theme="dark"] .sph__balance-unit { color:#FCD34D55; }
+  .sph__earn-btn {
+    background:none; border:1px solid #D9770622; border-radius:8px;
+    font-family:var(--font-mono); font-size:9px; font-weight:600; letter-spacing:.06em;
+    color:#D97706; cursor:pointer; padding:4px 8px;
+    transition:all .15s; white-space:nowrap; flex-shrink:0;
+  }
+  .dark .sph__earn-btn,
+  [data-theme="dark"] .sph__earn-btn { color:#FCD34D88; border-color:#FCD34D18; }
+  .sph__earn-btn:hover { background:#D9770610; color:#D97706; border-color:#D9770644; }
+  .dark .sph__earn-btn:hover,
+  [data-theme="dark"] .sph__earn-btn:hover { background:#FCD34D10; color:#FCD34D; border-color:#FCD34D44; }
 
   .sph__error { display:flex; align-items:center; gap:10px; padding:12px 16px; background:#450a0a55; border:1px solid #7f1d1d55; border-radius:12px; color:#FCA5A5; font-size:13px; margin-bottom:18px; }
   .sph__error-dismiss { margin-left:auto; background:none; border:none; color:#FCA5A5; cursor:pointer; opacity:.7; }
@@ -661,10 +755,24 @@ const styles = `
   .sc__border-glow { position:absolute; inset:-1px; border-radius:21px; pointer-events:none; z-index:0; background:conic-gradient(from 0deg,transparent 60%,var(--c,transparent) 80%,transparent 100%); opacity:0; transition:opacity .3s; }
   .sc:hover .sc__border-glow { opacity:.3; }
 
-  /* Top panel */
+  /* Top panel — default = light pastel, dark mode overrides to deep gradient */
   .sc__top { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:28px 20px 22px; overflow:hidden; flex-shrink:0; min-height:166px; z-index:1; }
+  .sc__top--themed { background: var(--light-grad, #f0edff); }
+  /* Dark mode: apply via explicit .dark class or data-theme="dark" on any ancestor */
+  .dark .sc__top--themed,
+  [data-theme="dark"] .sc__top--themed { background: var(--dark-grad, #0d0f17) !important; }
+  /* Decorative SVG shape watermark */
+  .sc__shape { position:absolute; inset:0; background-repeat:no-repeat; background-position:center; background-size:85%; pointer-events:none; z-index:0; }
   .sc__noise { position:absolute; inset:0; pointer-events:none; z-index:0; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E"); opacity:.7; }
   .sc__orb { position:absolute; top:-40px; right:-40px; width:110px; height:110px; border-radius:50%; background:radial-gradient(circle,var(--c,#ffffff18) 0%,transparent 70%); pointer-events:none; opacity:.45; }
+  /* Icon colour: dark on light panels (default), white on dark panels */
+  .sc__icon-inner { color: #1a1a2e; }
+  .dark .sc__icon-inner,
+  [data-theme="dark"] .sc__icon-inner { color: #fff !important; }
+  /* Hero tagline opacity boost in dark mode */
+  .sc__hero-line { opacity:.9; }
+  .dark .sc__hero-line,
+  [data-theme="dark"] .sc__hero-line { opacity:.85; }
 
   /* Badge */
   .sc__badge { position:absolute; top:12px; right:12px; z-index:3; font-family:var(--font-mono); font-size:9px; font-weight:700; letter-spacing:.14em; padding:3px 9px; border-radius:999px; }
@@ -675,7 +783,7 @@ const styles = `
   .sc__icon-inner { width:54px; height:54px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; }
 
   /* Hero tagline */
-  .sc__hero-line { position:relative; z-index:2; font-family:var(--font-mono); font-size:10px; font-weight:700; letter-spacing:.06em; text-align:center; margin:0; line-height:1.5; opacity:.85; }
+  .sc__hero-line { position:relative; z-index:2; font-family:var(--font-mono); font-size:10px; font-weight:700; letter-spacing:.06em; text-align:center; margin:0; line-height:1.5; }
 
   /* Body */
   .sc__body { position:relative; z-index:1; display:flex; flex-direction:column; padding:20px; gap:13px; flex:1; background:var(--color-bg-elevated); }

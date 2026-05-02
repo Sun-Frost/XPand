@@ -31,24 +31,25 @@ export interface UseSentimentReturn {
 // ---------------------------------------------------------------------------
 
 function expressionsToSentiment(expressions: Record<string, number>): SentimentResult {
-  const sorted = Object.entries(expressions).sort(([, a], [, b]) => b - a);
-  const [topEmotion, topScore] = sorted[0] ?? ["neutral", 1];
+  const { fearful = 0, sad = 0, angry = 0, disgusted = 0, happy = 0, neutral = 0, surprised = 0 } = expressions;
 
-  const mapping: Record<string, SentimentLabel> = {
-    happy: "happy",
-    fearful: "nervous",
-    sad: "nervous",
-    angry: "angry",
-    disgusted: "angry",
-    surprised: "confident",
-    neutral: "neutral",
+  // Nervous = any meaningful anxiety blend, even if no single emotion dominates
+  const nervousScore = fearful * 1.5 + sad * 0.8 + disgusted * 0.5 + (1 - happy) * 0.3;
+  const confidentScore = happy * 1.2 + neutral * 0.6;
+  const angryScore = angry * 1.5 + disgusted * 0.8;
+
+  const scores: Record<SentimentLabel, number> = {
+    nervous: nervousScore,
+    confident: confidentScore,
+    angry: angryScore,
+    happy: happy * 1.5,
+    neutral: neutral,
+    unknown: 0,
   };
 
-  return {
-    label: mapping[topEmotion] ?? "neutral",
-    confidence: topScore,
-    rawExpressions: expressions,
-  };
+  const [label, confidence] = Object.entries(scores).sort(([, a], [, b]) => b - a)[0] as [SentimentLabel, number];
+
+  return { label, confidence: Math.min(confidence, 1), rawExpressions: expressions };
 }
 
 // ---------------------------------------------------------------------------

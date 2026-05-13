@@ -627,10 +627,12 @@ const ApplicantCard: React.FC<{
   const initials = getInitials(app.userFullName);
   const nextStatuses = NEXT_STATUSES[app.status] ?? [];
   const canAct = nextStatuses.length > 0 && app.status !== "WITHDRAWN" && !isLocked && !isBeforeDeadline;
+  // Before deadline: suppress priority strip — company should only see names, not slot rankings
+  const showPriorityStrip = !!app.prioritySlotRank && !isBeforeDeadline;
 
   return (
-    <div className={`ja-row ${app.status === "WITHDRAWN" ? "ja-row--withdrawn" : ""} ${app.prioritySlotRank ? `ja-row--priority ja-row--priority-rank${app.prioritySlotRank}` : ""} ${isLocked ? "ja-row--locked" : ""} ${isBeforeDeadline ? "ja-row--pre-deadline" : ""}`}>
-      {app.prioritySlotRank && (
+    <div className={`ja-row ${app.status === "WITHDRAWN" ? "ja-row--withdrawn" : ""} ${app.prioritySlotRank && !isBeforeDeadline ? `ja-row--priority ja-row--priority-rank${app.prioritySlotRank}` : ""} ${isLocked ? "ja-row--locked" : ""} ${isBeforeDeadline ? "ja-row--pre-deadline" : ""}`}>
+      {showPriorityStrip && (
         <div className={`ja-row__priority-strip ja-row__priority-strip--rank${app.prioritySlotRank}`}>
           <span>{app.prioritySlotRank === 1 ? <span className="ja-inline-icon-text"><Icon name="trophy" size={14} label="" /></span> : app.prioritySlotRank === 2 ? <span className="ja-inline-icon-text"><Icon name="badge-silver" size={14} label="" /></span> : <span className="ja-inline-icon-text"><Icon name="badge-bronze" size={14} label="" /></span>}</span>
           <span>
@@ -891,25 +893,31 @@ const JobApplicantsPage: React.FC = () => {
     });
   }, [regularApps, regularVerifications]);
 
-  // Deadline gate: CV and actions are locked until the job deadline has passed
+  // Deadline gate: CV and actions are locked until the job deadline has passed.
+  // IMPORTANT: if job hasn't loaded yet OR has no deadline set, default to TRUE (locked)
+  // so we never accidentally open CVs before we know the real deadline state.
   const isBeforeDeadline = useMemo(() => {
-    if (!job?.deadline) return false;
+    if (!job) return true;            // job not loaded yet — stay locked
+    if (!job.deadline) return true;   // no deadline set — stay locked (safe default)
     return new Date(job.deadline) > new Date();
-  }, [job?.deadline]);
+  }, [job]);
 
   // ── Rank-1 auto-open: ONLY after deadline, automatically open the CV of the
-  // rank-1 priority applicant (if pending). Before deadline nothing opens.
-  const autoOpenedRef = React.useRef(false);
+  // rank-1 priority applicant (if still pending). Before deadline nothing opens.
+  // We use a state flag (not a ref) so the gate survives strict-mode double-invocations,
+  // but we intentionally DON'T reset it when the component unmounts — if the company
+  // navigates away and back the modal should NOT re-open (they've already been shown it).
+  const [hasAutoOpened, setHasAutoOpened] = useState(false);
   useEffect(() => {
-    if (autoOpenedRef.current) return;
+    if (hasAutoOpened) return;
     if (isLoading) return;
-    if (isBeforeDeadline) return;          // ← deadline gate
+    if (isBeforeDeadline) return;          // ← hard deadline gate — nothing opens pre-deadline
     const rank1 = priorityApps.find((a) => a.prioritySlotRank === 1 && a.status === "PENDING");
     if (rank1) {
-      autoOpenedRef.current = true;
+      setHasAutoOpened(true);
       setCvApp(rank1);
     }
-  }, [isLoading, priorityApps, isBeforeDeadline]);
+  }, [isLoading, priorityApps, isBeforeDeadline, hasAutoOpened]);
 
   const filtered = useMemo(() => {
     const all = [...priorityApps, ...regularApps];
@@ -967,7 +975,7 @@ const JobApplicantsPage: React.FC = () => {
             <div className="ja-page-header__meta">
               {job?.location && <span className="ja-inline-icon-text"><Icon name="location" size={12} label="" /> {job.location}</span>}
               <span className="ja-inline-icon-text"><Icon name="question-personal" size={14} label="" /> {applications.length} applicant{applications.length !== 1 ? "s" : ""}</span>
-              {priorityApps.length > 0 && <span className="ja-page-header__priority">⭐ {priorityApps.length} priority</span>}
+              {!isBeforeDeadline && priorityApps.length > 0 && <span className="ja-page-header__priority">⭐ {priorityApps.length} priority</span>}
             </div>
           </div>
         </div>
@@ -1013,7 +1021,7 @@ const JobApplicantsPage: React.FC = () => {
         </div>
       )}
 
-      {priorityApps.length > 0 && !allPriorityDone && (
+      {!isBeforeDeadline && priorityApps.length > 0 && !allPriorityDone && (
         <div className="ja-priority-notice">
           <span className="ja-inline-icon-text"><Icon name="flag" size={16} label="" /></span>
           <div>
@@ -1022,7 +1030,7 @@ const JobApplicantsPage: React.FC = () => {
           </div>
         </div>
       )}
-      {priorityApps.length > 0 && allPriorityDone && (
+      {!isBeforeDeadline && priorityApps.length > 0 && allPriorityDone && (
         <div className="ja-priority-done-notice">
           <span className="ja-inline-icon-text"><Icon name="success" size={16} label="" /></span>
           <span>All priority applicants reviewed — regular applications are now unlocked.</span>
@@ -1063,10 +1071,10 @@ const JobApplicantsPage: React.FC = () => {
           <div className="ja-group__label">
             <span>⭐</span> Priority Applications
             <span className="ja-group__count">{priorityApps.length}</span>
-            {allPriorityDone
+            {!isBeforeDeadline && (allPriorityDone
               ? <span className="ja-group__done-badge"><span className="ja-inline-icon-text">All reviewed <Icon name="check" size={12} label="" /></span></span>
               : <span className="ja-group__pending-badge">{pendingPriorityCount} pending</span>
-            }
+            )}
           </div>
 
           {/* Post-deadline: show as horizontal priority cards */}
@@ -1107,27 +1115,27 @@ const JobApplicantsPage: React.FC = () => {
           <div className="ja-group__label">
             <span className="ja-inline-icon-text"><Icon name="question-personal" size={16} label="" /></span> Regular Applications
             <span className="ja-group__count">{regularApps.length}</span>
-            {priorityApps.length > 0 && !allPriorityDone && (
+            {!isBeforeDeadline && priorityApps.length > 0 && !allPriorityDone && (
               <span className="ja-group__locked-note"><span className="ja-inline-icon-text"><Icon name="locked" size={12} label="" /> Review priority first</span></span>
             )}
-            {(!priorityApps.length || allPriorityDone) && regularApps.length > 0 && (
+            {!isBeforeDeadline && (!priorityApps.length || allPriorityDone) && regularApps.length > 0 && (
               <span className="ja-group__badge-sort-note">🏅 Sorted highest to lowest badge strength</span>
             )}
           </div>
 
-          <div className={`ja-list ${priorityApps.length > 0 && !allPriorityDone ? "ja-list--locked" : ""}`}>
+          <div className={`ja-list ${!isBeforeDeadline && priorityApps.length > 0 && !allPriorityDone ? "ja-list--locked" : ""}`}>
             {profileFilteredRegularApps.map((app) => (
                 <ApplicantCard key={app.id} app={app}
                   onStatusChange={handleStatusChange}
                   isUpdating={updatingId === app.id}
-                  isLocked={priorityApps.length > 0 && !allPriorityDone}
+                  isLocked={!isBeforeDeadline && priorityApps.length > 0 && !allPriorityDone}
                   isBeforeDeadline={isBeforeDeadline}
                   onViewCV={() => { if (!isBeforeDeadline) setCvApp(app); }}
                   
                 />
               ))
             }
-            {priorityApps.length > 0 && !allPriorityDone && (
+            {!isBeforeDeadline && priorityApps.length > 0 && !allPriorityDone && (
               <div className="ja-list__lock-cover">
                 <div className="ja-lock-cover__inner">
                   <span className="ja-lock-cover__icon"><Icon name="locked" size={32} label="" /></span>

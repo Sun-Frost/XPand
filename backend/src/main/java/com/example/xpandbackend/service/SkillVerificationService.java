@@ -41,13 +41,19 @@ public class SkillVerificationService {
         Skill skill = skillRepository.findById(skillId)
                 .orElseThrow(() -> new ResourceNotFoundException("Skill not found."));
         if (!skill.getIsActive()) throw new BadRequestException("This skill is not active.");
-
         UserSkillVerification verification = verificationRepository
-                .findByUserIdAndSkillId(userId, skillId).orElse(null);
+                .findByUserIdAndSkillId(userId, skillId)
+                .stream().findFirst().orElse(null);
 
         if (verification != null) {
+            // Gold badge = permanently verified; no further attempts allowed on this skill.
+            if (BadgeLevel.GOLD.equals(verification.getCurrentBadge())) {
+                throw new BadRequestException("You have already earned a Gold badge for this skill. No further attempts are needed.");
+            }
+
             if (verification.getIsLocked()) {
                 if (verification.getLockExpiry() != null && LocalDateTime.now().isAfter(verification.getLockExpiry())) {
+                    // Lock period expired — reset for a new monthly window.
                     verification.setIsLocked(false);
                     verification.setAttemptCount(0);
                     verification.setLockExpiry(null);
@@ -56,6 +62,8 @@ public class SkillVerificationService {
                     throw new BadRequestException("Skill is locked. Try again after: " + verification.getLockExpiry());
                 }
             }
+
+            // Belt-and-suspenders: also block if attempts are maxed but lock wasn't persisted.
             if (verification.getAttemptCount() >= MAX_ATTEMPTS) {
                 throw new BadRequestException("Maximum attempts reached. Skill is locked.");
             }
@@ -84,7 +92,8 @@ public class SkillVerificationService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found."));
 
         UserSkillVerification verification = verificationRepository
-                .findByUserIdAndSkillId(userId, skillId).orElseGet(() -> {
+                .findByUserIdAndSkillId(userId, skillId)
+                .stream().findFirst().orElseGet(() -> {
                     UserSkillVerification v = new UserSkillVerification();
                     v.setUser(user);
                     v.setSkill(skill);
@@ -163,7 +172,9 @@ public class SkillVerificationService {
             }
         }
 
-        if (verification.getAttemptCount() >= MAX_ATTEMPTS && badge == null) {
+        // Lock after MAX_ATTEMPTS regardless of whether a badge was earned or not.
+        // A badge just means the skill is "verified" — the attempt still consumed a slot.
+        if (verification.getAttemptCount() >= MAX_ATTEMPTS) {
             verification.setIsLocked(true);
             verification.setLockExpiry(LocalDateTime.now().plusMonths(1));
         }

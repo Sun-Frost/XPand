@@ -25,6 +25,7 @@ public class UserService {
     private final ProjectSkillRepository projectSkillRepository;
     private final SkillRepository skillRepository;
     private final UserOnboardingSkillRepository onboardingSkillRepository;
+    private final ChallengeEvaluationService challengeEvaluationService;
 
     public UserProfileResponse getProfile(Integer userId) {
         User user = findUser(userId);
@@ -46,22 +47,20 @@ public class UserService {
         if (request.getProfessionalTitle() != null) user.setProfessionalTitle(request.getProfessionalTitle());
         if (request.getAboutMe() != null) user.setAboutMe(request.getAboutMe());
         userRepository.save(user);
+
+        // Only evaluate profile completion — not certs or projects
+        triggerProfileCompletionEval(userId);
+
         return mapToProfileResponse(user);
     }
 
     // -------- Onboarding skills --------
 
-    /**
-     * Persists the skill IDs the user self-reported knowing at registration step 3.
-     * Duplicate inserts (same user + skill) are silently ignored so the endpoint is safe
-     * to call multiple times (e.g. if the user re-completes setup via the post-verify flow).
-     */
     @Transactional
     public void saveOnboardingSkills(Integer userId, List<Integer> skillIds) {
         if (skillIds == null || skillIds.isEmpty()) return;
         User user = findUser(userId);
         for (Integer skillId : skillIds) {
-            // Skip if already recorded
             if (onboardingSkillRepository.existsByUserIdAndSkillId(userId, skillId)) continue;
             Skill skill = skillRepository.findById(skillId)
                     .orElseThrow(() -> new ResourceNotFoundException("Skill not found: " + skillId));
@@ -72,10 +71,6 @@ public class UserService {
         }
     }
 
-    /**
-     * Returns the list of skill IDs recorded during onboarding for the given user.
-     * The Skills Library uses this to show the "verify your skills" nudge popup.
-     */
     public List<Integer> getOnboardingSkillIds(Integer userId) {
         return onboardingSkillRepository.findSkillIdsByUserId(userId);
     }
@@ -161,6 +156,10 @@ public class UserService {
         cert.setUser(user);
         setCertFields(cert, request);
         certificationRepository.save(cert);
+
+        // Only evaluate cert challenges — not project or profile completion
+        triggerCertEval(userId);
+
         return mapToCertResponse(cert);
     }
 
@@ -171,6 +170,10 @@ public class UserService {
         assertOwnership(cert.getUser().getId(), userId);
         setCertFields(cert, request);
         certificationRepository.save(cert);
+
+        // Only evaluate cert challenges — not project or profile completion
+        triggerCertEval(userId);
+
         return mapToCertResponse(cert);
     }
 
@@ -180,6 +183,7 @@ public class UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("Certification not found."));
         assertOwnership(cert.getUser().getId(), userId);
         certificationRepository.delete(cert);
+        // No eval on delete — count dropped, no challenge should complete
     }
 
     // -------- Projects --------
@@ -196,6 +200,10 @@ public class UserService {
         setProjectFields(project, request);
         projectRepository.save(project);
         saveProjectSkills(project, request.getSkillIds());
+
+        // Only evaluate project challenges — not cert or profile completion
+        triggerProjectEval(userId);
+
         return mapToProjectResponse(project);
     }
 
@@ -208,6 +216,10 @@ public class UserService {
         projectRepository.save(project);
         projectSkillRepository.deleteByProjectId(projectId);
         saveProjectSkills(project, request.getSkillIds());
+
+        // Only evaluate project challenges — not cert or profile completion
+        triggerProjectEval(userId);
+
         return mapToProjectResponse(project);
     }
 
@@ -217,6 +229,42 @@ public class UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found."));
         assertOwnership(project.getUser().getId(), userId);
         projectRepository.delete(project);
+        // No eval on delete — count dropped, no challenge should complete
+    }
+
+    // -------- Challenge evaluation triggers --------
+
+    /**
+     * Only evaluates ADD_CERTIFICATION challenges.
+     * Called after cert add/update only — never from project or profile methods.
+     */
+    private void triggerCertEval(Integer userId) {
+        long certCount = certificationRepository.countByUserId(userId);
+        challengeEvaluationService.evaluateProfileUpdate(userId, (int) certCount, -1, false);
+    }
+
+    /**
+     * Only evaluates ADD_PROJECT challenges.
+     * Called after project add/update only — never from cert or profile methods.
+     */
+    private void triggerProjectEval(Integer userId) {
+        long projectCount = projectRepository.countByUserId(userId);
+        challengeEvaluationService.evaluateProfileUpdate(userId, -1, (int) projectCount, false);
+    }
+
+    /**
+     * Only evaluates COMPLETE_PROFILE challenge.
+     * Called after profile field updates only — never from cert or project methods.
+     */
+    private void triggerProfileCompletionEval(Integer userId) {
+        User user = findUser(userId);
+        boolean isComplete = user.getFirstName() != null
+                && user.getLastName() != null
+                && user.getCity() != null
+                && user.getCountry() != null
+                && user.getProfessionalTitle() != null
+                && user.getAboutMe() != null;
+        challengeEvaluationService.evaluateProfileUpdate(userId, -1, -1, isComplete);
     }
 
     // -------- helpers --------
@@ -268,7 +316,7 @@ public class UserService {
         p.setTitle(r.getTitle());
         p.setDescription(r.getDescription());
         p.setTechnologiesUsed(r.getTechnologiesUsed());
-        p.setProjectUrl(r.getProjectUrl());
+        p.setProjectUrl(p.getProjectUrl());
         p.setGithubUrl(r.getGithubUrl());
         p.setStartDate(r.getStartDate());
         p.setEndDate(r.getEndDate());

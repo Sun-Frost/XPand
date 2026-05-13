@@ -755,31 +755,61 @@ const StepByStepScreen: React.FC<{
           </div>
         </div>
 
-        {/* Per-question feedback */}
+        {/* Post-submit: cop mode reveal + navigation — no feedback text */}
         {(feedbackLoading || hasFeedback) && (
-          <div ref={feedbackRef}><FeedbackPanel feedback={currentFeedback} /></div>
-        )}
-
-        {/* Navigation */}
-        {hasFeedback && (
-          <div className="mi-nav-row">
-            {!isLastQuestion ? (
-              <button className="mi-next-btn" onClick={onNextQuestion} disabled={isFetchingNextQuestion}>
-                {isFetchingNextQuestion
-                  ? <span className="mi-start-btn__inner"><span className="mi-spinner" />Gemini is thinking…</span>
-                  : "Next Question →"}
-              </button>
-            ) : (
-              <div className="mi-finish-block">
-                <p className="mi-finish-block__hint">
-                  All {totalQuestions} questions answered.{" "}
-                  {allAnswered ? "Submit for your full AI performance report." : "Ensure all questions are answered."}
-                </p>
-                <button className="mi-finish-btn" onClick={onFinishInterview} disabled={!allAnswered}>
-                  Finish & Get Full Feedback →
-                </button>
+          <div ref={feedbackRef} className="mi-cop-reveal">
+            {feedbackLoading ? (
+              <div className="mi-cop-reveal__loading">
+                <span className="mi-spinner" />
+                <span className="mi-cop-reveal__loading-text">Analysing…</span>
               </div>
-            )}
+            ) : hasFeedback && currentFeedback ? (
+              <>
+                {/* Cop mode card */}
+                <div
+                  className="mi-cop-card"
+                  style={{
+                    background: MODE_CONFIG[currentFeedback.mode].bg,
+                    borderColor: MODE_CONFIG[currentFeedback.mode].border,
+                  }}
+                >
+                  <span className="mi-cop-card__icon">
+                    <Icon name={MODE_CONFIG[currentFeedback.mode].icon} size={20} label="" />
+                  </span>
+                  <div>
+                    <div className="mi-cop-card__label" style={{ color: MODE_CONFIG[currentFeedback.mode].color }}>
+                      {MODE_CONFIG[currentFeedback.mode].label} Mode
+                    </div>
+                    <div className="mi-cop-card__desc">{MODE_CONFIG[currentFeedback.mode].desc}</div>
+                  </div>
+                  <div className="mi-cop-card__sentiment" style={{ color: SENTIMENT_CONFIG[currentFeedback.sentiment].color }}>
+                    <Icon name={SENTIMENT_CONFIG[currentFeedback.sentiment].icon} size={14} label="" />
+                    {SENTIMENT_CONFIG[currentFeedback.sentiment].label}
+                  </div>
+                </div>
+
+                {/* Navigation */}
+                <div className="mi-nav-row">
+                  {!isLastQuestion ? (
+                    <button className="mi-next-btn" onClick={onNextQuestion} disabled={isFetchingNextQuestion}>
+                      {isFetchingNextQuestion
+                        ? <span className="mi-start-btn__inner"><span className="mi-spinner" />Gemini is thinking…</span>
+                        : "Next Question →"}
+                    </button>
+                  ) : (
+                    <div className="mi-finish-block">
+                      <p className="mi-finish-block__hint">
+                        All {totalQuestions} questions answered.{" "}
+                        {allAnswered ? "Submit for your full AI performance report." : "Ensure all questions are answered."}
+                      </p>
+                      <button className="mi-finish-btn" onClick={onFinishInterview} disabled={!allAnswered}>
+                        Finish & Get Full Feedback →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : null}
           </div>
         )}
       </div>
@@ -1245,16 +1275,15 @@ const styles = `
   .mi-submit-btn:hover:not(:disabled) { box-shadow:0 0 20px #34D39922; transform:translateY(-1px); }
   .mi-submit-btn:disabled { opacity:.5; cursor:not-allowed; }
 
-  /* Feedback panel */
-  .mi-feedback-panel { border:1px solid; border-radius:14px; padding:20px; animation:mi-slide-in .25s ease; }
-  .mi-feedback-panel--loading { display:flex; align-items:center; gap:12px; padding:16px 20px; }
-  .mi-feedback-panel__spinner { width:16px; height:16px; border:2px solid rgba(255,255,255,.15); border-radius:50%; animation:mi-spin .7s linear infinite; flex-shrink:0; }
-  .mi-feedback-panel__loading-text { font-size:13px; font-family:var(--font-mono); }
-  .mi-feedback-panel__header { display:flex; align-items:center; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
-  .mi-feedback-panel__mode-icon { font-size:14px; }
-  .mi-feedback-panel__mode-label { font-family:var(--font-mono); font-size:11px; font-weight:700; letter-spacing:.08em; }
-  .mi-feedback-panel__spacer { flex:1; }
-  .mi-feedback-panel__text { font-size:14px; line-height:1.75; color:var(--color-text-secondary); white-space:pre-wrap; }
+  /* Cop reveal */
+  .mi-cop-reveal { display:flex; flex-direction:column; gap:12px; animation:mi-slide-in .3s cubic-bezier(.34,1.56,.64,1); }
+  .mi-cop-reveal__loading { display:flex; align-items:center; gap:10px; padding:14px 18px; background:var(--color-bg-elevated); border:1px solid var(--color-border-default); border-radius:12px; }
+  .mi-cop-reveal__loading-text { font-family:var(--font-mono); font-size:12px; color:var(--color-text-muted); }
+  .mi-cop-card { display:flex; align-items:center; gap:14px; padding:16px 20px; border:1px solid; border-radius:14px; transition:all .25s; }
+  .mi-cop-card__icon { flex-shrink:0; }
+  .mi-cop-card__label { font-family:var(--font-mono); font-size:13px; font-weight:700; letter-spacing:.06em; line-height:1.3; }
+  .mi-cop-card__desc { font-size:11px; color:var(--color-text-muted); margin-top:2px; }
+  .mi-cop-card__sentiment { display:flex; align-items:center; gap:5px; margin-left:auto; font-family:var(--font-mono); font-size:11px; font-weight:600; white-space:nowrap; }
 
   /* Navigation */
   .mi-nav-row { display:flex; justify-content:flex-end; }

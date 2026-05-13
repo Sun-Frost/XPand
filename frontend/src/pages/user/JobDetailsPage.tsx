@@ -430,7 +430,14 @@ const ApplyModal: React.FC<{
 
   return (
     <Modal onClose={onClose}>
-      <div className="jd-modal animate-scale-in" onClick={(e) => e.stopPropagation()}>
+      <div className="jd-modal-outer animate-scale-in" onClick={(e) => e.stopPropagation()}>
+
+        {/* Close button — outside overflow:hidden modal, anchored to corner */}
+        <button className="jd-modal__close" onClick={onClose} aria-label="Close">
+          <Icon name="close" size={12} label="Close" />
+        </button>
+
+        <div className="jd-modal">
 
         <div className="jd-modal__header">
           <div className="jd-modal__header-left">
@@ -440,9 +447,6 @@ const ApplyModal: React.FC<{
               <p className="jd-modal__company">{job.companyName}{job.location ? ` · ${job.location}` : ""}</p>
             </div>
           </div>
-          <button className="btn-icon btn-icon-sm" onClick={onClose}>
-            <Icon name="close" size={14} label="Close" />
-          </button>
         </div>
 
         <div className="jd-modal__match">
@@ -517,17 +521,24 @@ const ApplyModal: React.FC<{
                     <span className="jd-slot-opt__glyph">◎</span>
                     <span className="jd-slot-opt__label">Apply without priority</span>
                   </button>
-                  {prioritySlots.map((slot) => (
-                    <button
-                      key={slot.id}
-                      className={`jd-slot-opt jd-slot-opt--priority ${selectedSlotId === slot.id ? "jd-slot-opt--selected" : ""}`}
-                      onClick={() => setSelectedSlotId(slot.id)}
-                    >
-                      <span className="jd-slot-opt__glyph"><Icon name="star" size={14} label="" /></span>
-                      <span className="jd-slot-opt__label">Use Priority Slot #{slot.id}</span>
-                      <span className="jd-slot-opt__badge">1×</span>
-                    </button>
-                  ))}
+                  {(["FIRST", "SECOND", "THIRD"] as const)
+                    .map((rank) => {
+                      const group = prioritySlots.filter((s) => s.slotRank === rank);
+                      if (group.length === 0) return null;
+                      const rankLabel = rank === "FIRST" ? "1st" : rank === "SECOND" ? "2nd" : "3rd";
+                      const firstId = group[0].id;
+                      return (
+                        <button
+                          key={rank}
+                          className={`jd-slot-opt jd-slot-opt--priority ${selectedSlotId === firstId ? "jd-slot-opt--selected" : ""}`}
+                          onClick={() => setSelectedSlotId(firstId)}
+                        >
+                          <span className="jd-slot-opt__glyph"><Icon name="star" size={14} label="" /></span>
+                          <span className="jd-slot-opt__label">Use {rankLabel} Priority Slot</span>
+                          <span className="jd-slot-opt__badge">{group.length}×</span>
+                        </button>
+                      );
+                    })}
                 </div>
               </>
             )}
@@ -555,7 +566,9 @@ const ApplyModal: React.FC<{
                 : <>Confirm Application →</>}
           </button>
         </div>
-      </div>
+
+        </div>{/* end .jd-modal */}
+      </div>{/* end .jd-modal-outer */}
     </Modal>
   );
 };
@@ -1553,8 +1566,35 @@ const styles = `
 }
 
 /* ══ MODAL (unchanged) ════════════════════════════════════════════════ */
+.jd-modal-outer {
+  position: relative;
+  width: 100%; max-width: 440px;
+  max-height: 90vh;
+  display: flex; flex-direction: column;
+}
+
+.jd-modal__close {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  transition: all var(--duration-base) var(--ease-smooth);
+  z-index: 10;
+}
+.jd-modal__close:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-strong);
+  color: var(--color-text-primary);
+}
+
 .jd-modal {
-  width: 100%; max-width: 440px; max-height: 90vh;
+  width: 100%; flex: 1; min-height: 0;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-2xl);
@@ -1645,6 +1685,8 @@ const styles = `
 .jd-modal__body {
   padding: var(--space-4) var(--space-5);
   overflow-y: auto;
+  flex: 1;
+  min-height: 0;
   display: flex; flex-direction: column; gap: var(--space-4);
 }
 
@@ -1776,6 +1818,9 @@ const styles = `
 
 .jd-slot-options {
   display: flex; flex-direction: column; gap: var(--space-2);
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: var(--space-1);
 }
 
 .jd-slot-opt {
@@ -1899,9 +1944,12 @@ const styles = `
 }
 
 @media (max-width: 600px) {
+  .jd-modal-outer {
+    align-self: flex-end;
+    width: 100%;
+  }
   .jd-modal {
     border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
-    align-self: flex-end;
   }
 }
 `;

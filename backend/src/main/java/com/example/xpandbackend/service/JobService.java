@@ -138,6 +138,7 @@ public class JobService {
         for (JobSkillRequirement req : majorSkills) {
             boolean hasBadge = verificationRepository
                     .findByUserIdAndSkillId(userId, req.getSkill().getId())
+                    .stream().findFirst()
                     .map(v -> v.getCurrentBadge() != null)
                     .orElse(false);
             if (!hasBadge) {

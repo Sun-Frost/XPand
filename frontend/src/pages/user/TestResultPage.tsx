@@ -428,7 +428,7 @@ const styles = `
   .result-threshold--silver.result-threshold--earned { background:var(--color-silver-bg);border-color:var(--color-silver-border); }
   .result-threshold--gold.result-threshold--earned   { background:var(--color-gold-bg);border-color:var(--color-gold-border);box-shadow:var(--glow-gold); }
   .result-threshold__pct { font-family:var(--font-mono);font-size:var(--text-xs);font-weight:var(--weight-bold);color:var(--color-text-muted);min-width:40px; }
-  .result-threshold__label { flex:1;font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--color-text-secondary); }
+  .result-threshold__label { flex:1;font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--color-text-secondary);display:flex;align-items:center;gap:6px; }
   .result-threshold--earned .result-threshold__label { color:var(--color-text-primary); }
   .result-threshold__check { font-size:var(--text-xs);font-weight:var(--weight-bold);color:var(--color-verified); }
   .result-hero__your-score { color:var(--color-text-muted); }
@@ -459,7 +459,7 @@ const styles = `
   .review-opt__indicator { font-weight:var(--weight-bold);font-size:var(--text-sm);flex-shrink:0; }
   .review-opt--correct .review-opt__indicator { color:var(--color-verified); }
   .review-opt--wrong   .review-opt__indicator { color:var(--color-danger); }
-  .review-item__skipped { color:var(--color-warning);margin-top:var(--space-3); }
+  .review-item__skipped { color:var(--color-warning);margin-top:var(--space-3);display:flex;align-items:center;gap:6px; }
   .badge-verified { background:var(--color-verified-bg);border-color:var(--color-verified-border);color:var(--color-verified); }
   .badge-danger   { background:var(--color-danger-bg);border-color:var(--color-danger-border);color:var(--color-danger); }
   .diff-easy   { background:var(--color-verified-bg);border-color:var(--color-verified-border);color:var(--color-verified); }

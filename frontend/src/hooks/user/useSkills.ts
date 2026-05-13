@@ -33,6 +33,12 @@ export interface SkillWithVerification extends SkillItem {
   remainingAttempts: number;
   /** True if the user has achieved the Gold badge — skill is complete, no re-attempts allowed */
   isGoldVerified: boolean;
+  /**
+   * True only if the user has earned at least one badge (BRONZE, SILVER, or GOLD).
+   * A verification record existing without a badge means the user attempted but did NOT pass —
+   * that is NOT a verified skill. Never derive "verified" from the presence of a verification record.
+   */
+  isVerified: boolean;
 }
 
 export interface SkillsData {
@@ -61,9 +67,11 @@ const MAX_MONTHLY_ATTEMPTS = 3;
 
 function getRemainingAttempts(v: UserSkillVerification | undefined): number {
   if (!v) return MAX_MONTHLY_ATTEMPTS;
+  // Locked = 0 remaining (whether the lock is active or was just triggered).
   if (v.isLocked) return 0;
-  const usedThisMonth = v.attemptCount % MAX_MONTHLY_ATTEMPTS;
-  return MAX_MONTHLY_ATTEMPTS - usedThisMonth;
+  // attemptCount is reset to 0 by the backend when a lock expires (on next
+  // startTest call). Clamp to 0 so we never surface a negative number.
+  return Math.max(0, MAX_MONTHLY_ATTEMPTS - v.attemptCount);
 }
 
 // ---------------------------------------------------------------------------
@@ -100,12 +108,19 @@ export const useSkills = (): UseSkillsReturn => {
           const v = verificationMap.get(skill.id);
           const remaining = getRemainingAttempts(v);
           const isGoldVerified = v?.currentBadge === "GOLD";
+          // A skill is considered "verified" only if the user earned at least one badge.
+          // Having a verification record with no badge means the user just attempted — NOT verified.
+          const isVerified = v?.currentBadge != null;
+          // Can't take another attempt when: Gold badge earned (permanently done),
+          // or all 3 monthly attempts used up / skill is locked.
+          const attemptsExhausted = isGoldVerified || remaining === 0;
           return {
             ...skill,
             verification: v,
             remainingAttempts: isGoldVerified ? 0 : remaining,
-            attemptsExhausted: isGoldVerified || remaining === 0,
+            attemptsExhausted,
             isGoldVerified,
+            isVerified,
           };
         });
 

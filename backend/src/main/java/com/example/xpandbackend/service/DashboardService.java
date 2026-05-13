@@ -99,7 +99,12 @@ public class DashboardService {
         res.setGoldBadges(gold);
         res.setSilverBadges(silver);
         res.setBronzeBadges(bronze);
-        res.setVerifiedSkills(verifications.size());
+        // A skill is only "verified" if the user earned at least one badge.
+        // verifications.size() counts ALL rows — including failed attempts with no badge.
+        int verifiedCount = (int) verifications.stream()
+                .filter(v -> v.getCurrentBadge() != null)
+                .count();
+        res.setVerifiedSkills(verifiedCount);
 
         // ── Challenge stats ───────────────────────────────────────
         long active    = allChallenges.stream().filter(c -> c.getStatus() == ChallengeStatus.IN_PROGRESS).count();
@@ -133,7 +138,9 @@ public class DashboardService {
         res.setTopSkills(topSkills);
 
         // ── Market skills (from MarketGapService) ─────────────────
+        // Only skills with a badge count as "owned" by the user.
         List<String> userSkillNames = verifications.stream()
+                .filter(v -> v.getCurrentBadge() != null)
                 .map(v -> v.getSkill().getName())
                 .toList();
         List<DashboardResponse.MarketSkillItem> topMarketSkills = marketGap.getTopDemandedSkills().stream()

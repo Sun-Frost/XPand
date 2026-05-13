@@ -5,7 +5,8 @@ import com.example.xpandbackend.models.Enums.BadgeLevel;
 import com.example.xpandbackend.models.Enums.ChallengeStatus;
 import com.example.xpandbackend.models.Enums.ChallengeType;
 import com.example.xpandbackend.models.Enums.TransactionType;
-import com.example.xpandbackend.repository.*;import lombok.RequiredArgsConstructor;
+import com.example.xpandbackend.repository.*;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,45 @@ public class ChallengeEvaluationService {
     private final UserRepository userRepository;
     private final XPTransactionRepository xpTransactionRepository;
     private final UserSkillVerificationRepository verificationRepository;
+
+    // ── PROFILE & ONBOARDING ─────────────────────────────────────────────────
+
+    /**
+     * Scoped profile evaluation — only evaluates the challenge types whose
+     * counts are passed in. Pass -1 to skip a type entirely.
+     *
+     * Examples:
+     *   triggerCertEval        → evaluateProfileUpdate(userId, certCount, -1,  false)
+     *   triggerProjectEval     → evaluateProfileUpdate(userId, -1, projectCount, false)
+     *   triggerProfileCompletion → evaluateProfileUpdate(userId, -1, -1, true/false)
+     *
+     * This prevents a cert add from accidentally completing a project challenge
+     * (or vice versa) because the user already had qualifying data on their profile.
+     *
+     * @param userId              the user performing the update
+     * @param certificationCount  total certs right now, or -1 to skip ADD_CERTIFICATION
+     * @param projectCount        total projects right now, or -1 to skip ADD_PROJECT
+     * @param isProfileComplete   true to evaluate COMPLETE_PROFILE; false skips it
+     */
+    @Transactional
+    public void evaluateProfileUpdate(Integer userId,
+                                      int certificationCount,
+                                      int projectCount,
+                                      boolean isProfileComplete) {
+        User user = findUser(userId);
+        if (user == null) return;
+
+        // Only evaluate if the caller explicitly provided a count (>= 0)
+        if (certificationCount >= 0)
+            evaluate(user, ChallengeType.ADD_CERTIFICATION, certificationCount);
+
+        if (projectCount >= 0)
+            evaluate(user, ChallengeType.ADD_PROJECT, projectCount);
+
+        // Only evaluate if the caller confirmed the profile is complete
+        if (isProfileComplete)
+            evaluate(user, ChallengeType.COMPLETE_PROFILE, 1);
+    }
 
     // ── SKILL PROGRESSION ────────────────────────────────────────────────────
 

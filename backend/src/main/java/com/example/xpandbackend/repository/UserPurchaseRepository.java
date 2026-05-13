@@ -19,4 +19,7 @@ public interface UserPurchaseRepository extends JpaRepository<UserPurchase, Inte
     Optional<UserPurchase> findUnusedByUserTypeAndJob(@Param("userId") Integer userId,
                                                       @Param("type") ItemType type,
                                                       @Param("jobId") Integer jobId);
+
+    List<UserPurchase> findByItemId(Integer itemId);
+    List<UserPurchase> findByAssociatedJobId(Integer jobId);
 }

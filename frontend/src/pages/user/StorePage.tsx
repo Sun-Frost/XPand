@@ -583,20 +583,24 @@ const StorePage: React.FC = () => {
         </div>
       )}
 
-      {/* ── Collection strip ────────────────────────── */}
+      {/* ── Collection banner ────────────────────────── */}
       {!isLoading && purchases.length > 0 && (
-        <div className="sph__collection-strip">
-          <span><Icon name="collection" size={15} label="" /></span>
-          <span className="sph__collection-text">
-            {purchases.length} item{purchases.length !== 1 ? "s" : ""} in your collection
-            {unusedPurchases.length > 0 && (
-              <span className="sph__collection-unused"> · {unusedPurchases.length} unused</span>
-            )}
-          </span>
-          <button className="sph__collection-link" onClick={() => navigate("/store/purchases")}>
-            View all →
-          </button>
-        </div>
+        <button className="sph__collection-banner" onClick={() => navigate("/store/purchases")}>
+          <div className="sph__collection-banner__glow" />
+          <div className="sph__collection-banner__left">
+            <span className="sph__collection-banner__icon"><Icon name="collection" size={20} label="" /></span>
+            <div className="sph__collection-banner__text">
+              <span className="sph__collection-banner__title">My Collection</span>
+              <span className="sph__collection-banner__sub">
+                {purchases.length} item{purchases.length !== 1 ? "s" : ""} purchased
+                {unusedPurchases.length > 0 && (
+                  <span className="sph__collection-banner__unused"> · {unusedPurchases.length} unused &amp; ready</span>
+                )}
+              </span>
+            </div>
+          </div>
+          <span className="sph__collection-banner__cta">View Collection →</span>
+        </button>
       )}
 
       {/* ── How it works ────────────────────────────── */}
@@ -714,11 +718,23 @@ const styles = `
   .sph__error-dismiss { margin-left:auto; background:none; border:none; color:#FCA5A5; cursor:pointer; opacity:.7; }
   .sph__error-dismiss:hover { opacity:1; }
 
-  .sph__collection-strip { display:flex; align-items:center; gap:10px; padding:10px 16px; background:var(--color-bg-elevated); border:1px solid var(--color-border-default); border-radius:12px; margin-bottom:18px; width:fit-content; }
-  .sph__collection-text { font-size:13px; color:var(--color-text-muted); }
-  .sph__collection-unused { color:var(--color-primary-300); }
-  .sph__collection-link { background:none; border:none; font-family:var(--font-mono); font-size:11px; color:var(--color-primary-400); cursor:pointer; letter-spacing:.05em; padding:0; transition:opacity .15s; }
-  .sph__collection-link:hover { opacity:.7; }
+  /* Collection Banner — light-mode first, dark override */
+  .sph__collection-banner { position:relative; display:flex; align-items:center; justify-content:space-between; gap:16px; width:100%; padding:16px 20px; margin-bottom:20px; background:var(--color-bg-elevated); border:1.5px solid rgba(155,124,255,0.3); border-radius:16px; cursor:pointer; overflow:hidden; transition:all .2s; box-shadow:0 2px 12px rgba(155,124,255,0.08); text-align:left; }
+  .dark .sph__collection-banner,[data-theme="dark"] .sph__collection-banner { background:linear-gradient(135deg,#150b35 0%,#0d0620 100%); border-color:rgba(155,124,255,0.35); box-shadow:0 0 28px rgba(155,124,255,0.1); }
+  .sph__collection-banner:hover { border-color:rgba(155,124,255,0.55); box-shadow:0 4px 24px rgba(155,124,255,0.15); transform:translateY(-1px); }
+  .dark .sph__collection-banner:hover,[data-theme="dark"] .sph__collection-banner:hover { box-shadow:0 0 40px rgba(155,124,255,0.18); }
+  .sph__collection-banner__glow { position:absolute; top:-40px; left:-20px; width:200px; height:120px; background:radial-gradient(ellipse,rgba(155,124,255,.1),transparent 70%); pointer-events:none; }
+  .sph__collection-banner__left { display:flex; align-items:center; gap:14px; min-width:0; position:relative; z-index:1; }
+  .sph__collection-banner__icon { display:flex; align-items:center; justify-content:center; width:42px; height:42px; border-radius:12px; background:rgba(155,124,255,0.1); border:1px solid rgba(155,124,255,0.2); color:var(--color-primary-500,#7c3aed); flex-shrink:0; font-size:1.1rem; }
+  .dark .sph__collection-banner__icon,[data-theme="dark"] .sph__collection-banner__icon { background:rgba(155,124,255,0.15); border-color:rgba(155,124,255,0.25); color:var(--color-primary-300,#c4b0ff); }
+  .sph__collection-banner__text { display:flex; flex-direction:column; gap:2px; }
+  .sph__collection-banner__title { font-family:var(--font-display); font-size:16px; font-weight:700; color:var(--color-text-primary); line-height:1; }
+  .sph__collection-banner__sub { font-family:var(--font-mono); font-size:11px; color:var(--color-text-muted); letter-spacing:.02em; }
+  .sph__collection-banner__unused { color:var(--color-primary-500,#7c3aed); font-weight:700; }
+  .dark .sph__collection-banner__unused,[data-theme="dark"] .sph__collection-banner__unused { color:#a78bfa; }
+  .sph__collection-banner__cta { position:relative; z-index:1; flex-shrink:0; font-family:var(--font-mono); font-size:12px; font-weight:700; letter-spacing:.05em; color:var(--color-primary-600,#6d28d9); background:rgba(155,124,255,0.1); border:1px solid rgba(155,124,255,0.25); padding:8px 16px; border-radius:10px; white-space:nowrap; transition:all .15s; }
+  .dark .sph__collection-banner__cta,[data-theme="dark"] .sph__collection-banner__cta { color:var(--color-primary-300,#c4b0ff); background:rgba(155,124,255,0.12); border-color:rgba(155,124,255,0.3); }
+  .sph__collection-banner:hover .sph__collection-banner__cta { background:rgba(155,124,255,0.18); border-color:rgba(155,124,255,0.45); }
 
   /* ── How it works ─────────────────────────── */
   .how-strip { display:flex; align-items:center; gap:10px; padding:13px 20px; background:var(--color-bg-elevated); border:1px solid var(--color-border-default); border-radius:14px; margin-bottom:24px; flex-wrap:wrap; }

@@ -27,6 +27,27 @@ public class AdminService {
     private final EmailService emailService;
     private final PasswordEncoder passwordEncoder;
 
+    // ── NEW repos needed for cascading deletes ────────────────────────────────
+    private final UserChallengeRepository userChallengeRepository;
+    private final TestAttemptRepository testAttemptRepository;
+    private final TestAttemptQuestionRepository testAttemptQuestionRepository;
+    private final UserSkillVerificationRepository userSkillVerificationRepository;
+    private final UserPurchaseRepository userPurchaseRepository;
+    private final MockInterviewRepository mockInterviewRepository;
+    private final ReadinessReportRepository readinessReportRepository;
+    private final ApplicationRepository applicationRepository;
+    private final XPTransactionRepository xpTransactionRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final SavedJobRepository savedJobRepository;
+    private final UserOnboardingSkillRepository userOnboardingSkillRepository;
+    private final EducationRepository educationRepository;
+    private final WorkExperienceRepository workExperienceRepository;
+    private final CertificationRepository certificationRepository;
+    private final ProjectRepository projectRepository;
+    private final ProjectSkillRepository projectSkillRepository;
+    private final JobPostingRepository jobPostingRepository;
+    private final JobSkillRequirementRepository jobSkillRequirementRepository;
+
     // -------- Users --------
     public List<UserProfileResponse> getAllUsers() {
         return userRepository.findAll().stream().map(this::mapToUserResponse).collect(Collectors.toList());
@@ -36,10 +57,7 @@ public class AdminService {
     public void suspendUser(Integer userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found."));
-        // We store suspension as a flag - here we delete password to suspend
-        // In production, add an isActive/isSuspended field to User model
         emailService.sendUserSuspensionEmail(user.getEmail());
-        // For now, invalidate by setting password to garbage value
         user.setPasswordHash("SUSPENDED_" + user.getPasswordHash());
         userRepository.save(user);
     }
@@ -47,6 +65,61 @@ public class AdminService {
     @Transactional
     public void deleteUser(Integer userId) {
         if (!userRepository.existsById(userId)) throw new ResourceNotFoundException("User not found.");
+
+        // 1. Password reset tokens
+        passwordResetTokenRepository.deleteByUserId(userId);
+
+        // 2. Onboarding skills
+        userOnboardingSkillRepository.findByUserId(userId)
+                .forEach(o -> userOnboardingSkillRepository.deleteById(o.getId()));
+
+        // 3. Saved jobs
+        savedJobRepository.findAll().stream()
+                .filter(s -> s.getUser().getId().equals(userId))
+                .forEach(savedJobRepository::delete);
+
+        // 4. Applications
+        applicationRepository.findByUserId(userId)
+                .forEach(applicationRepository::delete);
+
+        // 5. XP transactions
+        xpTransactionRepository.findByUserIdOrderByCreatedAtDesc(userId)
+                .forEach(xpTransactionRepository::delete);
+
+        // 6. User challenges
+        userChallengeRepository.findByUserId(userId)
+                .forEach(userChallengeRepository::delete);
+
+        // 7. Test attempts (test_attempt_question rows cascade via CascadeType.ALL on TestAttempt)
+        testAttemptRepository.findByUserId(userId)
+                .forEach(testAttemptRepository::delete);
+
+        // 8. Skill verifications
+        userSkillVerificationRepository.findByUserId(userId)
+                .forEach(userSkillVerificationRepository::delete);
+
+        // 9. Store purchases — delete linked mock interviews and readiness reports first
+        //    (MockInterview and ReadinessReport have CascadeType.ALL on UserPurchase,
+        //     so deleting the purchase is enough — but only if the cascade is the owning side.
+        //     Since mappedBy is on UserPurchase, we delete children manually to be safe.)
+        userPurchaseRepository.findByUserId(userId).forEach(purchase -> {
+            mockInterviewRepository.findByPurchaseId(purchase.getId())
+                    .ifPresent(mockInterviewRepository::delete);
+            readinessReportRepository.findByPurchaseId(purchase.getId())
+                    .ifPresent(readinessReportRepository::delete);
+            userPurchaseRepository.delete(purchase);
+        });
+
+        // 10. Projects (project_skill rows cascade via CascadeType.ALL on Project)
+        projectRepository.findByUserId(userId)
+                .forEach(projectRepository::delete);
+
+        // 11. Education, work experience, certifications
+        educationRepository.findByUserId(userId).forEach(educationRepository::delete);
+        workExperienceRepository.findByUserId(userId).forEach(workExperienceRepository::delete);
+        certificationRepository.findByUserId(userId).forEach(certificationRepository::delete);
+
+        // 12. Finally delete the user
         userRepository.deleteById(userId);
     }
 
@@ -81,6 +154,36 @@ public class AdminService {
     @Transactional
     public void deleteCompany(Integer companyId) {
         if (!companyRepository.existsById(companyId)) throw new ResourceNotFoundException("Company not found.");
+
+        List<JobPosting> jobs = jobPostingRepository.findByCompanyId(companyId);
+        for (JobPosting job : jobs) {
+            Integer jobId = job.getId();
+
+            // 1. job_skill_requirement rows for this job
+            jobSkillRequirementRepository.deleteByJobPostingId(jobId);
+
+            // 2. Saved jobs referencing this job
+            savedJobRepository.findAll().stream()
+                    .filter(s -> s.getJob().getId().equals(jobId))
+                    .forEach(savedJobRepository::delete);
+
+            // 3. Applications referencing this job
+            //    (user_purchase rows may reference the job as associatedJob — null them out)
+            applicationRepository.findByJobId(jobId)
+                    .forEach(applicationRepository::delete);
+
+            userPurchaseRepository.findAll().stream()
+                    .filter(p -> p.getAssociatedJob() != null && p.getAssociatedJob().getId().equals(jobId))
+                    .forEach(p -> {
+                        p.setAssociatedJob(null);
+                        userPurchaseRepository.save(p);
+                    });
+
+            // 4. Delete the job posting
+            jobPostingRepository.delete(job);
+        }
+
+        // 5. Finally delete the company
         companyRepository.deleteById(companyId);
     }
 
@@ -149,6 +252,12 @@ public class AdminService {
     @Transactional
     public void deleteQuestion(Integer questionId) {
         if (!questionRepository.existsById(questionId)) throw new ResourceNotFoundException("Question not found.");
+
+        // test_attempt_question rows reference this question — delete them first
+        testAttemptQuestionRepository.findAll().stream()
+                .filter(taq -> taq.getQuestion().getId().equals(questionId))
+                .forEach(testAttemptQuestionRepository::delete);
+
         questionRepository.deleteById(questionId);
     }
 
@@ -173,7 +282,6 @@ public class AdminService {
         return mapToChallengeResponse(c);
     }
 
-
     @Transactional
     public ChallengeResponse updateChallenge(Integer challengeId, CreateChallengeRequest request) {
         Challenge c = challengeRepository.findById(challengeId)
@@ -194,6 +302,12 @@ public class AdminService {
     @Transactional
     public void deleteChallenge(Integer challengeId) {
         if (!challengeRepository.existsById(challengeId)) throw new ResourceNotFoundException("Challenge not found.");
+
+        // user_challenge rows reference this challenge — delete them first
+        userChallengeRepository.findAll().stream()
+                .filter(uc -> uc.getChallenge().getId().equals(challengeId))
+                .forEach(userChallengeRepository::delete);
+
         challengeRepository.deleteById(challengeId);
     }
 
@@ -228,6 +342,19 @@ public class AdminService {
     @Transactional
     public void deleteStoreItem(Integer itemId) {
         if (!storeItemRepository.existsById(itemId)) throw new ResourceNotFoundException("Store item not found.");
+
+        // user_purchase rows reference this item — delete mock_interview and
+        // readiness_report children first, then the purchases
+        userPurchaseRepository.findAll().stream()
+                .filter(p -> p.getItem().getId().equals(itemId))
+                .forEach(purchase -> {
+                    mockInterviewRepository.findByPurchaseId(purchase.getId())
+                            .ifPresent(mockInterviewRepository::delete);
+                    readinessReportRepository.findByPurchaseId(purchase.getId())
+                            .ifPresent(readinessReportRepository::delete);
+                    userPurchaseRepository.delete(purchase);
+                });
+
         storeItemRepository.deleteById(itemId);
     }
 
@@ -252,13 +379,6 @@ public class AdminService {
         r.setCreatedAt(u.getCreatedAt());
         return r;
     }
-//    private UserProfileResponse mapToUserResponse(User u) {
-//        UserProfileResponse r = new UserProfileResponse();
-//        r.setId(u.getId()); r.setEmail(u.getEmail());
-//        r.setFirstName(u.getFirstName()); r.setLastName(u.getLastName());
-//        r.setXpBalance(u.getXpBalance()); r.setCreatedAt(u.getCreatedAt());
-//        return r;
-//    }
 
     private CompanyProfileResponse mapToCompanyResponse(Company c) {
         CompanyProfileResponse r = new CompanyProfileResponse();

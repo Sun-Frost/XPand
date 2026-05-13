@@ -445,7 +445,7 @@ const styles = `
   /* Panel */
   .mi-panel { background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-xl); overflow: hidden; }
   .mi-panel__head { display: flex; align-items: center; justify-content: space-between; padding: var(--space-4) var(--space-6); border-bottom: 1px solid var(--color-border-subtle); }
-  .mi-panel__title { font-family: var(--font-display); font-size: var(--text-base); font-weight: var(--weight-bold); color: var(--color-text-primary); margin: 0; }
+  .mi-panel__title { font-family: var(--font-display); font-size: var(--text-base); font-weight: var(--weight-bold); color: var(--color-text-primary); margin: 0; display: flex; align-items: center; gap: var(--space-2); }
   .mi-panel__hint { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-muted); }
   .mi-panel__body { padding: var(--space-5) var(--space-6); display: flex; flex-direction: column; gap: var(--space-3); }
   .mi-empty { color: var(--color-text-muted); font-size: var(--text-sm); text-align: center; padding: var(--space-6) 0; }

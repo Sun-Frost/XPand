@@ -14,4 +14,5 @@ public interface UserChallengeRepository extends JpaRepository<UserChallenge, In
 
     // Used by evaluateMeta to count completed challenges
     long countByUserIdAndStatus(Integer userId, ChallengeStatus status);
+    void deleteByChallengeId(Integer challengeId);
 }

@@ -31,25 +31,14 @@ export interface UseSentimentReturn {
 // ---------------------------------------------------------------------------
 
 function expressionsToSentiment(expressions: Record<string, number>): SentimentResult {
-  const { fearful = 0, sad = 0, angry = 0, disgusted = 0, happy = 0, neutral = 0, surprised = 0 } = expressions;
+  const { happy = 0 } = expressions;
 
-  // Nervous = any meaningful anxiety blend, even if no single emotion dominates
-  const nervousScore = fearful * 1.5 + sad * 0.8 + disgusted * 0.5 + (1 - happy) * 0.3;
-  const confidentScore = happy * 1.2 + neutral * 0.6;
-  const angryScore = angry * 1.5 + disgusted * 0.8;
+  // Nervous is the default state. Only a clearly visible smile (happy > 0.4)
+  // flips to confident. Everything else — resting face, tense, blank — is nervous.
+  const label: SentimentLabel = happy > 0.4 ? "confident" : "nervous";
+  const confidence = label === "confident" ? happy : 1 - happy;
 
-  const scores: Record<SentimentLabel, number> = {
-    nervous: nervousScore,
-    confident: confidentScore,
-    angry: angryScore,
-    happy: happy * 1.5,
-    neutral: neutral,
-    unknown: 0,
-  };
-
-  const [label, confidence] = Object.entries(scores).sort(([, a], [, b]) => b - a)[0] as [SentimentLabel, number];
-
-  return { label, confidence: Math.min(confidence, 1), rawExpressions: expressions };
+  return { label, confidence: Math.min(Math.max(confidence, 0.5), 1), rawExpressions: expressions };
 }
 
 // ---------------------------------------------------------------------------
@@ -285,7 +274,7 @@ export function useSentiment(): UseSentimentReturn {
   }, [setPermission]);
 
  const captureAndAnalyse = useCallback(async (): Promise<SentimentResult> => {
-  const fallback: SentimentResult = { label: "neutral", confidence: 0.5 };
+  const fallback: SentimentResult = { label: "nervous", confidence: 0.6 };
   if (permissionRef.current !== "granted") return fallback;
 
   const video = videoRef.current;
@@ -317,7 +306,7 @@ export function useSentiment(): UseSentimentReturn {
       .withFaceExpressions();
 
     if (!detection) {
-      const result: SentimentResult = { label: "neutral", confidence: 0.3 };
+      const result: SentimentResult = { label: "nervous", confidence: 0.6 };
       setLastSentiment(result);
       return result;
     }

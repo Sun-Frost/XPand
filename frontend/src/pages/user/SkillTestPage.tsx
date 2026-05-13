@@ -548,6 +548,7 @@ const styles = `
   .test-submit-btn:disabled { opacity:.5; cursor:not-allowed; }
 
   /* ── Confirm modal internals ─────────────────────────── */
+  .modal-header h3 { display:flex; align-items:center; gap:8px; }
   .test-confirm-warning { display:flex; align-items:flex-start; gap:12px; background:rgba(251,191,36,.07); border:1px solid rgba(251,191,36,.25); border-radius:12px; padding:16px; margin-bottom:8px; }
   .test-confirm-warning__icon { font-size:1.2rem; flex-shrink:0; }
   .test-confirm-warning p { color:var(--color-text-secondary); margin:0; font-size:13px; line-height:1.65; }

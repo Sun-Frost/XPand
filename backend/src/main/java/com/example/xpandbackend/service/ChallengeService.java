@@ -55,6 +55,7 @@ public class ChallengeService {
         r.setStartDate(uc.getStartDate());
         r.setCompletedAt(uc.getCompletedAt());
         r.setStatus(uc.getStatus());
+        r.setType(uc.getChallenge().getType());
         return r;
     }
 }

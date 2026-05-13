@@ -6,7 +6,13 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "user_skill_verification")
+@Table(
+        name = "user_skill_verification",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uq_user_skill_verification",
+                columnNames = {"user_id", "skill_id"}
+        )
+)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

@@ -1,697 +1,533 @@
-/* ============================================================
-   ChallengesPage.tsx — XPand  (Mission Control Redesign)
-   "Every quest earns XP. XP earns power. Power earns jobs."
-
-   UX PARADIGM: Mission Control
-   Instead of a browsable grid/list of challenge cards, the page
-   is a command center with a strict visual hierarchy:
-
-   Zone 1 — Mission Command   top strip: rank identity + XP bar
-                               + urgency rail (expiring soon)
-   Zone 2 — Featured Mission  dominant hero: highest-value
-                               in-progress challenge, full-width
-   Zone 3 — Mission Tracks    3-col progression strips, one per
-                               category group; clicking a track
-                               filters Zone 4
-   Zone 4 — Dispatch Queue    compact single-col list of all
-                               active challenges; locked +
-                               completed states visible inline
-   Zone 5 — Completed Feed    collapsed log at the bottom;
-                               no tabs needed
-
-   ALL original backend data, hook calls, and logic are
-   preserved. No fake features added.
-   ============================================================ */
+/**
+ * ChallengesPage.tsx — XPand
+ *
+ * Full reconstruction. Section-box layout:
+ *  1. Streak Header        — flame icon, days, rank, XP bar, XP this week
+ *  2. Ending Soon          — time-boxed challenges with countdown
+ *  3. Repeatable           — loop challenges, cycle badge
+ *  4. Active Challenges    — in-progress + not started
+ *  5. Suggested For You    — highest-XP un-started challenges
+ *  6. History              — completed log, collapsible
+ *
+ * Rules:
+ *  - No emojis — Icon component only
+ *  - No strikethrough on completed items
+ *  - No stat pills (DONE / ACTIVE counts) in header
+ *  - Repeatable badge on all repeatable items
+ *  - Completed = green tint + check icon, never dimmed/crossed
+ */
 
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import PageLayout from "../../components/user/PageLayout";
 import { Icon, type IconName } from "../../components/ui/Icon";
 import { useChallenges } from "../../hooks/user/useChallenges";
 import type { ChallengeWithProgress, PlayerStats } from "../../hooks/user/useChallenges";
 import PageHeader, { PAGE_CONFIGS } from "../../components/ui/PageHeader";
-// ── Constants (unchanged) ─────────────────────────────────────────────────────
 
-const RANK_CONFIG: Record<PlayerStats["rank"], { label: string; color: string; roman: string }> = {
-  RECRUIT:    { label: "Recruit",    color: "var(--color-text-muted)",  roman: "I"   },
-  APPRENTICE: { label: "Apprentice", color: "var(--color-cyan-400)",    roman: "II"  },
-  JOURNEYMAN: { label: "Journeyman", color: "var(--color-green-400)",   roman: "III" },
-  EXPERT:     { label: "Expert",     color: "var(--color-primary-400)", roman: "IV"  },
-  MASTER:     { label: "Master",     color: "var(--color-gold-light)",  roman: "V"   },
-  LEGEND:     { label: "Legend",     color: "var(--color-warning)",     roman: "VI"  },
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RANK_CONFIG: Record<
+  PlayerStats["rank"],
+  { label: string; color: string; nextRank: string }
+> = {
+  RECRUIT:    { label: "Recruit",    color: "var(--color-text-muted)",  nextRank: "Apprentice" },
+  APPRENTICE: { label: "Apprentice", color: "var(--color-cyan-400)",    nextRank: "Journeyman" },
+  JOURNEYMAN: { label: "Journeyman", color: "var(--color-green-400)",   nextRank: "Expert"     },
+  EXPERT:     { label: "Expert",     color: "var(--color-primary-400)", nextRank: "Master"     },
+  MASTER:     { label: "Master",     color: "var(--color-gold-light)",  nextRank: "Legend"     },
+  LEGEND:     { label: "Legend",     color: "var(--color-warning)",     nextRank: "Legend"     },
 };
 
-const RANK_NEXT: Record<PlayerStats["rank"], string> = {
-  RECRUIT:    "Apprentice",
-  APPRENTICE: "Journeyman",
-  JOURNEYMAN: "Expert",
-  EXPERT:     "Master",
-  MASTER:     "Legend",
-  LEGEND:     "Legend",
+const CATEGORY_LABEL: Record<string, string> = {
+  DAILY: "Daily", WEEKLY: "Weekly", STREAK: "Streak",
+  MILESTONE: "Milestone", SKILL: "Skill", SOCIAL: "Social",
 };
 
-const CATEGORY_CONFIG: Record<string, { label: string; badgeClass: string; accentVar: string; icon: IconName }> = {
-  DAILY:     { label: "Daily",     badgeClass: "badge-warning", accentVar: "--color-primary-400", icon: "challenge-daily"     },
-  WEEKLY:    { label: "Weekly",    badgeClass: "badge-cyan",    accentVar: "--color-primary-400", icon: "challenge-weekly"    },
-  STREAK:    { label: "Streak",    badgeClass: "badge-warning", accentVar: "--color-primary-400", icon: "challenge-streak"    },
-  MILESTONE: { label: "Milestone", badgeClass: "badge-primary", accentVar: "--color-primary-400", icon: "challenge-milestone" },
-  SKILL:     { label: "Skill",     badgeClass: "badge-green",   accentVar: "--color-primary-400", icon: "challenge-skill"     },
-  SOCIAL:    { label: "Social",    badgeClass: "badge-muted",   accentVar: "--color-primary-400", icon: "challenge-social"    },
+const CATEGORY_BADGE: Record<string, string> = {
+  DAILY: "badge-warning", WEEKLY: "badge-cyan", STREAK: "badge-warning",
+  MILESTONE: "badge-primary", SKILL: "badge-green", SOCIAL: "badge-muted",
 };
 
-const CATEGORY_ORDER = ["DAILY", "WEEKLY", "STREAK", "SKILL", "MILESTONE", "SOCIAL"];
+const CATEGORY_ICON: Record<string, IconName> = {
+  DAILY: "challenge-daily", WEEKLY: "challenge-weekly", STREAK: "challenge-streak",
+  MILESTONE: "challenge-milestone", SKILL: "challenge-skill", SOCIAL: "challenge-social",
+};
 
-// Track groupings for Zone 3 — maps a display track to the categories it covers
-const TRACK_GROUPS: Array<{
-  id: string;
-  label: string;
-  categories: string[];
-  accentVar: string;
-  resetLabel: string;
-}> = [
-  { id: "DAILY_OPS",   label: "Daily Ops",   categories: ["DAILY", "STREAK"],    accentVar: "--color-primary-400", resetLabel: "resets daily"  },
-  { id: "SKILL_PATH",  label: "Skill Path",  categories: ["SKILL", "MILESTONE"], accentVar: "--color-primary-400", resetLabel: "ongoing"       },
-  { id: "WEEKLY_PUSH", label: "Weekly Push", categories: ["WEEKLY", "SOCIAL"],   accentVar: "--color-primary-400", resetLabel: "resets weekly" },
-];
-
-// ── Helpers (unchanged) ───────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
 function formatCountdown(iso: string): string {
   const diff = new Date(iso).getTime() - Date.now();
   if (diff <= 0) return "Expired";
-  const hrs  = Math.floor(diff / 3600000);
-  const mins = Math.floor((diff % 3600000) / 60000);
-  if (hrs > 24) return `${Math.floor(hrs / 24)}d ${hrs % 24}h`;
-  if (hrs > 0)  return `${hrs}h ${mins}m`;
-  return `${mins}m`;
+  const h = Math.floor(diff / 3_600_000);
+  const m = Math.floor((diff % 3_600_000) / 60_000);
+  if (h > 48) return `${Math.floor(h / 24)}d left`;
+  if (h > 0) return `${h}h ${m}m left`;
+  return `${m}m left`;
 }
 
-function isExpiringSoon(endDate: string | null | undefined): boolean {
+function isHot(endDate: string | null | undefined): boolean {
   if (!endDate) return false;
-  return new Date(endDate).getTime() - Date.now() < 1000 * 60 * 60 * 3;
+  return new Date(endDate).getTime() - Date.now() < 3 * 3_600_000;
 }
 
-// ── Zone 1: Mission Command ───────────────────────────────────────────────────
-// Full-width 2-col strip: rank + XP on the left, urgency rail on the right.
-// Replaces PlayerHUD.
+function completedToday(completedAt: string | null | undefined): boolean {
+  if (!completedAt) return false;
+  const d = new Date(completedAt), n = new Date();
+  return d.getFullYear() === n.getFullYear() &&
+    d.getMonth() === n.getMonth() &&
+    d.getDate() === n.getDate();
+}
 
-const MissionCommand: React.FC<{
-  stats: PlayerStats;
-  expiring: ChallengeWithProgress[];
-}> = ({ stats, expiring }) => {
-  const rank    = RANK_CONFIG[stats.rank];
-  const xpRange = stats.xpToNextLevel - stats.xpForCurrentLevel;
-  const xpProg  = stats.totalXp - stats.xpForCurrentLevel;
-  const pct     = Math.min(100, Math.round((xpProg / Math.max(1, xpRange)) * 100));
+// ─────────────────────────────────────────────────────────────────────────────
+// Section wrapper
+// ─────────────────────────────────────────────────────────────────────────────
+
+const Section: React.FC<{
+  title: string;
+  icon: IconName;
+  iconColor?: string;
+  count?: number;
+  countBadge?: string;
+  accent?: string;
+  trailing?: React.ReactNode;
+  children: React.ReactNode;
+}> = ({ title, icon, iconColor, count, countBadge = "badge-primary", accent = "var(--color-primary-400)", trailing, children }) => (
+  <div style={{
+    background: "var(--color-bg-surface)",
+    border: "1px solid var(--color-border-default)",
+    borderRadius: "var(--radius-2xl)",
+    overflow: "hidden",
+    marginBottom: "var(--space-4)",
+  }}>
+    <div style={{ height: 2, background: accent }} />
+    <div style={{
+      display: "flex", alignItems: "center", gap: "var(--space-3)",
+      padding: "var(--space-4) var(--space-5)",
+      borderBottom: "1px solid var(--color-border-subtle)",
+    }}>
+      <Icon name={icon} size={15} label="" style={{ color: iconColor ?? accent }} />
+      <span style={{
+        fontFamily: "var(--font-display)", fontSize: "var(--text-sm)", fontWeight: 700,
+        letterSpacing: "0.06em", color: "var(--color-text-primary)", flex: 1,
+      }}>
+        {title}
+      </span>
+      {count !== undefined && (
+        <span className={`badge ${countBadge}`} style={{ fontSize: 9 }}>{count}</span>
+      )}
+      {trailing}
+    </div>
+    <div style={{ padding: "var(--space-4) var(--space-5)" }}>
+      {children}
+    </div>
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mini progress bar
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MiniBar: React.FC<{ pct: number; color?: string }> = ({ pct, color = "var(--color-primary-400)" }) => (
+  <div style={{
+    width: 64, height: 4,
+    background: "var(--color-bg-overlay)",
+    borderRadius: "var(--radius-full)", overflow: "hidden", flexShrink: 0,
+  }}>
+    <div style={{
+      width: `${pct}%`, height: "100%", background: color,
+      borderRadius: "var(--radius-full)", transition: "width 0.5s ease",
+    }} />
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Challenge row
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ChallengeRow: React.FC<{
+  c: ChallengeWithProgress;
+  variant?: "active" | "completed" | "suggestion";
+  showCountdown?: boolean;
+}> = ({ c, variant = "active", showCountdown = false }) => {
+  const progress = c.currentProgress;
+  const target = c.conditionValue || 1;
+  const pct = Math.min(100, Math.round((progress / target) * 100));
+  const catLabel = CATEGORY_LABEL[c.category] ?? c.category;
+  const catBadge = CATEGORY_BADGE[c.category] ?? "badge-primary";
+  const catIcon = CATEGORY_ICON[c.category] ?? "quest";
+  const hot = isHot(c.endDate);
+  const isComp = variant === "completed";
+  const earnedToday = isComp && completedToday(c.completedAt);
+  const barColor = isComp
+    ? "var(--color-success)"
+    : pct >= 80 ? "var(--color-success)" : "var(--color-primary-400)";
 
   return (
     <div style={{
-      display: "grid", gridTemplateColumns: "1fr auto",
-      gap: "var(--space-6)", alignItems: "stretch",
+      display: "flex", alignItems: "center", gap: "var(--space-3)",
+      padding: "var(--space-3) var(--space-4)",
+      background: isComp
+        ? "rgba(34,197,94,0.04)"
+        : variant === "suggestion"
+        ? "var(--color-bg-elevated)"
+        : "var(--color-bg-elevated)",
+      border: `1px solid ${
+        isComp
+          ? "rgba(34,197,94,0.2)"
+          : hot && showCountdown
+          ? "var(--color-danger-border, rgba(239,68,68,0.4))"
+          : "var(--color-border-subtle)"
+      }`,
+      borderRadius: "var(--radius-xl)",
+      marginBottom: "var(--space-2)",
+      transition: "border-color 0.15s",
+    }}>
+
+      {/* Icon circle */}
+      <div style={{
+        width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: isComp ? "rgba(34,197,94,0.10)" : "var(--color-bg-overlay)",
+        border: `1px solid ${isComp ? "rgba(34,197,94,0.3)" : "var(--color-border-subtle)"}`,
+      }}>
+        <Icon
+          name={isComp ? "success" : catIcon}
+          size={15}
+          label=""
+          style={{ color: isComp ? "var(--color-success)" : "var(--color-text-muted)" }}
+        />
+      </div>
+
+      {/* Text */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: 3, flexWrap: "wrap" }}>
+          <span style={{
+            fontSize: "var(--text-sm)", fontWeight: 600,
+            color: isComp ? "var(--color-text-secondary)" : "var(--color-text-primary)",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
+            {c.title}
+          </span>
+          {c.isRepeatable && (
+            <span className="badge badge-cyan" style={{ fontSize: 8, flexShrink: 0, padding: "1px 6px" }}>
+              <Icon name="activity" size={8} label="" style={{ marginRight: 2 }} /> Loop
+            </span>
+          )}
+          {earnedToday && (
+            <span className="badge badge-green" style={{ fontSize: 8, flexShrink: 0 }}>Today</span>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
+          <span className={`badge ${catBadge}`} style={{ fontSize: 8, padding: "1px 5px" }}>
+            {catLabel}
+          </span>
+          {showCountdown && c.endDate && (
+            <span className="mono" style={{
+              fontSize: 9, fontWeight: 700,
+              color: hot ? "var(--color-danger)" : "var(--color-warning)",
+            }}>
+              {formatCountdown(c.endDate)}
+            </span>
+          )}
+          {!isComp && (
+            <span className="caption" style={{ fontSize: 10 }}>
+              {progress} / {target}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Bar + XP */}
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", flexShrink: 0 }}>
+        {!isComp && <MiniBar pct={pct} color={barColor} />}
+        <div style={{ textAlign: "right", minWidth: 36 }}>
+          <div className="mono" style={{
+            fontSize: "var(--text-xs)", fontWeight: 800,
+            color: isComp
+              ? "var(--color-success)"
+              : "var(--color-xp-gold-light, var(--color-gold-light))",
+          }}>
+            +{c.xpReward}
+          </div>
+          <div className="caption" style={{ fontSize: 9, marginTop: 1 }}>XP</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. Streak Header
+// ─────────────────────────────────────────────────────────────────────────────
+
+const StreakHeader: React.FC<{ stats: PlayerStats }> = ({ stats }) => {
+  const rank = RANK_CONFIG[stats.rank];
+  const xpRange = stats.xpToNextLevel - stats.xpForCurrentLevel;
+  const xpProg = stats.totalXp - stats.xpForCurrentLevel;
+  const pct = Math.min(100, Math.round((xpProg / Math.max(1, xpRange)) * 100));
+  const xpLeft = Math.max(0, stats.xpToNextLevel - stats.totalXp);
+
+  return (
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: "auto 1fr auto",
+      gap: "var(--space-5)",
+      alignItems: "center",
       background: "var(--color-bg-surface)",
       border: "1px solid var(--color-border-default)",
       borderRadius: "var(--radius-2xl)",
       padding: "var(--space-5) var(--space-6)",
-      marginBottom: "var(--space-5)",
+      marginBottom: "var(--space-4)",
       position: "relative", overflow: "hidden",
     }}>
-      {/* Ambient rank glow */}
+      {/* Rank glow */}
       <div style={{
         position: "absolute", inset: 0, pointerEvents: "none",
-        background: `radial-gradient(ellipse 60% 100% at 0% 50%, ${rank.color}0D 0%, transparent 65%)`,
+        background: `radial-gradient(ellipse 50% 120% at 0% 50%, ${rank.color}10 0%, transparent 60%)`,
       }} />
       <div style={{
         position: "absolute", top: 0, left: 0, right: 0, height: 2,
-        background: `linear-gradient(90deg, ${rank.color}CC, transparent 60%)`,
+        background: `linear-gradient(90deg, ${rank.color}AA, transparent 55%)`,
       }} />
 
-      {/* LEFT — rank + XP */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", position: "relative", zIndex: 1 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-          <div style={{
-            position: "relative", width: 48, height: 48,
-            borderRadius: "var(--radius-full)",
-            background: "var(--color-bg-overlay)",
-            border: `2px solid ${rank.color}55`,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
-          }}>
-            <span style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-xl)", fontWeight: 700, color: "var(--color-text-primary)" }}>
-              {rank.roman}
-            </span>
-            <div className="badge badge-gold" style={{
-              position: "absolute", bottom: -4, right: -4,
-              minWidth: 20, height: 20, padding: "0 4px",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800,
-              border: "2px solid var(--color-bg-surface)",
-            }}>
-              {stats.currentLevel}
-            </div>
-          </div>
-          <div>
-            <div className="mono" style={{ fontSize: "var(--text-sm)", fontWeight: 700, letterSpacing: "0.08em", color: rank.color }}>
-              {rank.label}
-            </div>
-            <div className="caption mono" style={{ fontSize: 10, marginTop: 1 }}>
-              {stats.totalXp.toLocaleString()} XP total
-            </div>
-          </div>
-          {/* Stat pills */}
-          <div style={{ display: "flex", gap: "var(--space-2)", marginLeft: "var(--space-2)" }}>
-            <div className="stat-card stat-card-green" style={{ minWidth: 56, padding: "var(--space-2) var(--space-3)", textAlign: "center" }}>
-              <div className="stat-value" style={{ fontSize: "var(--text-lg)" }}>{stats.completedChallenges}</div>
-              <div className="stat-label">DONE</div>
-            </div>
-            <div className="stat-card stat-card-primary" style={{ minWidth: 56, padding: "var(--space-2) var(--space-3)", textAlign: "center" }}>
-              <div className="stat-value" style={{ fontSize: "var(--text-lg)" }}>{stats.activeChallenges}</div>
-              <div className="stat-label">ACTIVE</div>
-            </div>
-          </div>
-        </div>
-
-        {/* XP progress bar */}
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "var(--space-1)" }}>
-            <span className="caption">Progress to {RANK_NEXT[stats.rank]}</span>
-            <span className="mono" style={{ fontSize: 10, color: "var(--color-gold-light)" }}>
-              {stats.totalXp.toLocaleString()} / {stats.xpToNextLevel.toLocaleString()} XP
-            </span>
-          </div>
-          <div className="progress-track" style={{ height: 6 }}>
-            <div className="progress-bar progress-bar-gold" style={{ width: `${pct}%` }} />
-          </div>
-          <div className="caption" style={{ marginTop: 4 }}>
-            {(xpRange - xpProg).toLocaleString()} XP to Level {stats.currentLevel + 1}
-          </div>
-        </div>
-      </div>
-
-      {/* RIGHT — urgency rail */}
-      {expiring.length > 0 && (
-        <div style={{
-          display: "flex", flexDirection: "column", gap: "var(--space-2)",
-          minWidth: 220, position: "relative", zIndex: 1,
-          borderLeft: "1px solid var(--color-border-subtle)",
-          paddingLeft: "var(--space-5)",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-            <Icon name="challenge-streak" size={12} label="" style={{ color: "var(--color-danger)" }} />
-            <span className="mono" style={{ fontSize: 9, letterSpacing: "0.1em", color: "var(--color-danger)", textTransform: "uppercase" }}>
-              Expiring soon
-            </span>
-          </div>
-          {expiring.map(c => {
-            const timeLeft = c.endDate ? formatCountdown(c.endDate) : null;
-            const hot = isExpiringSoon(c.endDate);
-            return (
-              <div key={c.challengeId} style={{
-                display: "flex", alignItems: "center", gap: 8,
-                padding: "6px 10px",
-                background: "var(--color-bg-elevated)",
-                border: `1px solid ${hot ? "var(--color-danger-border)" : "var(--color-border-subtle)"}`,
-                borderRadius: "var(--radius-lg)",
-              }}>
-                <div style={{
-                  width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
-                  background: hot ? "var(--color-danger)" : "var(--color-warning)",
-                }} />
-                <span style={{
-                  flex: 1, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)",
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                }}>
-                  {c.title}
-                </span>
-                {timeLeft && (
-                  <span className="mono" style={{ fontSize: 9, color: hot ? "var(--color-danger)" : "var(--color-warning)", flexShrink: 0, fontWeight: 700 }}>
-                    {timeLeft}
-                  </span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ── Zone 2: Featured Mission ──────────────────────────────────────────────────
-// The single highest-value in-progress challenge gets a dominant hero card.
-
-const FeaturedMission: React.FC<{ challenge: ChallengeWithProgress }> = ({ challenge }) => {
-  const cat       = CATEGORY_CONFIG[challenge.category] ?? CATEGORY_CONFIG["MILESTONE"];
-  const progress  = challenge.currentProgress;
-  const target    = challenge.conditionValue || 1;
-  const pct       = Math.min(100, Math.round((progress / target) * 100));
-  const expiresIn = challenge.endDate ? formatCountdown(challenge.endDate) : null;
-  const expiring  = isExpiringSoon(challenge.endDate);
-
-  return (
-    <div style={{
-      background: "var(--color-bg-surface)",
-      border: "1px solid var(--color-border-default)",
-      borderRadius: "var(--radius-2xl)",
-      overflow: "hidden",
-      marginBottom: "var(--space-5)",
-      position: "relative",
-    }}>
-      {/* Top accent band */}
-      <div style={{ height: 3, background: `var(${cat.accentVar})`, opacity: 0.85 }} />
-
+      {/* Streak block */}
       <div style={{
-        padding: "var(--space-5) var(--space-6)",
-        display: "grid",
-        gridTemplateColumns: "1fr auto",
-        gap: "var(--space-6)",
-        alignItems: "start",
+        display: "flex", flexDirection: "column", alignItems: "center",
+        gap: "var(--space-1)", position: "relative", zIndex: 1,
       }}>
-        {/* Left — title + description + progress */}
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
-            <span className={`badge ${cat.badgeClass}`} style={{ fontSize: 9 }}>
-              <Icon name={cat.icon} size={10} label="" /> {cat.label.toUpperCase()}
-            </span>
-            <span className="mono" style={{ fontSize: 9, color: "var(--color-text-muted)", letterSpacing: "0.08em" }}>
-              FEATURED MISSION
-            </span>
-            {expiring && expiresIn && (
-              <span className="badge badge-danger" style={{ fontSize: 9 }}>⚡ {expiresIn}</span>
-            )}
-          </div>
-          <h2 style={{
-            fontFamily: "var(--font-display)", fontSize: "var(--text-2xl)", fontWeight: 800,
-            color: "var(--color-text-primary)", letterSpacing: "var(--tracking-tight)",
-            lineHeight: 1.15, margin: "0 0 var(--space-2)",
+        <div style={{
+          width: 54, height: 54, borderRadius: "var(--radius-xl)",
+          background: stats.currentStreak > 0 ? "rgba(251,146,60,0.12)" : "var(--color-bg-overlay)",
+          border: `1px solid ${stats.currentStreak > 0 ? "rgba(251,146,60,0.4)" : "var(--color-border-subtle)"}`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <Icon
+            name="challenge-streak"
+            size={24}
+            label=""
+            style={{ color: stats.currentStreak > 0 ? "var(--color-warning)" : "var(--color-text-disabled)" }}
+          />
+        </div>
+        <div style={{ textAlign: "center" }}>
+          <div className="mono" style={{
+            fontSize: "var(--text-xl)", fontWeight: 800, lineHeight: 1,
+            color: stats.currentStreak > 0 ? "var(--color-warning)" : "var(--color-text-muted)",
           }}>
-            {challenge.title}
-          </h2>
-          <p className="caption" style={{ lineHeight: 1.6, marginBottom: "var(--space-4)", maxWidth: 520 }}>
-            {challenge.description}
-          </p>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-            <div className="progress-track" style={{ flex: 1, height: 8, maxWidth: 320 }}>
-              <div
-                className={`progress-bar ${pct >= 80 ? "progress-bar-green" : ""}`}
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <span className="mono" style={{
-              fontSize: "var(--text-sm)", fontWeight: 700,
-              color: pct >= 80 ? "var(--color-success)" : `var(${cat.accentVar})`,
-            }}>
-              {progress} / {target}
-            </span>
-            <span className="caption mono" style={{ fontSize: 10 }}>{pct}%</span>
-            {expiresIn && !expiring && (
-              <span className="caption mono" style={{ fontSize: 10 }}>⏱ {expiresIn}</span>
-            )}
+            {stats.currentStreak}
+          </div>
+          <div className="caption" style={{ fontSize: 9, letterSpacing: "0.08em" }}>
+            {stats.currentStreak === 1 ? "DAY" : "DAYS"}
           </div>
         </div>
+      </div>
 
-        {/* Right — XP reward badge */}
-        <div style={{
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          background: "var(--color-xp-gold-bg)",
-          border: "1px solid var(--color-xp-gold-border)",
-          borderRadius: "var(--radius-xl)",
-          padding: "var(--space-4) var(--space-5)",
-          minWidth: 100, textAlign: "center",
-        }}>
-          <Icon name="xp" size={20} label="" style={{ color: "var(--color-xp-gold-light)", marginBottom: 4 }} />
-          <div style={{
-            fontFamily: "var(--font-display)", fontSize: "var(--text-2xl)", fontWeight: 800,
-            color: "var(--color-xp-gold-light)", lineHeight: 1,
+      {/* Rank + XP bar */}
+      <div style={{ flex: 1, position: "relative", zIndex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-3)", marginBottom: "var(--space-3)" }}>
+          <span style={{
+            fontFamily: "var(--font-display)", fontSize: "var(--text-xl)", fontWeight: 800,
+            color: rank.color, letterSpacing: "var(--tracking-tight)",
           }}>
-            +{challenge.xpReward.toLocaleString()}
-          </div>
-          <div className="mono" style={{ fontSize: 9, color: "var(--color-gold)", marginTop: 3, letterSpacing: "0.08em" }}>
-            XP REWARD
-          </div>
+            {rank.label}
+          </span>
+          <span className="mono" style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
+            Lv.{stats.currentLevel}
+          </span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "var(--space-1)" }}>
+          <span className="caption mono" style={{ fontSize: 10 }}>
+            {stats.totalXp.toLocaleString()} XP
+          </span>
+          {stats.rank !== "LEGEND" && (
+            <span className="caption mono" style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
+              {xpLeft.toLocaleString()} XP to {rank.nextRank}
+            </span>
+          )}
+        </div>
+        <div style={{
+          height: 6, background: "var(--color-bg-overlay)",
+          borderRadius: "var(--radius-full)", overflow: "hidden",
+        }}>
+          <div style={{
+            width: `${pct}%`, height: "100%",
+            background: `linear-gradient(90deg, ${rank.color}88, ${rank.color})`,
+            borderRadius: "var(--radius-full)", transition: "width 0.8s ease",
+          }} />
+        </div>
+      </div>
+
+      {/* XP this week */}
+      <div style={{
+        display: "flex", flexDirection: "column", alignItems: "center",
+        gap: "var(--space-1)", position: "relative", zIndex: 1,
+        borderLeft: "1px solid var(--color-border-subtle)",
+        paddingLeft: "var(--space-5)",
+      }}>
+        <Icon name="xp" size={20} label="" style={{ color: "var(--color-xp-gold-light, var(--color-gold-light))" }} />
+        <div className="mono" style={{
+          fontSize: "var(--text-xl)", fontWeight: 800, lineHeight: 1,
+          color: "var(--color-xp-gold-light, var(--color-gold-light))",
+        }}>
+          {stats.xpThisWeek.toLocaleString()}
+        </div>
+        <div className="caption" style={{ fontSize: 9, letterSpacing: "0.08em", textAlign: "center", lineHeight: 1.4 }}>
+          XP THIS<br />WEEK
         </div>
       </div>
     </div>
   );
 };
 
-// ── Zone 3: Mission Tracks ────────────────────────────────────────────────────
-// 3-column progression strips. Each track shows step dots (done/active/locked).
-// Clicking a track sets the active filter for the Dispatch Queue.
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. Ending Soon
+// ─────────────────────────────────────────────────────────────────────────────
 
-const MissionTracks: React.FC<{
-  allChallenges: ChallengeWithProgress[];
-  completedChallenges: ChallengeWithProgress[];
-  activeTrack: string;
-  onSelectTrack: (id: string) => void;
-}> = ({ allChallenges, completedChallenges, activeTrack, onSelectTrack }) => (
-  <div style={{
-    display: "grid", gridTemplateColumns: "repeat(3, 1fr)",
-    gap: "var(--space-3)", marginBottom: "var(--space-5)",
-  }}>
-    {TRACK_GROUPS.map(track => {
-      const trackActive    = allChallenges.filter(c => track.categories.includes(c.category));
-      const trackCompleted = completedChallenges.filter(c => track.categories.includes(c.category));
-      const total   = trackActive.length + trackCompleted.length;
-      const done    = trackCompleted.length + trackActive.filter(c => c.status === "COMPLETED").length;
-      const active  = trackActive.filter(c => c.status === "IN_PROGRESS" || c.status === "NOT_STARTED").length;
-      const isSelected = activeTrack === track.id;
-      const accentColor = `var(${track.accentVar})`;
+const EndingSoonSection: React.FC<{ challenges: ChallengeWithProgress[] }> = ({ challenges }) => {
+  if (challenges.length === 0) return null;
+  return (
+    <Section
+      title="Ending Soon"
+      icon="timer"
+      iconColor="var(--color-danger)"
+      count={challenges.length}
+      countBadge="badge-danger"
+      accent="var(--color-danger)"
+    >
+      {challenges.map(c => (
+        <ChallengeRow key={c.challengeId} c={c} variant="active" showCountdown />
+      ))}
+    </Section>
+  );
+};
 
-      // Build up to 6 step dots
-      const dots = Array.from({ length: Math.min(Math.max(total, 1), 6) }, (_, i) => {
-        if (i < done)            return "done";
-        if (i < done + active)   return "active";
-        return "locked";
-      });
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. Repeatable
+// ─────────────────────────────────────────────────────────────────────────────
 
-      return (
-        <button
-          key={track.id}
-          onClick={() => onSelectTrack(isSelected ? "ALL" : track.id)}
-          style={{
-            display: "flex", flexDirection: "column", gap: "var(--space-3)",
-            padding: "var(--space-4)",
-            background: isSelected ? "var(--color-bg-elevated)" : "var(--color-bg-surface)",
-            border: `1px solid ${isSelected ? accentColor : "var(--color-border-subtle)"}`,
-            borderRadius: "var(--radius-xl)",
-            cursor: "pointer", textAlign: "left",
-            position: "relative", overflow: "hidden",
-            transition: "border-color 0.15s, background 0.15s",
-          }}
-        >
-          {/* Top accent stripe */}
-          <div style={{
-            position: "absolute", top: 0, left: 0, right: 0, height: 2,
-            background: accentColor, opacity: isSelected ? 1 : 0.45,
-          }} />
+const RepeatableSection: React.FC<{ challenges: ChallengeWithProgress[] }> = ({ challenges }) => {
+  if (challenges.length === 0) return null;
+  return (
+    <Section
+      title="Repeatable"
+      icon="activity"
+      iconColor="var(--color-cyan-400)"
+      count={challenges.length}
+      countBadge="badge-cyan"
+      accent="var(--color-cyan-400)"
+    >
+      <p className="caption" style={{ marginBottom: "var(--space-3)", lineHeight: 1.6 }}>
+        Complete these multiple times — each completion awards XP again.
+      </p>
+      {challenges.map(c => (
+        <ChallengeRow key={c.challengeId} c={c} variant="active" />
+      ))}
+    </Section>
+  );
+};
 
-          <div>
-            <div style={{
-              fontFamily: "var(--font-display)", fontSize: "var(--text-sm)", fontWeight: 700,
-              color: "var(--color-text-primary)", letterSpacing: "var(--tracking-wide)", marginBottom: 2,
-            }}>
-              {track.label}
-            </div>
-            <div className="caption" style={{ fontSize: 10 }}>
-              {active} active · {track.resetLabel}
-            </div>
-          </div>
 
-          {/* Step node rail */}
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            {dots.map((state, i) => (
-              <React.Fragment key={i}>
-                {i > 0 && (
-                  <div style={{ flex: 1, height: 1, background: "var(--color-border-subtle)", minWidth: 4 }} />
-                )}
-                <div style={{
-                  width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 9, fontWeight: 700,
-                  background:
-                    state === "done"   ? "var(--color-success-bg)"    :
-                    state === "active" ? "var(--color-primary-glow)"  :
-                    "var(--color-bg-overlay)",
-                  border: `1px solid ${
-                    state === "done"   ? "var(--color-success-border)" :
-                    state === "active" ? accentColor                  :
-                    "var(--color-border-subtle)"
-                  }`,
-                  color:
-                    state === "done"   ? "var(--color-success)"       :
-                    state === "active" ? accentColor                  :
-                    "var(--color-text-disabled)",
-                }}>
-                  {state === "done" ? "✓" : state === "active" ? String(i + 1) : "·"}
-                </div>
-              </React.Fragment>
-            ))}
-          </div>
-        </button>
-      );
-    })}
-  </div>
-);
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. Suggested For You
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ── Zone 4: Dispatch Queue ────────────────────────────────────────────────────
-// Compact single-col list. States: active (→), completed (✓).
-// Inline mini progress bar + type chip + XP.
+const SuggestedSection: React.FC<{ challenges: ChallengeWithProgress[] }> = ({ challenges }) => {
+  const suggestions = [...challenges]
+    .filter(c => c.status === "NOT_STARTED")
+    .sort((a, b) => b.xpReward - a.xpReward)
+    .slice(0, 3);
 
-const DispatchQueue: React.FC<{
-  challenges: ChallengeWithProgress[];
-  completedChallenges: ChallengeWithProgress[];
-}> = ({ challenges, completedChallenges }) => {
-  const active    = challenges.filter(c => c.status !== "COMPLETED").sort((a, b) => b.xpReward - a.xpReward);
-  const inlineDone = challenges.filter(c => c.status === "COMPLETED");
-  // Include global completedChallenges not already in challenges (different source)
-  const extraDone  = completedChallenges.filter(c => !inlineDone.find(x => x.challengeId === c.challengeId));
-  const allDone    = [...inlineDone, ...extraDone].slice(0, 5);
-
-  const rows: Array<{ c: ChallengeWithProgress; isComplete: boolean }> = [
-    ...active.map(c  => ({ c, isComplete: false })),
-    ...allDone.map(c => ({ c, isComplete: true  })),
-  ];
-
-  if (rows.length === 0) {
-    return (
-      <div className="empty-state" style={{ marginBottom: "var(--space-5)" }}>
-        <div className="empty-state-icon"><Icon name="map" size={32} label="" /></div>
-        <h3>No missions in this track</h3>
-        <p>Select a different track above or check back tomorrow.</p>
-      </div>
-    );
-  }
+  if (suggestions.length === 0) return null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)", marginBottom: "var(--space-6)" }}>
-      {rows.map(({ c, isComplete }) => {
-        const cat      = CATEGORY_CONFIG[c.category] ?? CATEGORY_CONFIG["MILESTONE"];
-        const progress = c.currentProgress;
-        const target   = c.conditionValue || 1;
-        const pct      = Math.min(100, Math.round((progress / target) * 100));
-        const expiring = isExpiringSoon(c.endDate);
-        const expiresIn = c.endDate ? formatCountdown(c.endDate) : null;
-        const barColor  = isComplete
-          ? "var(--color-success)"
-          : pct >= 80 ? "var(--color-success)" : `var(${cat.accentVar})`;
-
-        return (
-          <div
-            key={c.challengeId}
-            className={isComplete ? "" : "card-interactive"}
-            style={{
-              display: "flex", alignItems: "center", gap: "var(--space-3)",
-              padding: "10px var(--space-4)",
-              background: "var(--color-bg-surface)",
-              border: `1px solid ${expiring && !isComplete ? "var(--color-danger-border)" : "var(--color-border-subtle)"}`,
-              borderRadius: "var(--radius-xl)",
-              opacity: isComplete ? 0.55 : 1,
-              transition: "border-color 0.15s",
-            }}
-          >
-            {/* Status icon */}
-            <div style={{
-              width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 11, fontWeight: 700,
-              background:  isComplete ? "var(--color-success-bg)"   : "var(--color-primary-glow)",
-              border: `1px solid ${isComplete ? "var(--color-success-border)" : `var(${cat.accentVar})`}`,
-              color:       isComplete ? "var(--color-success)"       : `var(${cat.accentVar})`,
-            }}>
-              {isComplete ? "✓" : "→"}
-            </div>
-
-            {/* Title */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <span style={{
-                fontSize: "var(--text-sm)", fontWeight: 500,
-                color: isComplete ? "var(--color-text-muted)" : "var(--color-text-primary)",
-                display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                textDecoration: isComplete ? "line-through" : "none",
-              }}>
-                {c.title}
-              </span>
-            </div>
-
-            {/* Meta */}
-            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexShrink: 0 }}>
-              <span className={`badge ${cat.badgeClass}`} style={{ fontSize: 9 }}>
-                {cat.label}
-              </span>
-              {expiring && expiresIn && !isComplete && (
-                <span className="badge badge-danger" style={{ fontSize: 9 }}>⚡ {expiresIn}</span>
-              )}
-              {/* Mini progress bar */}
-              <div style={{ width: 52 }}>
-                <div className="progress-track" style={{ height: 3 }}>
-                  <div style={{
-                    width: `${pct}%`, height: "100%",
-                    background: barColor,
-                    borderRadius: "var(--radius-full)",
-                    transition: "width 0.6s ease",
-                  }} />
-                </div>
-              </div>
-              {/* XP */}
-              <span className="mono" style={{
-                fontSize: 11, fontWeight: 700,
-                color: isComplete ? "var(--color-text-muted)" : "var(--color-xp-gold-light)",
-                minWidth: 40, textAlign: "right",
-              }}>
-                {isComplete ? "+" : ""}{c.xpReward}
-              </span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
+    <Section
+      title="Suggested For You"
+      icon="recommended"
+      iconColor="var(--color-gold-light)"
+      count={suggestions.length}
+      countBadge="badge-gold"
+      accent="var(--color-gold-light)"
+    >
+      <p className="caption" style={{ marginBottom: "var(--space-3)", lineHeight: 1.6 }}>
+        High-value challenges you haven't started yet.
+      </p>
+      {suggestions.map(c => (
+        <ChallengeRow key={c.challengeId} c={c} variant="suggestion" />
+      ))}
+    </Section>
   );
 };
 
-// ── Zone 5: Completed Feed ────────────────────────────────────────────────────
-// Collapsible log. Shows total XP earned + per-item entries.
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. History
+// ─────────────────────────────────────────────────────────────────────────────
 
-const CompletedFeed: React.FC<{
-  completed: ChallengeWithProgress[];
-}> = ({ completed }) => {
+const HistorySection: React.FC<{ completed: ChallengeWithProgress[] }> = ({ completed }) => {
   const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? completed : completed.slice(0, 4);
   const totalXp = completed.reduce((s, c) => s + c.xpReward, 0);
-  const shown   = expanded ? completed : completed.slice(0, 4);
 
   if (completed.length === 0) return null;
 
   return (
-    <div style={{
-      background: "var(--color-bg-surface)",
-      border: "1px solid var(--color-border-subtle)",
-      borderRadius: "var(--radius-xl)",
-      overflow: "hidden",
-    }}>
-      {/* Header / toggle */}
-      <button
-        onClick={() => setExpanded(e => !e)}
-        style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          width: "100%", padding: "var(--space-4) var(--space-5)",
-          background: "none", border: "none", cursor: "pointer",
-          borderBottom: expanded ? "1px solid var(--color-border-subtle)" : "none",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-          <Icon name="trophy" size={15} label="" style={{ color: "var(--color-success)" }} />
-          <span style={{ fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--color-text-primary)" }}>
-            Completed
-          </span>
-          <span className="badge badge-green" style={{ fontSize: 9 }}>{completed.length}</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-          <span className="xp-pill" style={{ fontSize: 10, padding: "3px 8px" }}>
-            <Icon name="xp" size={11} label="" /> +{totalXp.toLocaleString()} XP earned
-          </span>
-          <span style={{ color: "var(--color-text-muted)", fontSize: 12 }}>
-            {expanded ? "▲" : "▼"}
-          </span>
-        </div>
-      </button>
-
-      {/* Entries */}
-      {expanded && (
-        <div style={{ padding: "var(--space-2) var(--space-4) var(--space-3)" }}>
-          {shown.map(c => {
-            const cat = CATEGORY_CONFIG[c.category] ?? CATEGORY_CONFIG["MILESTONE"];
-            return (
-              <div key={c.challengeId} style={{
-                display: "flex", alignItems: "center", gap: "var(--space-3)",
-                padding: "8px 0",
-                borderBottom: "1px solid var(--color-border-subtle)",
-              }}>
-                <div style={{
-                  width: 24, height: 24, borderRadius: "var(--radius-md)",
-                  background: "var(--color-success-bg)", border: "1px solid var(--color-success-border)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "var(--color-success)", flexShrink: 0,
-                }}>
-                  <Icon name="success" size={12} label="" />
-                </div>
-                <span style={{
-                  flex: 1, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)",
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                }}>
-                  {c.title}
-                </span>
-                <span className={`badge ${cat.badgeClass}`} style={{ fontSize: 9, flexShrink: 0 }}>
-                  {cat.label}
-                </span>
-                <span className="mono" style={{ fontSize: 10, color: "var(--color-success)", fontWeight: 700, flexShrink: 0 }}>
-                  +{c.xpReward}
-                </span>
-              </div>
-            );
-          })}
-          {completed.length > 4 && (
-            <button
-              className="btn btn-ghost btn-sm"
-              style={{ marginTop: "var(--space-3)", width: "100%" }}
-              onClick={() => setExpanded(true)}
-            >
-              Show all {completed.length} completed
-            </button>
-          )}
-        </div>
+    <Section
+      title="History"
+      icon="trophy"
+      iconColor="var(--color-success)"
+      count={completed.length}
+      countBadge="badge-green"
+      accent="var(--color-success)"
+      trailing={
+        <span className="xp-pill" style={{ fontSize: 10, padding: "3px 8px" }}>
+          <Icon name="xp" size={10} label="" /> +{totalXp.toLocaleString()} earned
+        </span>
+      }
+    >
+      {shown.map(c => (
+        <ChallengeRow key={c.challengeId} c={c} variant="completed" />
+      ))}
+      {completed.length > 4 && (
+        <button
+          className="btn btn-ghost btn-sm"
+          style={{ width: "100%", marginTop: "var(--space-2)" }}
+          onClick={() => setExpanded(e => !e)}
+        >
+          {expanded ? "Show less" : `Show all ${completed.length} completed`}
+        </button>
       )}
-    </div>
+    </Section>
   );
 };
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Skeleton
+// ─────────────────────────────────────────────────────────────────────────────
 
-const SkeletonMissionControl: React.FC = () => (
+const Skeleton: React.FC = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
-    <div className="skeleton" style={{ height: 120, borderRadius: "var(--radius-2xl)" }} />
-    <div className="skeleton" style={{ height: 148, borderRadius: "var(--radius-2xl)" }} />
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "var(--space-3)" }}>
-      {[1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: 88, borderRadius: "var(--radius-xl)" }} />)}
-    </div>
-    {[1, 2, 3, 4].map(i => <div key={i} className="skeleton" style={{ height: 50, borderRadius: "var(--radius-xl)" }} />)}
+    <div className="skeleton" style={{ height: 100, borderRadius: "var(--radius-2xl)" }} />
+    <div className="skeleton" style={{ height: 160, borderRadius: "var(--radius-2xl)" }} />
+    <div className="skeleton" style={{ height: 200, borderRadius: "var(--radius-2xl)" }} />
+    <div className="skeleton" style={{ height: 140, borderRadius: "var(--radius-2xl)" }} />
   </div>
 );
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Page
+// ─────────────────────────────────────────────────────────────────────────────
 
 const ChallengesPage: React.FC = () => {
-  const navigate = useNavigate();
   const { challenges, completedChallenges, playerStats, isLoading, error, refetch } = useChallenges();
-
-  // Track filter — "ALL" or one of the TRACK_GROUPS ids
-  const [activeTrack, setActiveTrack] = useState<string>("ALL");
-
-  // Derive featured mission: highest xpReward in-progress / not-started challenge
-  const featuredChallenge = [...challenges]
-    .filter(c => c.status === "IN_PROGRESS" || c.status === "NOT_STARTED")
-    .sort((a, b) => b.xpReward - a.xpReward)[0] ?? challenges[0] ?? null;
-
-  // Derive expiring-soon challenges for urgency rail (top 3 by soonest endDate)
-  const expiringChallenges = challenges
-    .filter(c => c.endDate && new Date(c.endDate).getTime() > Date.now())
-    .sort((a, b) => new Date(a.endDate!).getTime() - new Date(b.endDate!).getTime())
-    .slice(0, 3);
-
-  // Filter dispatch queue by active track
-  const trackGroup = TRACK_GROUPS.find(t => t.id === activeTrack);
-  const dispatchChallenges = trackGroup
-    ? challenges.filter(c => trackGroup.categories.includes(c.category))
-    : challenges;
-  const dispatchCompleted = trackGroup
-    ? completedChallenges.filter(c => trackGroup.categories.includes(c.category))
-    : completedChallenges;
 
   if (error) {
     return (
       <PageLayout pageTitle="Challenges">
         <div className="empty-state">
           <div className="empty-state-icon"><Icon name="warning" size={32} label="" /></div>
-          <h3>Failed to load missions</h3>
+          <h3>Failed to load challenges</h3>
           <p>{error}</p>
           <button className="btn btn-primary btn-sm mt-4" onClick={refetch}>Retry</button>
         </div>
@@ -699,80 +535,72 @@ const ChallengesPage: React.FC = () => {
     );
   }
 
- 
-   return (
-  <PageLayout pageTitle="Challenges">
+  // Derive sections from flat challenge lists
+  const endingSoon = challenges
+    .filter(c => c.endDate && new Date(c.endDate).getTime() > Date.now() && c.status !== "COMPLETED")
+    .sort((a, b) => new Date(a.endDate!).getTime() - new Date(b.endDate!).getTime());
 
-    <PageHeader
-      {...PAGE_CONFIGS.challenges}
-      right={
-        playerStats ? (
-          <>
-            <div className="xp-pill">
-              <span>⚡</span>
-              <span>{playerStats.totalXp.toLocaleString()} XP</span>
-            </div>
-            <span className="badge badge-primary">
-              {playerStats.completedChallenges} / {challenges.length} Complete
-            </span>
-          </>
-        ) : null
-      }
-    />
+  // Repeatable: include completed ones too (they can loop)
+  const allChallenges = [...challenges, ...completedChallenges];
+  const seen = new Set<number>();
+  const repeatable = allChallenges.filter(c => {
+    if (!c.isRepeatable || seen.has(c.challengeId)) return false;
+    seen.add(c.challengeId);
+    return true;
+  });
 
-    {isLoading ? (
-        <SkeletonMissionControl />
+  // Active: exclude those already in Ending Soon and Repeatable
+  const endingSoonIds = new Set(endingSoon.map(c => c.challengeId));
+  const repeatableIds = new Set(repeatable.map(c => c.challengeId));
+  const active = challenges.filter(
+    c => !endingSoonIds.has(c.challengeId) && !repeatableIds.has(c.challengeId)
+  );
+
+  return (
+    <PageLayout pageTitle="Challenges">
+      <PageHeader
+        {...PAGE_CONFIGS.challenges}
+        right={
+          playerStats ? (
+            <>
+              <div className="xp-pill">
+                <Icon name="xp" size={12} label="" />
+                <span>{playerStats.totalXp.toLocaleString()} XP</span>
+              </div>
+              <span className="badge badge-primary">
+                {playerStats.completedChallenges} complete
+              </span>
+            </>
+          ) : null
+        }
+      />
+
+      {isLoading ? (
+        <Skeleton />
       ) : (
         <>
-          {/* ══════════════════════════════════════════════════════
-              ZONE 1 — Mission Command: rank + XP + urgency rail
-              ══════════════════════════════════════════════════════ */}
-          {playerStats && (
-            <MissionCommand stats={playerStats} expiring={expiringChallenges} />
-          )}
+          {/* 1 — Streak + Rank + XP */}
+          {playerStats && <StreakHeader stats={playerStats} />}
 
-          {/* ══════════════════════════════════════════════════════
-              ZONE 2 — Featured Mission: dominant single challenge
-              Shown only when there is an active / not-started quest
-              ══════════════════════════════════════════════════════ */}
-          {featuredChallenge && (
-            <FeaturedMission challenge={featuredChallenge} />
-          )}
+          {/* 2 — Ending Soon */}
+          <EndingSoonSection challenges={endingSoon} />
 
-          {challenges.length === 0 && completedChallenges.length === 0 ? (
+          {/* 3 — Repeatable */}
+          <RepeatableSection challenges={repeatable} />
+
+
+          {/* 5 — Suggested */}
+          <SuggestedSection challenges={challenges} />
+
+          {/* 6 — History */}
+          <HistorySection completed={completedChallenges} />
+
+          {challenges.length === 0 && completedChallenges.length === 0 && (
             <div className="empty-state">
               <div className="empty-state-icon"><Icon name="map" size={32} label="" /></div>
-              <h3>No missions available</h3>
-              <p>Check back soon — new missions are generated daily.</p>
+              <h3>No challenges yet</h3>
+              <p>Check back soon — new challenges are added regularly.</p>
             </div>
-          ) : (
-            <>
-              {/* ════════════════════════════════════════════════
-                  ZONE 3 — Mission Tracks: progression strips
-                  Click a track to filter the dispatch queue below
-                  ════════════════════════════════════════════════ */}
-              <MissionTracks
-                allChallenges={challenges}
-                completedChallenges={completedChallenges}
-                activeTrack={activeTrack}
-                onSelectTrack={id => setActiveTrack(id === activeTrack ? "ALL" : id)}
-              />
-
-              {/* ════════════════════════════════════════════════
-                  ZONE 4 — Dispatch Queue: compact mission list
-                  Active → completed, inline states
-                  ════════════════════════════════════════════════ */}
-              <DispatchQueue
-                challenges={dispatchChallenges}
-                completedChallenges={dispatchCompleted}
-              />
-
-              {/* ════════════════════════════════════════════════
-                  ZONE 5 — Completed Feed: collapsible log
-                  No separate tab — lives at the bottom of the page
-                  ════════════════════════════════════════════════ */}
-              <CompletedFeed completed={completedChallenges} />
-            </>
           )}
         </>
       )}

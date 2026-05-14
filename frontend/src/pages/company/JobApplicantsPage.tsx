@@ -135,7 +135,7 @@ const StatusBadge: React.FC<{ status: ApplicationStatus; size?: "sm" | "md" }> =
 // ---------------------------------------------------------------------------
 // Hook: fetch applicant rich profile
 // ---------------------------------------------------------------------------
-function useApplicantProfile(userId: number | null): ApplicantRichProfile {
+function useApplicantProfile(userId: number | null, jobId: number | null): ApplicantRichProfile {
   const [state, setState] = useState<ApplicantRichProfile>({
     profile: null,
     workExperience: [],
@@ -147,9 +147,9 @@ function useApplicantProfile(userId: number | null): ApplicantRichProfile {
   });
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !jobId) return;
     setState((p) => ({ ...p, isLoading: true, error: null }));
-    get<CompanyUserFullProfileResponse>(`/company/user/${userId}`)
+    get<CompanyUserFullProfileResponse>(`/company/user/${userId}?jobId=${jobId}`)
       .then((res) => {
         setState({
           profile: res.profile,
@@ -168,7 +168,7 @@ function useApplicantProfile(userId: number | null): ApplicantRichProfile {
           error: err.message || "Failed to load profile",
         }));
       });
-  }, [userId]);
+  }, [userId, jobId]);
 
   return state;
 }
@@ -210,14 +210,15 @@ const mapProject = (proj: ProjectResponse) => ({
 
 const CVModal: React.FC<{
   app: ApplicationResponse;
+  jobId: number;
   onClose: () => void;
   onStatusChange: (id: number, status: ApplicationStatus) => Promise<void>;
   isUpdating: boolean;
   isPriority: boolean;
   allPriorityDone: boolean;
   pendingPriorityCount: number;
-}> = ({ app, onClose, onStatusChange, isUpdating, isPriority, allPriorityDone, pendingPriorityCount }) => {
-  const rich = useApplicantProfile(app.userId);
+}> = ({ app, jobId, onClose, onStatusChange, isUpdating, isPriority, allPriorityDone, pendingPriorityCount }) => {
+  const rich = useApplicantProfile(app.userId, jobId);
   const [actionLoading, setActionLoading] = useState<ApplicationStatus | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const p = rich.profile;
@@ -470,7 +471,15 @@ const CVModal: React.FC<{
               </div>
             )}
 
-            {!rich.isLoading && !p && (
+            {!rich.isLoading && rich.error && (
+              <div className="cv-empty">
+                <div className="cv-empty__icon"><Icon name="warning" size={40} label="" /></div>
+                <p className="cv-empty__title">Could not load profile</p>
+                <p className="cv-empty__sub">{rich.error}</p>
+              </div>
+            )}
+
+            {!rich.isLoading && !rich.error && !p && (
               <div className="cv-empty">
                 <div className="cv-empty__icon"><Icon name="question-personal" size={40} label="" /></div>
                 <p className="cv-empty__title">Profile not available</p>
@@ -1174,9 +1183,10 @@ const JobApplicantsPage: React.FC = () => {
       )}
 
       {/* CV Modal */}
-      {cvApp && (
+      {cvApp && jobIdNum && (
         <CVModal
           app={cvApp}
+          jobId={jobIdNum}
           onClose={() => setCvApp(null)}
           onStatusChange={handleStatusChange}
           isUpdating={updatingId === cvApp.id}

@@ -59,21 +59,24 @@ public class CompanyController {
     @GetMapping("/user/{userId}")
     public ResponseEntity<CompanyUserFullProfileResponse> getUserFullProfileForCompany(
             @AuthenticationPrincipal AuthenticatedUser principal,
-            @PathVariable Integer userId) {
+            @PathVariable Integer userId,
+            @RequestParam Integer jobId) {
 
         Integer companyId = principal.getId();
 
-        // 🔴 SECURITY CHECK — company must have at least one application from this user
-        if (!applicationRepository.existsByCompanyIdAndUserId(companyId, userId)) {
+        // 🔴 SECURITY CHECK + 🔒 DEADLINE GATE
+        // Look up the application directly by userId + jobId — unambiguous, no lazy-load issues.
+        Application application = applicationRepository.findByUserIdAndJobId(userId, jobId)
+                .orElseThrow(() -> new ForbiddenException("You can only view applicants."));
+
+        // Verify the job actually belongs to this company
+        if (!application.getJob().getCompany().getId().equals(companyId)) {
             throw new ForbiddenException("You can only view applicants.");
         }
 
-        // 🔒 DEADLINE GATE — CV is locked until the job deadline has passed.
-        List<Application> applications = applicationRepository.findByCompanyIdAndUserId(companyId, userId);
-        boolean allDeadlinesPassed = applications.stream()
-                .allMatch(a -> a.getJob().getDeadline() != null
-                        && a.getJob().getDeadline().isBefore(LocalDateTime.now()));
-        if (!allDeadlinesPassed) {
+        // CV is locked until this job's deadline has passed
+        if (application.getJob().getDeadline() == null
+                || application.getJob().getDeadline().isAfter(LocalDateTime.now())) {
             throw new ForbiddenException("CV locked until deadline.");
         }
 

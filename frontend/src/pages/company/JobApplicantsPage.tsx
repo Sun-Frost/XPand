@@ -353,10 +353,7 @@ const CVModal: React.FC<{
           <aside className="cv-sidebar">
             <div className="cv-sidebar__identity">
               <div className="cv-sidebar__avatar">
-                {p?.profilePicture
-                  ? <img src={p.profilePicture} alt={app.userFullName} className="cv-sidebar__avatar-img" />
-                  : <span className="cv-sidebar__avatar-initials">{initials}</span>
-                }
+                <span className="cv-sidebar__avatar-initials">{initials}</span>
               </div>
               <h2 className="cv-sidebar__name">{app.userFullName}</h2>
               {p?.professionalTitle && <p className="cv-sidebar__title">{p.professionalTitle}</p>}

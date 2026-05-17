@@ -5,6 +5,16 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
 
+/**
+ * Tracks a user's progress on a specific {@link Challenge}.
+ * <p>
+ * One row per (user, challenge) pair. {@code currentProgress} is updated every
+ * time a qualifying event occurs (e.g. a skill test passed, a job applied to).
+ * When {@code currentProgress} reaches {@code challenge.conditionValue} the status
+ * transitions to {@code COMPLETED} and XP is awarded.
+ * </p>
+ * For repeatable challenges the row stays but is reset so progress can accumulate again.
+ */
 @Entity
 @Table(name = "user_challenge")
 @Data
@@ -35,6 +45,7 @@ public class UserChallenge {
     @Column(nullable = false)
     private LocalDateTime startDate;
 
+    /** Set when the challenge transitions to {@code COMPLETED}. */
     private LocalDateTime completedAt;
 
     @Enumerated(EnumType.STRING)

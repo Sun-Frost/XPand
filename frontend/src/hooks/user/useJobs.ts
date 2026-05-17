@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { get, post } from "../../api/axios";
-import { BadgeLevel } from "../../types";
+import type { BadgeLevel } from "../user/useSkills";
 
 // ---------------------------------------------------------------------------
 // API response types (mirrors Java DTOs exactly)

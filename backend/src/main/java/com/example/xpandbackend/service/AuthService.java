@@ -20,6 +20,23 @@ import java.time.temporal.ChronoUnit;
 import java.util.Random;
 import java.util.regex.Pattern;
 
+/**
+ * Handles all authentication flows: registration, login, email verification,
+ * password reset, and Google OAuth provisioning.
+ *
+ * <h3>Password policy</h3>
+ * All passwords must be at least 8 characters and contain at least one uppercase
+ * letter, one lowercase letter, one digit, and one special character.
+ *
+ * <h3>Email verification</h3>
+ * After registration, LOCAL users and companies receive a 6-digit code by email.
+ * The code is stored in {@code verificationCode} on the entity and cleared after
+ * successful verification. The same field is reused for password-reset codes.
+ *
+ * <h3>Login streak tracking</h3>
+ * On every successful user login the streak and weekly login count are updated and
+ * {@link ChallengeEvaluationService#evaluateLogin} is triggered for login-based challenges.
+ */
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -34,12 +51,10 @@ public class AuthService {
 
     private final Random random = new Random();
 
-    /**
-     * Password policy: >= 8 chars, at least one uppercase, one lowercase,
-     * one digit, one special character.
-     */
     private static final Pattern PASSWORD_POLICY =
             Pattern.compile("^(?=.*[A-Z])(?=.*[a-z])(?=.*\\d)(?=.*[^A-Za-z\\d]).{8,}$");
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private void validatePasswordPolicy(String password) {
         if (password == null || !PASSWORD_POLICY.matcher(password).matches()) {
@@ -48,8 +63,6 @@ public class AuthService {
                             "a lowercase letter, a number, and a special character.");
         }
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private String generateVerificationCode() {
         return String.format("%06d", random.nextInt(1_000_000));
@@ -76,6 +89,11 @@ public class AuthService {
 
     // ── Registration ──────────────────────────────────────────────────────────
 
+    /**
+     * Registers a new job seeker. Sends a 6-digit email verification code.
+     * The returned JWT is valid immediately so the frontend can proceed to the
+     * verification step without a separate login call.
+     */
     @Transactional
     public AuthResponse registerUser(RegisterUserRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
@@ -93,7 +111,6 @@ public class AuthService {
         user.setCountry(request.getCountry());
         user.setCity(request.getCity());
         user.setXpBalance(0);
-
         user.setEmailVerified(false);
         user.setVerificationCode(generateVerificationCode());
         user.setProvider("LOCAL");
@@ -105,6 +122,11 @@ public class AuthService {
         return new AuthResponse(token, "USER", user.getId(), user.getEmail());
     }
 
+    /**
+     * Registers a new company. Sends a 6-digit email verification code.
+     * The account will be {@code isApproved = false} until an admin approves it,
+     * so the company cannot log in even after email verification.
+     */
     @Transactional
     public AuthResponse registerCompany(RegisterCompanyRequest request) {
         if (companyRepository.existsByEmail(request.getEmail())) {
@@ -122,7 +144,6 @@ public class AuthService {
         company.setIndustry(request.getIndustry());
         company.setLocation(request.getLocation());
         company.setIsApproved(false);
-
         company.setEmailVerified(false);
         company.setVerificationCode(generateVerificationCode());
         company.setProvider("LOCAL");
@@ -136,6 +157,11 @@ public class AuthService {
 
     // ── Login ─────────────────────────────────────────────────────────────────
 
+    /**
+     * Authenticates a job seeker. Rejects Google-only accounts (no password set),
+     * unverified emails, and suspended accounts.
+     * Updates the login streak and triggers login-based challenge evaluation.
+     */
     @Transactional
     public AuthResponse loginUser(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
@@ -191,18 +217,19 @@ public class AuthService {
         return new AuthResponse(token, "USER", user.getId(), user.getEmail());
     }
 
+    /**
+     * Authenticates a company. Rejects unverified emails and unapproved accounts.
+     */
     public AuthResponse loginCompany(LoginRequest request) {
         Company company = companyRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new UnauthorizedException("Invalid credentials."));
         if (!passwordEncoder.matches(request.getPassword(), company.getPasswordHash())) {
             throw new UnauthorizedException("Invalid credentials.");
         }
-
         if (!company.isEmailVerified()) {
             throw new UnauthorizedException(
                     "Please verify your email before logging in. Check your inbox for a 6-digit verification code.");
         }
-
         if (!company.getIsApproved()) {
             throw new UnauthorizedException("Company account is pending approval.");
         }
@@ -210,6 +237,7 @@ public class AuthService {
         return new AuthResponse(token, "COMPANY", company.getId(), company.getEmail());
     }
 
+    /** Authenticates an admin. No email verification or approval check required. */
     public AuthResponse loginAdmin(LoginRequest request) {
         Admin admin = adminRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new UnauthorizedException("Invalid credentials."));
@@ -222,10 +250,13 @@ public class AuthService {
 
     // ── Email verification ────────────────────────────────────────────────────
 
+    /**
+     * Verifies the 6-digit code for either a user or company account.
+     * Clears the code and marks {@code emailVerified = true} on success.
+     * Silently succeeds if the account is already verified (idempotent).
+     */
     @Transactional
     public void verifyEmail(VerifyCodeRequest request) {
-        System.out.println("[AuthService] verifyEmail called for email: " + request.getEmail());
-
         String email = request.getEmail().trim();
         String submittedCode = request.getCode().trim();
 
@@ -256,6 +287,10 @@ public class AuthService {
         throw new BadRequestException("No account found for that email address.");
     }
 
+    /**
+     * Generates and sends a fresh 6-digit verification code.
+     * Silently succeeds if the email does not exist (prevents enumeration).
+     */
     @Transactional
     public void resendVerificationEmail(ResendVerificationRequest request) {
         String email = request.getEmail().trim();
@@ -275,48 +310,41 @@ public class AuthService {
             company.setVerificationCode(generateVerificationCode());
             companyRepository.save(company);
             sendCompanyVerificationEmailSafely(company);
-            return;
         }
-        // Silently succeed — prevents enumeration
+        // Silently succeed for unknown emails — prevents enumeration.
     }
 
-    // ── Forgot / reset password ───────────────────────────────────────────────
+    // ── Forgot / reset password (3-step flow) ────────────────────────────────
 
     /**
-     * Step 1: user supplies their email.
-     *
-     * Requirements:
-     *  - Account must exist (user or company).
-     *  - Account must NOT be an OAuth-only account (no password to reset).
-     *  - Account email must be verified (emailVerified = true). Unverified
-     *    accounts should verify their email first, not reset a password.
-     *
-     * If none of these conditions are met, a BadRequestException is thrown
-     * with a clear message so the frontend can display it to the user.
-     * We intentionally do NOT silently ignore missing emails here — the product
-     * requirement is to show an error, not prevent enumeration for this flow.
+     * Step 1 — user supplies their email.
+     * Generates a 6-digit reset code and emails it.
+     * <p>
+     * Throws {@link BadRequestException} (not a silent 200) in the following cases
+     * because the product requirement is to show a specific error, not prevent enumeration:
+     * <ul>
+     *   <li>Email not found</li>
+     *   <li>Google-only account (no password to reset)</li>
+     *   <li>Unverified account (must verify email first)</li>
+     * </ul>
      */
     @Transactional
     public void forgotPassword(ForgotPasswordRequest request) {
         String email = request.getEmail().trim();
 
-        // ── Try User ──
         User user = userRepository.findByEmailIgnoreCase(email).orElse(null);
         if (user != null) {
-            // Block Google-only accounts — they have no password to reset
             if ("GOOGLE".equals(user.getProvider())
                     && (user.getPasswordHash() == null || user.getPasswordHash().isEmpty())) {
                 throw new BadRequestException(
                         "This account uses Google sign-in and does not have a password to reset. " +
                                 "Please use 'Continue with Google' to sign in.");
             }
-            // Block unverified accounts — they should verify email first
             if (!user.isEmailVerified()) {
                 throw new BadRequestException(
                         "This email address has not been verified yet. " +
                                 "Please verify your email before resetting your password.");
             }
-            // All checks passed — generate and send reset code
             String code = generateVerificationCode();
             user.setVerificationCode(code);
             userRepository.save(user);
@@ -329,21 +357,17 @@ public class AuthService {
             return;
         }
 
-        // ── Try Company ──
         Company company = companyRepository.findByEmailIgnoreCase(email).orElse(null);
         if (company != null) {
-            // Companies are always LOCAL, but guard anyway
             if ("GOOGLE".equals(company.getProvider())) {
                 throw new BadRequestException(
                         "This account uses Google sign-in and does not have a password to reset.");
             }
-            // Block unverified company accounts
             if (!company.isEmailVerified()) {
                 throw new BadRequestException(
                         "This email address has not been verified yet. " +
                                 "Please verify your email before resetting your password.");
             }
-            // All checks passed — generate and send reset code
             String code = generateVerificationCode();
             company.setVerificationCode(code);
             companyRepository.save(company);
@@ -357,14 +381,14 @@ public class AuthService {
             return;
         }
 
-        // Email not found — return a clear error (product requirement: show an error)
         throw new BadRequestException(
                 "No account found with that email address. Please check the email and try again.");
     }
 
     /**
-     * Step 2: verify the 6-digit reset code before showing the new-password form.
-     * Does NOT consume the code — resetPassword() re-validates and consumes it.
+     * Step 2 — validates the 6-digit reset code without consuming it.
+     * Allows the frontend to gate the "set new password" form behind a verified code,
+     * preventing the user from reaching that step with a wrong code.
      */
     @Transactional(readOnly = true)
     public void verifyResetCode(VerifyResetCodeRequest request) {
@@ -396,7 +420,8 @@ public class AuthService {
     }
 
     /**
-     * Step 3: set the new password after re-validating the code.
+     * Step 3 — re-validates the code and sets the new password.
+     * Re-validation is intentional: prevents replay if the user navigates back.
      */
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
@@ -406,7 +431,6 @@ public class AuthService {
 
         validatePasswordPolicy(newPassword);
 
-        // ── Try User ──
         User user = userRepository.findByEmailIgnoreCase(email).orElse(null);
         if (user != null) {
             if ("GOOGLE".equals(user.getProvider())
@@ -420,11 +444,9 @@ public class AuthService {
             user.setPasswordHash(passwordEncoder.encode(newPassword));
             user.setVerificationCode(null);
             userRepository.save(user);
-            System.out.println("[AuthService] Password reset for user: " + email);
             return;
         }
 
-        // ── Try Company ──
         Company company = companyRepository.findByEmailIgnoreCase(email).orElse(null);
         if (company != null) {
             if (company.getVerificationCode() == null || !company.getVerificationCode().equals(submittedCode)) {
@@ -433,7 +455,6 @@ public class AuthService {
             company.setPasswordHash(passwordEncoder.encode(newPassword));
             company.setVerificationCode(null);
             companyRepository.save(company);
-            System.out.println("[AuthService] Password reset for company: " + email);
             return;
         }
 
@@ -442,6 +463,7 @@ public class AuthService {
 
     // ── Change password (authenticated) ──────────────────────────────────────
 
+    /** Changes the password for an authenticated user after verifying the current password. */
     @Transactional
     public void changeUserPassword(Integer userId, ChangePasswordRequest request) {
         User user = userRepository.findById(userId)
@@ -458,6 +480,7 @@ public class AuthService {
         userRepository.save(user);
     }
 
+    /** Changes the password for an authenticated company after verifying the current password. */
     @Transactional
     public void changeCompanyPassword(Integer companyId, ChangePasswordRequest request) {
         Company company = companyRepository.findById(companyId)
@@ -472,6 +495,11 @@ public class AuthService {
 
     // ── OAuth user provisioning ───────────────────────────────────────────────
 
+    /**
+     * Creates or updates a user account after a successful Google OAuth login.
+     * If an account already exists for the email, the provider fields are updated
+     * and the account is marked as verified. Updates the login streak.
+     */
     @Transactional
     public AuthResponse loginOrRegisterOAuthUser(String email, String providerId,
                                                  String firstName, String lastName) {

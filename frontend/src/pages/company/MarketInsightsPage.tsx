@@ -1,3 +1,30 @@
+/**
+ * MarketInsightsPage — /company/insights
+ *
+ * Market intelligence dashboard showing skill demand across all active job postings
+ * on the platform (not just this company's jobs).
+ *
+ * Data source:
+ *   useMarketInsights() fetches from a single endpoint that aggregates across all
+ *   companies. The data is read-only from the company's perspective.
+ *
+ * Derived metrics (computed client-side from the raw response):
+ *   top5Concentration — percentage of total job requirements covered by the top 5
+ *   skills. Indicates how concentrated or distributed the market demand is.
+ *   avgJobsPerSkill   — total job references / unique skill count.
+ *   majorSkillsCount  — skills required as MAJOR in at least one job.
+ *   minorOnlySkills   — skills only appearing as MINOR requirements.
+ *
+ * DemandBar:
+ *   Width is relative to the highest-demand skill (maxJobCount). The bar is split
+ *   into a major (solid) segment and a minor (translucent) segment proportional to
+ *   majorCount vs (jobCount - majorCount).
+ *
+ * PDF export:
+ *   Calls exportMarketInsightsPdf() passing the full insights object. Disabled
+ *   while export is in progress.
+ */
+
 import React, { useState, useCallback } from "react";
 import CompanyPageLayout from "../../components/company/companyPageLayout";
 import { Icon, type IconName } from "../../components/ui/Icon";
@@ -6,15 +33,15 @@ import { useMarketInsights } from "../../hooks/company/useCompany";
 import { exportMarketInsightsPdf } from "../../utils/pdfExport";
 import type { SkillDemand } from "../../hooks/company/useCompany";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+
+
+
 
 const pct = (val: number, total: number) => total > 0 ? Math.round((val / total) * 100) : 0;
 
-// ---------------------------------------------------------------------------
-// Skill demand bar row
-// ---------------------------------------------------------------------------
+
+
+
 
 const DemandBar: React.FC<{ skill: SkillDemand; max: number; rank: number }> = ({ skill, max, rank }) => {
   const width = max > 0 ? (skill.jobCount / max) * 100 : 0;
@@ -42,9 +69,9 @@ const DemandBar: React.FC<{ skill: SkillDemand; max: number; rank: number }> = (
   );
 };
 
-// ---------------------------------------------------------------------------
-// Breakdown item
-// ---------------------------------------------------------------------------
+
+
+
 
 const BreakdownItem: React.FC<{ label: string; count: number; total: number; color: string }> = ({
   label, count, total, color
@@ -65,7 +92,7 @@ const BreakdownItem: React.FC<{ label: string; count: number; total: number; col
   );
 };
 
-// Colors for breakdown charts
+
 const JOB_TYPE_COLORS: Record<string, string> = {
   FULL_TIME: "#34D399", PART_TIME: "#A78BFA", CONTRACT: "#F59E0B",
   INTERNSHIP: "#60A5FA", FREELANCE: "#F472B6", UNSPECIFIED: "#64748B",
@@ -73,9 +100,9 @@ const JOB_TYPE_COLORS: Record<string, string> = {
 
 const LOC_COLORS = ["#A78BFA", "#34D399", "#F59E0B", "#60A5FA", "#F472B6", "#22D3EE", "#FB923C", "#94A3B8"];
 
-// ---------------------------------------------------------------------------
-// Stat tile
-// ---------------------------------------------------------------------------
+
+
+
 
 const StatTile: React.FC<{ icon: IconName; value: string | number; label: string; color?: string; sub?: string }> = ({
   icon, value, label, color = "var(--color-verified)", sub
@@ -88,9 +115,9 @@ const StatTile: React.FC<{ icon: IconName; value: string | number; label: string
   </div>
 );
 
-// ---------------------------------------------------------------------------
-// Mini metric row — used inside detail cards
-// ---------------------------------------------------------------------------
+
+
+
 
 const MetricRow: React.FC<{ label: string; value: string | number; color?: string }> = ({ label, value, color }) => (
   <div className="mi-metric-row">
@@ -99,9 +126,9 @@ const MetricRow: React.FC<{ label: string; value: string | number; color?: strin
   </div>
 );
 
-// ---------------------------------------------------------------------------
-// MarketInsightsPage
-// ---------------------------------------------------------------------------
+
+
+
 
 const MarketInsightsPage: React.FC = () => {
   const { insights, isLoading, error, refetch } = useMarketInsights();
@@ -150,7 +177,7 @@ const MarketInsightsPage: React.FC = () => {
     );
   }
 
-  // ── Derived metrics ──────────────────────────────────────────────────────
+
 
   const visibleSkills    = showAllSkills ? insights.skillDemand : insights.skillDemand.slice(0, 10);
   const maxJobCount      = insights.skillDemand[0]?.jobCount ?? 1;
@@ -163,16 +190,16 @@ const MarketInsightsPage: React.FC = () => {
   const jobTypesCount    = Object.keys(insights.jobTypeBreakdown).length;
   const locationsCount   = Object.keys(insights.locationBreakdown).length;
 
-  // Top job type
+
   const topJobType = Object.entries(insights.jobTypeBreakdown).sort((a, b) => b[1] - a[1])[0];
   const topLocation = topLocations[0];
 
-  // Avg jobs per skill
+
   const avgJobsPerSkill = uniqueSkills > 0
     ? (insights.skillDemand.reduce((sum, s) => sum + s.jobCount, 0) / uniqueSkills).toFixed(1)
     : "—";
 
-  // Demand concentration: % of jobs covered by top 5 skills
+
   const top5JobCount = insights.topSkills.slice(0, 5).reduce((sum, s) => sum + s.jobCount, 0);
   const top5Concentration = insights.totalActiveJobs > 0
     ? Math.round((top5JobCount / insights.totalActiveJobs) * 100)
@@ -400,9 +427,9 @@ const MarketInsightsPage: React.FC = () => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
+
+
+
 
 const styles = `
   /* Actions slot (lives in PageHeader right slot) */

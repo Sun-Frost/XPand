@@ -1,4 +1,10 @@
-// CollectionPage.tsx
+/**
+ * CollectionPage — /store/purchases
+ *
+ * Shows all of the user's purchased items with filter, sort, and archive controls.
+ *
+*/
+
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import PageLayout from "../../components/user/PageLayout";
@@ -14,9 +20,9 @@ import {
 } from "../../utils/pdfExport";
 import type { UserPurchaseResponse } from "../../hooks/user/useStore";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const TYPE_META: Record<string, { icon: IconName; color: string; glow: string; gradient: string; label: string }> = {
   READINESS_REPORT: { icon: "cat-data", color: "#60A5FA", glow: "#60A5FA28", gradient: "linear-gradient(135deg,#1E3A5F,#162132)", label: "Readiness Report" },
@@ -29,7 +35,7 @@ const STATUS_META = {
   used:   { label: "Used",  color: "#94A3B8", bg: "#94A3B812", border: "#94A3B833" },
 };
 
-// Gold / Silver / Bronze rank theming for PRIORITY_SLOT cards
+
 const SLOT_RANK_META: Record<string, {
   label: string; sublabel: string; icon: IconName;
   color: string; colorDim: string;
@@ -80,9 +86,9 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Shared prose parser + renderer
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 function parseBlocks(text: string) {
   const out: Array<{ type: string; content: string; num?: number }> = [];
@@ -145,9 +151,9 @@ function extractScore(text: string): number | null {
 const scoreColor = (n: number) => n >= 80 ? "#34D399" : n >= 60 ? "#60A5FA" : n >= 40 ? "#FCD34D" : "#F87171";
 const scoreLabel = (n: number) => n >= 80 ? "Job Ready" : n >= 60 ? "Nearly There" : n >= 40 ? "In Progress" : "Early Stage";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Score Dial
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const ScoreDial: React.FC<{ score: number }> = ({ score }) => {
   const col = scoreColor(score);
@@ -166,9 +172,9 @@ const ScoreDial: React.FC<{ score: number }> = ({ score }) => {
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Modal shell
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const ModalShell: React.FC<{
   purchase: UserPurchaseResponse;
@@ -201,7 +207,7 @@ const ModalShell: React.FC<{
   );
 };
 
-// Spinner
+
 const Spin: React.FC<{ color?: string; text?: string; sub?: string }> = ({ color = "#60A5FA", text, sub }) => (
   <div className="cv-spin-wrap">
     <div className="cv-ring" style={{ borderTopColor: color }} />
@@ -210,7 +216,7 @@ const Spin: React.FC<{ color?: string; text?: string; sub?: string }> = ({ color
   </div>
 );
 
-// Generate card
+
 const GenerateCard: React.FC<{
   icon: IconName; title: string; desc: string;
   features: string[]; accentColor: string; accentBg: string;
@@ -240,9 +246,9 @@ const GenerateCard: React.FC<{
   </div>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PDF export button
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const PdfBtn: React.FC<{ onClick: () => void; loading: boolean; accent?: string }> = ({
   onClick, loading, accent = "#60A5FA"
@@ -260,9 +266,9 @@ const PdfBtn: React.FC<{ onClick: () => void; loading: boolean; accent?: string 
   </button>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Report Viewer
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const ReportViewer: React.FC<{ purchase: UserPurchaseResponse; onClose: () => void }> = ({ purchase, onClose }) => {
   const { report, isLoading, isGenerating, error, generate } = useReadinessReport(purchase.id);
@@ -329,9 +335,9 @@ const ReportViewer: React.FC<{ purchase: UserPurchaseResponse; onClose: () => vo
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Interview Viewer
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const InterviewViewer: React.FC<{ purchase: UserPurchaseResponse; onClose: () => void }> = ({ purchase, onClose }) => {
   const { interview, phase, answers, isLoading, error, setAnswers, startInterview, submitAnswers } = useMockInterview(purchase.id);
@@ -476,9 +482,9 @@ const InterviewViewer: React.FC<{ purchase: UserPurchaseResponse; onClose: () =>
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Purchase Card
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const PurchaseCard: React.FC<{
   purchase: UserPurchaseResponse;
@@ -493,11 +499,11 @@ const PurchaseCard: React.FC<{
   const status   = purchase.isUsed ? STATUS_META.used : STATUS_META.unused;
   const canView  = purchase.itemType === "READINESS_REPORT" || purchase.itemType === "MOCK_INTERVIEW";
 
-  // Rank-specific theming for priority slots
+
   const isPriority = purchase.itemType === "PRIORITY_SLOT";
   const rank       = isPriority && purchase.slotRank ? SLOT_RANK_META[purchase.slotRank] ?? SLOT_RANK_META.THIRD : null;
 
-  // Card-level colour tokens — rank overrides default meta for priority cards
+
   const cardColor = rank ? rank.color : meta.color;
   const cardGlow  = rank ? rank.glow  : meta.glow;
 
@@ -605,9 +611,9 @@ const PurchaseCard: React.FC<{
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Archive Confirm Toast / mini-modal
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const ArchiveToast: React.FC<{
   count: number;
@@ -625,29 +631,29 @@ const ArchiveToast: React.FC<{
   </div>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CollectionPage
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const CollectionPage: React.FC = () => {
   const navigate = useNavigate();
   const { purchases, unusedPurchases, isLoading, refetch } = useStore();
 
-  // ── filter / sort state
+
   const [activeFilter, setActiveFilter]   = useState("ALL");
   const [sortDir, setSortDir]             = useState<SortDir>("desc"); // desc = newest first
   const [viewing, setViewing]             = useState<UserPurchaseResponse | null>(null);
 
-  // ── archive state
+
   const [archivedIds, setArchivedIds]     = useState<Set<number>>(new Set());
   const [showArchived, setShowArchived]   = useState(false);
 
-  // ── bulk-select state
+
   const [isSelecting, setIsSelecting]     = useState(false);
   const [selectedIds, setSelectedIds]     = useState<Set<number>>(new Set());
   const [pendingArchive, setPendingArchive] = useState(false);
 
-  // ── derived lists
+
   const visiblePurchases = useMemo(() => {
     return purchases.filter((p) => showArchived ? archivedIds.has(p.id) : !archivedIds.has(p.id));
   }, [purchases, archivedIds, showArchived]);
@@ -673,7 +679,7 @@ const CollectionPage: React.FC = () => {
     PRIORITY_SLOT:    visiblePurchases.filter((p) => p.itemType === "PRIORITY_SLOT").length,
   };
 
-  // ── select helpers
+
   const toggleSelect = (id: number) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -685,7 +691,7 @@ const CollectionPage: React.FC = () => {
   const selectAll = () => setSelectedIds(new Set(filtered.map((p) => p.id)));
   const clearSelection = () => { setSelectedIds(new Set()); setIsSelecting(false); };
 
-  // ── archive helpers
+
   const archiveSingle = (id: number) => {
     setArchivedIds((prev) => new Set([...prev, id]));
   };
@@ -702,7 +708,7 @@ const CollectionPage: React.FC = () => {
     setShowArchived(false);
   };
 
-  // When user clicks "Archive selected" button
+
   const handleBulkArchive = () => {
     if (selectedIds.size === 0) return;
     setPendingArchive(true);
@@ -922,9 +928,9 @@ const CollectionPage: React.FC = () => {
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const styles = `
 .col-back-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; margin-bottom:20px; border-radius:var(--radius-lg); border:1px solid var(--color-border-default); background:var(--color-bg-surface); font-size:13px; color:var(--color-text-secondary); cursor:pointer; transition:all var(--duration-fast); }

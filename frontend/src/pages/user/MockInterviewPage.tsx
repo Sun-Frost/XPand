@@ -1,3 +1,30 @@
+/**
+ * MockInterviewPage — /store/mock-interview/:purchaseId
+ *
+ * AI-powered mock interview with live camera-based sentiment coaching.
+ * Navigated to from CollectionPage after purchasing a MOCK_INTERVIEW item.
+ *
+ * Phase state machine (managed by useMockInterview hook):
+ *   idle → starting → answering → submitting → completed
+ *
+ * Sentiment sampling (StepByStepScreen):
+ *   When camera permission is granted, captureAndAnalyse() is called every 4 seconds
+ *   via setInterval. Results are accumulated in a weighted samples array (early samples
+ *   weighted 2×, later samples 1×). The dominant sentiment is computed when the user
+ *   submits their answer and sent to the backend with the answer payload so the AI
+ *   can factor emotional state into its feedback and mode selection.
+ *
+ * Good Cop / Bad Cop mode:
+ *   The backend (Gemini) decides the interviewer tone for each question based on
+ *   answer quality and detected sentiment. Strong answers trigger Bad Cop (harder
+ *   follow-ups); nervous/weak answers trigger Good Cop (supportive). The mode is
+ *   returned per question in the LiveQuestion response.
+ *
+ * Coaching toast and breath prompt:
+ *   Shown automatically when nervous or angry sentiment is detected consecutively.
+ *   Toast auto-dismisses after 8s. Breath prompt (centered overlay with pulsing ring)
+ *   shows after 2 consecutive nervous samples and auto-hides after 5s.
+ */
 import React, { useMemo, useRef, useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import PageLayout from "../../components/user/PageLayout";
@@ -14,9 +41,9 @@ import type {
 } from "../../hooks/user/useStore";
 import type { SentimentLabel, SentimentResult } from "../../hooks/user/useSentiment";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+
+
+
 
 function parseToBlocks(text: string) {
   const lines = text.split("\n");
@@ -67,9 +94,9 @@ const ProseBlock: React.FC<{ block: Block; accent?: string }> = ({ block, accent
   }
 };
 
-// ---------------------------------------------------------------------------
-// Sentiment & coaching config
-// ---------------------------------------------------------------------------
+
+
+
 
 const SENTIMENT_CONFIG: Record<SentimentLabel, { icon: IconName; label: string; color: string; bg: string; border: string }> = {
   happy:     { icon: "mood-happy"        as IconName, label: "Happy",      color: "#34D399", bg: "#34D39912", border: "#34D39933" },
@@ -80,7 +107,7 @@ const SENTIMENT_CONFIG: Record<SentimentLabel, { icon: IconName; label: string; 
   unknown:   { icon: "interviewer-unknown" as IconName, label: "Unknown",  color: "#A78BFA", bg: "#A78BFA12", border: "#A78BFA33" },
 };
 
-// Real-interviewer coaching tips per sentiment
+
 const COACHING_TIPS: Record<SentimentLabel, { headline: string; tips: string[]; color: string; border: string; bg: string; icon: string }> = {
   nervous: {
     headline: "You look nervous — reset before it affects you",
@@ -152,9 +179,9 @@ const QTYPE_CONFIG: Record<QuestionType, { label: string; color: string; bg: str
   personal:  { label: "Personal",  icon: "question-personal", color: "#C084FC", bg: "#4A178018", border: "#C084FC33" },
 };
 
-// ---------------------------------------------------------------------------
-// Coaching Toast — shown when nervous/angry detected
-// ---------------------------------------------------------------------------
+
+
+
 
 interface CoachingToastProps {
   sentiment: SentimentLabel;
@@ -180,9 +207,9 @@ const CoachingToast: React.FC<CoachingToastProps> = ({ sentiment, visible, onDis
   );
 };
 
-// ---------------------------------------------------------------------------
-// Sentiment Coach Panel (sidebar) — full contextual coaching card
-// ---------------------------------------------------------------------------
+
+
+
 
 const SentimentCoachPanel: React.FC<{
   sentiment: SentimentResult | null;
@@ -193,7 +220,7 @@ const SentimentCoachPanel: React.FC<{
   const cfg  = COACHING_TIPS[sentiment.label];
   const scfg = SENTIMENT_CONFIG[sentiment.label];
 
-  // Derive arc description
+
   const arcDesc = useMemo(() => {
     if (sentimentHistory.length < 2) return null;
     const first = sentimentHistory[0];
@@ -232,9 +259,9 @@ const SentimentCoachPanel: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Sentiment Arc Sparkline — mini timeline of emotion dots
-// ---------------------------------------------------------------------------
+
+
+
 
 const SentimentArcBar: React.FC<{ history: SentimentLabel[] }> = ({ history }) => {
   if (history.length === 0) return null;
@@ -258,9 +285,9 @@ const SentimentArcBar: React.FC<{ history: SentimentLabel[] }> = ({ history }) =
   );
 };
 
-// ---------------------------------------------------------------------------
-// Breath Prompt — brief mindfulness nudge when nervous ≥ 2 consecutive
-// ---------------------------------------------------------------------------
+
+
+
 
 const BreathPrompt: React.FC<{ visible: boolean }> = ({ visible }) => (
   <div className={`mi-breath-prompt ${visible ? "mi-breath-prompt--visible" : ""}`}>
@@ -269,9 +296,9 @@ const BreathPrompt: React.FC<{ visible: boolean }> = ({ visible }) => (
   </div>
 );
 
-// ---------------------------------------------------------------------------
-// Camera / Sentiment Widget
-// ---------------------------------------------------------------------------
+
+
+
 
 const SentimentWidget: React.FC<{
   videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -345,9 +372,9 @@ const SentimentWidget: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Mode Badge
-// ---------------------------------------------------------------------------
+
+
+
 
 const ModeBadge: React.FC<{ mode: InterviewerMode }> = ({ mode }) => {
   const mc = MODE_CONFIG[mode];
@@ -362,9 +389,9 @@ const ModeBadge: React.FC<{ mode: InterviewerMode }> = ({ mode }) => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// Idle Screen
-// ---------------------------------------------------------------------------
+
+
+
 
 const IdleScreen: React.FC<{
   onStart: () => void;
@@ -433,9 +460,9 @@ const IdleScreen: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Transition comment
-// ---------------------------------------------------------------------------
+
+
+
 
 const TransitionComment: React.FC<{ text: string; tone: InterviewTone }> = ({ text, tone }) => {
   const tc = TONE_CONFIG[tone];
@@ -449,9 +476,9 @@ const TransitionComment: React.FC<{ text: string; tone: InterviewTone }> = ({ te
   );
 };
 
-// ---------------------------------------------------------------------------
-// Per-question Feedback Panel
-// ---------------------------------------------------------------------------
+
+
+
 
 const FeedbackPanel: React.FC<{ feedback: QuestionFeedback }> = ({ feedback }) => {
   const mc = MODE_CONFIG[feedback.mode];
@@ -490,9 +517,9 @@ const FeedbackPanel: React.FC<{ feedback: QuestionFeedback }> = ({ feedback }) =
   );
 };
 
-// ---------------------------------------------------------------------------
-// Step-by-step answering screen
-// ---------------------------------------------------------------------------
+
+
+
 
 const StepByStepScreen: React.FC<{
   currentQuestion: LiveQuestion;
@@ -535,19 +562,19 @@ const StepByStepScreen: React.FC<{
   const qtype = QTYPE_CONFIG[currentQuestion.type];
   const tone  = TONE_CONFIG[currentQuestion.tone];
 
-  // ── Rolling sentiment sampler ──────────────────────────────────────────────
+
   const SAMPLE_INTERVAL_MS = 4000;
   const samplesRef      = useRef<Array<{ label: SentimentLabel; confidence: number; weight: number }>>([]);
   const sampleTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const sampleCountRef  = useRef(0);
   const isCapturingRef  = useRef(false);
 
-  // Flat timeline of all labels seen across all rounds (for arc sparkline + coaching)
+
   const [globalSentimentHistory, setGlobalSentimentHistory] = useState<SentimentLabel[]>([]);
-  // Per-question sample list just for coaching context
+
   const [questionSentimentHistory, setQuestionSentimentHistory] = useState<SentimentLabel[]>([]);
 
-  // ── Coaching toast state ────────────────────────────────────────────────────
+
   const [toastVisible, setToastVisible]             = useState(false);
   const [toastSentiment, setToastSentiment]         = useState<SentimentLabel>("neutral");
   const [showBreathPrompt, setShowBreathPrompt]     = useState(false);
@@ -556,7 +583,7 @@ const StepByStepScreen: React.FC<{
   const toastDismissTimerRef                        = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const triggerCoachingToast = useCallback((label: SentimentLabel) => {
-    // Only show for actionable sentiments, and don't re-show the same one immediately
+
     const actionable: SentimentLabel[] = ["nervous", "angry", "confident"];
     if (!actionable.includes(label)) return;
     if (lastToastSentimentRef.current === label) return;
@@ -578,7 +605,7 @@ const StepByStepScreen: React.FC<{
     lastToastSentimentRef.current = null;
   }, []);
 
-  // Reset on question change
+
   useEffect(() => {
     samplesRef.current = [];
     sampleCountRef.current = 0;
@@ -589,7 +616,7 @@ const StepByStepScreen: React.FC<{
     setShowBreathPrompt(false);
   }, [currentQuestionIndex]);
 
-  // Start/stop the interval
+
   useEffect(() => {
     const shouldSample = permission === "granted" && !hasFeedback && !feedbackLoading;
 
@@ -609,24 +636,24 @@ const StepByStepScreen: React.FC<{
           samplesRef.current.push({ label: result.label, confidence: result.confidence, weight });
           sampleCountRef.current += 1;
 
-          // Update histories
+
           setQuestionSentimentHistory(prev => [...prev, result.label]);
           setGlobalSentimentHistory(prev => [...prev, result.label]);
 
-          // Track consecutive nervous
+
           if (result.label === "nervous") {
             consecutiveNervousRef.current += 1;
           } else {
             consecutiveNervousRef.current = 0;
           }
 
-          // Show breath prompt after 2 consecutive nervous samples
+
           if (consecutiveNervousRef.current >= 2) {
             setShowBreathPrompt(true);
             setTimeout(() => setShowBreathPrompt(false), 5000);
           }
 
-          // Trigger coaching toast
+
           triggerCoachingToast(result.label);
         }
       } finally {
@@ -640,7 +667,7 @@ const StepByStepScreen: React.FC<{
     return () => {
       if (sampleTimerRef.current) { clearInterval(sampleTimerRef.current); sampleTimerRef.current = null; }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [currentQuestionIndex, permission, hasFeedback, feedbackLoading]);
 
   const getDominantSentiment = useCallback((): SentimentResult => {
@@ -885,9 +912,9 @@ const StepByStepScreen: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Completed Screen
-// ---------------------------------------------------------------------------
+
+
+
 
 const CompletedScreen: React.FC<{
   questionsText: string;
@@ -901,7 +928,7 @@ const CompletedScreen: React.FC<{
   const feedbackBlocks = useMemo(() => parseToBlocks(aiFeedbackText), [aiFeedbackText]);
   const summaryBlocks  = useMemo(() => sessionSummary ? parseToBlocks(sessionSummary) : [], [sessionSummary]);
 
-  // Derive overall sentiment arc for the completed screen
+
   const overallArc = useMemo(() => {
     if (answerRecords.length === 0) return null;
     const labels = answerRecords.map(r => r.sentiment.label);
@@ -1012,9 +1039,9 @@ const CompletedScreen: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// MockInterviewPage
-// ---------------------------------------------------------------------------
+
+
+
 
 const MockInterviewPage: React.FC = () => {
   const { purchaseId } = useParams<{ purchaseId: string }>();
@@ -1116,9 +1143,9 @@ const MockInterviewPage: React.FC = () => {
 
 export default MockInterviewPage;
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
+
+
+
 
 const styles = `
   /* ── Shared ─────────────────────────────────────── */

@@ -5,12 +5,13 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 /**
- * Records a skill the user said they already know during registration (step 3).
- * This is separate from UserSkillVerification — a row here means "user claimed
- * this skill", NOT that it has been tested/verified.
- *
- * The Skills Library reads these rows and shows a nudge popup asking the user
+ * Records a skill the user self-reported knowing during registration (step 3 of onboarding).
+ * <p>
+ * This is distinct from {@link UserSkillVerification} — a row here means
+ * "the user claimed this skill", not that it has been tested or verified.
+ * The Skills Library reads these rows to show a nudge popup prompting the user
  * to take the verification test for each unverified onboarding skill.
+ * </p>
  */
 @Entity
 @Table(

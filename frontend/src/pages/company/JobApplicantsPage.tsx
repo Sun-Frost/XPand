@@ -1,3 +1,43 @@
+/**
+ * JobApplicantsPage — /company/jobs/:jobId/applicants
+ *
+ * Full applicant management view for a specific job posting.
+ *
+ * Deadline gate:
+ *   CV details and status actions are locked until the job deadline passes.
+ *   isBeforeDeadline defaults to true when the job hasn't loaded yet (safe default).
+ *   Pre-deadline: applicant names are visible but clicking them does nothing.
+ *   Post-deadline: CVs open, actions unlock per the priority review rule.
+ *
+ * Priority review rule:
+ *   Platform enforces that all priority applicants (prioritySlotRank !== null) must
+ *   be reviewed (status !== PENDING) before regular applicants can be actioned.
+ *   allPriorityDone drives the isLocked prop on regular ApplicantCard rows and the
+ *   lock cover overlay over the regular list.
+ *
+ * Priority card display (post-deadline):
+ *   Rank 1 = gold treatment + auto-opens CV on page load (once per session via
+ *   hasAutoOpened ref). Rank 2 = silver/blue. Rank 3 = standard amber.
+ *   PriorityCard components are shown in a 3-column grid; ApplicantCard rows are
+ *   used pre-deadline and in the filtered views.
+ *
+ * Badge score sorting (regular applicants):
+ *   GET /company/user/{userId}/skill-verifications is called for each regular
+ *   applicant. The response is cached in regularVerifications state. badgeScore()
+ *   computes (gold×3 + silver×2 + bronze×1). Regular apps are sorted highest-score-
+ *   first, with STATUS_WEIGHT as a tiebreaker.
+ *
+ * CV modal:
+ *   Loads the rich profile via GET /company/user/{userId}?jobId={jobId}.
+ *   Status changes made inside the modal are reflected in the parent list via the
+ *   shared handleStatusChange callback, which also patches the cvApp state so the
+ *   modal badge updates without closing.
+ *
+ * PDF export:
+ *   Calls exportApplicantCvPdf() from pdfExport utils. Disabled while the rich
+ *   profile is still loading.
+ */
+
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import CompanyPageLayout from "../../components/company/companyPageLayout";
@@ -16,9 +56,9 @@ import type {
 } from "../../hooks/company/useCompany";
 import { get } from "../../api/axios";
 
-// ---------------------------------------------------------------------------
-// Local hook state shape for rich applicant profile
-// ---------------------------------------------------------------------------
+
+
+
 interface ApplicantRichProfile {
   profile: CompanyViewUserProfileResponse | null;
   workExperience: WorkExperienceResponse[];
@@ -29,9 +69,9 @@ interface ApplicantRichProfile {
   error: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+
+
+
 
 const fmtDate = (d: string): string => {
   const date = new Date(d.length === 10 ? `${d}T00:00:00` : d);
@@ -51,9 +91,9 @@ const fmtYear = (d: string): string => {
 const getInitials = (name: string) =>
   name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
-// ---------------------------------------------------------------------------
-// Status config
-// ---------------------------------------------------------------------------
+
+
+
 
 const STATUS_CONFIG: Record<ApplicationStatus, {
   label: string; color: string; bg: string; border: string; dot: string;
@@ -83,16 +123,16 @@ function xpLevel(xp: number): { level: number; title: string; color: string } {
   return { level: 1, title: "Beginner", color: "#94A3B8" };
 }
 
-// ---------------------------------------------------------------------------
-// Badge strength scoring (for regular applicant ordering)
-// Formula: (goldCount × 3) + (silverCount × 2) + (bronzeCount × 1)
-// e.g. 3 gold + 4 silver + 2 bronze = 9 + 8 + 2 = 19
-// Data comes from GET /company/user/{userId}/skill-verifications
-// ---------------------------------------------------------------------------
+
+
+
+
+
+
 
 type BadgeTier = "GOLD" | "SILVER" | "BRONZE";
 
-// UserSkillVerificationResponse shape (mirrors backend DTO)
+
 interface ApplicantVerification {
   verificationId: number;
   skillId: number;
@@ -115,9 +155,9 @@ function badgeScore(verifications: ApplicantVerification[]): number {
   return gold * 3 + silver * 2 + bronze * 1;
 }
 
-// ---------------------------------------------------------------------------
-// StatusBadge
-// ---------------------------------------------------------------------------
+
+
+
 
 const StatusBadge: React.FC<{ status: ApplicationStatus; size?: "sm" | "md" }> = ({ status, size = "md" }) => {
   const cfg = STATUS_CONFIG[status];
@@ -132,9 +172,9 @@ const StatusBadge: React.FC<{ status: ApplicationStatus; size?: "sm" | "md" }> =
   );
 };
 
-// ---------------------------------------------------------------------------
-// Hook: fetch applicant rich profile
-// ---------------------------------------------------------------------------
+
+
+
 function useApplicantProfile(userId: number | null, jobId: number | null): ApplicantRichProfile {
   const [state, setState] = useState<ApplicantRichProfile>({
     profile: null,
@@ -204,9 +244,9 @@ const mapProject = (proj: ProjectResponse) => ({
   startDate: proj.startDate ?? undefined,
   endDate: proj.endDate ?? undefined,
 });
-// ---------------------------------------------------------------------------
-// CV Modal
-// ---------------------------------------------------------------------------
+
+
+
 
 const CVModal: React.FC<{
   app: ApplicationResponse;
@@ -238,7 +278,7 @@ const CVModal: React.FC<{
     }
   };
 
-  // ── PDF export ────────────────────────────────────────────────────────────
+
   const handleExportPdf = useCallback(async () => {
     setIsExportingPdf(true);
     try {
@@ -618,9 +658,9 @@ const CVModal: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Applicant Row Card
-// ---------------------------------------------------------------------------
+
+
+
 
 const ApplicantCard: React.FC<{
   app: ApplicationResponse;
@@ -633,7 +673,7 @@ const ApplicantCard: React.FC<{
   const initials = getInitials(app.userFullName);
   const nextStatuses = NEXT_STATUSES[app.status] ?? [];
   const canAct = nextStatuses.length > 0 && app.status !== "WITHDRAWN" && !isLocked && !isBeforeDeadline;
-  // Before deadline: suppress priority strip — company should only see names, not slot rankings
+
   const showPriorityStrip = !!app.prioritySlotRank && !isBeforeDeadline;
 
   return (
@@ -707,9 +747,9 @@ const ApplicantCard: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// PriorityCard — horizontal card shown in the post-deadline priority grid
-// ---------------------------------------------------------------------------
+
+
+
 
 const PRIORITY_RANK_CONFIG = {
   1: {
@@ -828,9 +868,9 @@ const PriorityCard: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// JobApplicantsPage
-// ---------------------------------------------------------------------------
+
+
+
 
 const JobApplicantsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -846,16 +886,16 @@ const JobApplicantsPage: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<ApplicationStatus | "ALL">("ALL");
   const [cvApp, setCvApp] = useState<ApplicationResponse | null>(null);
 
-  // ── Split applications into priority vs regular ────────────────────────
+
   const { priorityApps, regularApps } = useMemo(() => {
     const sorted = [...applications].sort((a, b) => {
-      // Priority applicants always come before regular ones
+
       if (a.prioritySlotRank && !b.prioritySlotRank) return -1;
       if (!a.prioritySlotRank && b.prioritySlotRank) return 1;
-      // Among priority applicants: rank 1 (most expensive) comes first
+
       if (a.prioritySlotRank && b.prioritySlotRank) return a.prioritySlotRank - b.prioritySlotRank;
-      // Regular applicants: insertion order preserved here;
-      // badge-score sort happens in profileFilteredRegularApps once verifications load
+
+
       return 0;
     });
     return {
@@ -870,11 +910,11 @@ const JobApplicantsPage: React.FC = () => {
   const pendingPriorityCount = useMemo(() =>
     priorityApps.filter((a) => a.status === "PENDING").length, [priorityApps]);
 
-  // ── Profile filter for regular applicants ────────────────────────────────
-  // Cache of fetched skill verifications for regular applicants (userId → verifications)
+
+
   const [regularVerifications, setRegularVerifications] = useState<Record<number, ApplicantVerification[]>>({});
 
-  // Fetch skill verifications for all regular applicants (used for badge-score sorting)
+
   useEffect(() => {
     if (regularApps.length === 0) return;
     regularApps.forEach((app) => {
@@ -885,12 +925,12 @@ const JobApplicantsPage: React.FC = () => {
           .catch(() => setRegularVerifications((prev) => ({ ...prev, [app.userId]: [] })));
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [regularApps]);
 
   const profileFilteredRegularApps = useMemo(() => {
-    // Sort by badge score descending: (goldCount×3) + (silverCount×2) + (bronzeCount×1)
-    // Falls back to status weight when scores are tied.
+
+
     return [...regularApps].sort((a, b) => {
       const scoreA = badgeScore(regularVerifications[a.userId] ?? []);
       const scoreB = badgeScore(regularVerifications[b.userId] ?? []);
@@ -899,20 +939,20 @@ const JobApplicantsPage: React.FC = () => {
     });
   }, [regularApps, regularVerifications]);
 
-  // Deadline gate: CV and actions are locked until the job deadline has passed.
-  // IMPORTANT: if job hasn't loaded yet OR has no deadline set, default to TRUE (locked)
-  // so we never accidentally open CVs before we know the real deadline state.
+
+
+
   const isBeforeDeadline = useMemo(() => {
     if (!job) return true;            // job not loaded yet — stay locked
     if (!job.deadline) return true;   // no deadline set — stay locked (safe default)
     return new Date(job.deadline) > new Date();
   }, [job]);
 
-  // ── Rank-1 auto-open: ONLY after deadline, automatically open the CV of the
-  // rank-1 priority applicant (if still pending). Before deadline nothing opens.
-  // We use a state flag (not a ref) so the gate survives strict-mode double-invocations,
-  // but we intentionally DON'T reset it when the component unmounts — if the company
-  // navigates away and back the modal should NOT re-open (they've already been shown it).
+
+
+
+
+
   const [hasAutoOpened, setHasAutoOpened] = useState(false);
   useEffect(() => {
     if (hasAutoOpened) return;
@@ -1198,9 +1238,9 @@ const JobApplicantsPage: React.FC = () => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
+
+
+
 
 const styles = `
   /* ─── Inline icon + text utility ─── */

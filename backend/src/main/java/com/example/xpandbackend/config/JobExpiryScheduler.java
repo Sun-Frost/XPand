@@ -13,6 +13,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * Background scheduler that automatically expires job postings once their deadline passes.
+ *
+ * <p>Runs every hour. Any {@code ACTIVE} job whose {@code deadline} is in the past
+ * is transitioned to {@code EXPIRED}. Expired jobs no longer appear in the public
+ * job listing and cannot accept new applications.</p>
+ */
 @Component
 @EnableScheduling
 @RequiredArgsConstructor
@@ -21,7 +28,8 @@ public class JobExpiryScheduler {
 
     private final JobPostingRepository jobPostingRepository;
 
-    @Scheduled(fixedRate = 3600000) // every hour
+    /** Checks for and expires overdue active jobs. Runs every 60 minutes. */
+    @Scheduled(fixedRate = 3600000)
     @Transactional
     public void expireJobs() {
         List<JobPosting> expired = jobPostingRepository.findExpiredActiveJobs(LocalDateTime.now());

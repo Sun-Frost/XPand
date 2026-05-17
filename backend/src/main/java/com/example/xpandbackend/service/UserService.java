@@ -316,7 +316,7 @@ public class UserService {
         p.setTitle(r.getTitle());
         p.setDescription(r.getDescription());
         p.setTechnologiesUsed(r.getTechnologiesUsed());
-        p.setProjectUrl(p.getProjectUrl());
+        p.setProjectUrl(r.getProjectUrl());
         p.setGithubUrl(r.getGithubUrl());
         p.setStartDate(r.getStartDate());
         p.setEndDate(r.getEndDate());

@@ -17,6 +17,27 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Manages skill test delivery and scoring.
+ *
+ * <h3>Test structure</h3>
+ * Each test draws 5 EASY, 5 MEDIUM, and 5 HARD questions at random (15 total).
+ * Questions are shuffled before delivery so the order differs each time.
+ *
+ * <h3>Scoring and badges</h3>
+ * <ul>
+ *   <li>Score ≥ 28 → GOLD badge (no further attempts allowed for this skill)</li>
+ *   <li>Score ≥ 24 → SILVER badge</li>
+ *   <li>Score ≥ 18 → BRONZE badge</li>
+ *   <li>Score &lt; 18 → no badge awarded, attempt is still consumed</li>
+ * </ul>
+ * A user's badge is only upgraded, never downgraded. GOLD is permanent.
+ *
+ * <h3>Attempt limits and locking</h3>
+ * A user may attempt each skill up to 3 times per month. After 3 attempts the
+ * verification record is locked for 1 month. The lock is released automatically
+ * on the next {@link #startTest} call after the expiry timestamp.
+ */
 @Service
 @RequiredArgsConstructor
 public class SkillVerificationService {
@@ -37,33 +58,40 @@ public class SkillVerificationService {
     private final UserRepository userRepository;
     private final ChallengeEvaluationService challengeEvaluationService;
 
+    /**
+     * Validates eligibility and returns a shuffled set of 15 questions for the test.
+     * Throws if the skill is inactive, the user already holds GOLD, or the
+     * verification record is locked and the lock has not yet expired.
+     */
     public List<QuestionResponse> startTest(Integer userId, Integer skillId) {
         Skill skill = skillRepository.findById(skillId)
                 .orElseThrow(() -> new ResourceNotFoundException("Skill not found."));
         if (!skill.getIsActive()) throw new BadRequestException("This skill is not active.");
+
         UserSkillVerification verification = verificationRepository
                 .findByUserIdAndSkillId(userId, skillId)
                 .stream().findFirst().orElse(null);
 
         if (verification != null) {
-            // Gold badge = permanently verified; no further attempts allowed on this skill.
             if (BadgeLevel.GOLD.equals(verification.getCurrentBadge())) {
-                throw new BadRequestException("You have already earned a Gold badge for this skill. No further attempts are needed.");
+                throw new BadRequestException(
+                        "You have already earned a Gold badge for this skill. No further attempts are needed.");
             }
 
             if (verification.getIsLocked()) {
-                if (verification.getLockExpiry() != null && LocalDateTime.now().isAfter(verification.getLockExpiry())) {
-                    // Lock period expired — reset for a new monthly window.
+                if (verification.getLockExpiry() != null
+                        && LocalDateTime.now().isAfter(verification.getLockExpiry())) {
+                    // Lock period has expired — reset for a new monthly window
                     verification.setIsLocked(false);
                     verification.setAttemptCount(0);
                     verification.setLockExpiry(null);
                     verificationRepository.save(verification);
                 } else {
-                    throw new BadRequestException("Skill is locked. Try again after: " + verification.getLockExpiry());
+                    throw new BadRequestException(
+                            "Skill is locked. Try again after: " + verification.getLockExpiry());
                 }
             }
 
-            // Belt-and-suspenders: also block if attempts are maxed but lock wasn't persisted.
             if (verification.getAttemptCount() >= MAX_ATTEMPTS) {
                 throw new BadRequestException("Maximum attempts reached. Skill is locked.");
             }
@@ -82,10 +110,13 @@ public class SkillVerificationService {
         return all.stream().map(this::mapToQuestionResponse).collect(Collectors.toList());
     }
 
+    /**
+     * Scores the submitted answers, persists the attempt, updates the verification
+     * record (badge and lock status), and triggers challenge evaluation.
+     * Returns the full per-question breakdown so the frontend can show a result screen.
+     */
     @Transactional
     public TestAttemptResponse submitTest(Integer userId, Integer skillId, SubmitTestRequest request) {
-        System.out.println(">>> Received answers: " + request.getAnswers());
-        System.out.println(">>> Answer count: " + request.getAnswers().size());
         Skill skill = skillRepository.findById(skillId)
                 .orElseThrow(() -> new ResourceNotFoundException("Skill not found."));
         User user = userRepository.findById(userId)
@@ -103,12 +134,12 @@ public class SkillVerificationService {
                 });
 
         if (verification.getIsLocked()) {
-            if (verification.getLockExpiry() != null && LocalDateTime.now().isBefore(verification.getLockExpiry())) {
+            if (verification.getLockExpiry() != null
+                    && LocalDateTime.now().isBefore(verification.getLockExpiry())) {
                 throw new BadRequestException("Skill is locked.");
             }
         }
 
-        // Calculate score — set everything BEFORE first DB save (score is NOT NULL)
         int totalScore  = 0;
         int correctCount = 0;
 
@@ -129,7 +160,6 @@ public class SkillVerificationService {
                 correctCount++;
             }
 
-            // Build attempt question record
             TestAttemptQuestion taq = new TestAttemptQuestion();
             taq.setTestAttempt(attempt);
             taq.setQuestion(q);
@@ -137,7 +167,6 @@ public class SkillVerificationService {
             taq.setIsCorrect(correct);
             attemptQuestions.add(taq);
 
-            // Build result detail for response (includes correctAnswer for review)
             TestAttemptResponse.QuestionResult qr = new TestAttemptResponse.QuestionResult();
             qr.setQuestionId(q.getId());
             qr.setQuestionText(q.getQuestionText());
@@ -153,37 +182,33 @@ public class SkillVerificationService {
             questionResults.add(qr);
         }
 
-        // Set score and badge BEFORE saving (NOT NULL constraint)
         BadgeLevel badge = determineBadge(totalScore);
         attempt.setScore(totalScore);
         attempt.setBadgeAwarded(badge);
         testAttemptRepository.save(attempt);
-
         testAttemptQuestionRepository.saveAll(attemptQuestions);
 
-        // Update verification
         verification.setAttemptCount(verification.getAttemptCount() + 1);
         verification.setLastAttemptDate(LocalDateTime.now());
 
+        // Only upgrade the badge — never downgrade
         if (badge != null) {
-            if (verification.getCurrentBadge() == null || badge.ordinal() > verification.getCurrentBadge().ordinal()) {
+            if (verification.getCurrentBadge() == null
+                    || badge.ordinal() > verification.getCurrentBadge().ordinal()) {
                 verification.setCurrentBadge(badge);
                 verification.setVerifiedDate(LocalDateTime.now());
             }
         }
 
-        // Lock after MAX_ATTEMPTS regardless of whether a badge was earned or not.
-        // A badge just means the skill is "verified" — the attempt still consumed a slot.
+        // Lock after MAX_ATTEMPTS regardless of badge outcome
         if (verification.getAttemptCount() >= MAX_ATTEMPTS) {
             verification.setIsLocked(true);
             verification.setLockExpiry(LocalDateTime.now().plusMonths(1));
         }
 
         verificationRepository.save(verification);
-
         challengeEvaluationService.evaluateSkillExpansion(userId);
 
-        // Build response with full question breakdown
         TestAttemptResponse response = new TestAttemptResponse();
         response.setAttemptId(attempt.getId());
         response.setSkillId(skillId);
@@ -197,11 +222,13 @@ public class SkillVerificationService {
         return response;
     }
 
+    /** Returns all verification records for the user (including attempts with no badge). */
     public List<UserSkillVerificationResponse> getUserVerifications(Integer userId) {
         return verificationRepository.findByUserId(userId).stream()
                 .map(this::mapToVerificationResponse).collect(Collectors.toList());
     }
 
+    /** Returns a summary of all past test attempts for the user (no per-question breakdown). */
     public List<TestAttemptResponse> getUserTestHistory(Integer userId) {
         return testAttemptRepository.findByUserId(userId).stream()
                 .map(a -> {
@@ -216,6 +243,9 @@ public class SkillVerificationService {
                 }).collect(Collectors.toList());
     }
 
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    /** Returns the badge level for a given score, or {@code null} if below BRONZE. */
     private BadgeLevel determineBadge(int score) {
         if (score >= GOLD_MIN)   return BadgeLevel.GOLD;
         if (score >= SILVER_MIN) return BadgeLevel.SILVER;

@@ -1,3 +1,31 @@
+/**
+ * CreateEditJobPage — /company/jobs/new and /company/jobs/:jobId/edit
+ *
+ * Combined create and edit form for job postings. The isEdit flag is derived
+ * from whether :jobId is present in the route params.
+ *
+ * Skill selection:
+ *   Skills are fetched from GET /skills (active skills only). Each added skill is
+ *   marked MAJOR (required — candidate must hold a badge) or MINOR (optional —
+ *   boosts match score). At least one MAJOR skill is required to post.
+ *   The SkillRow component handles importance toggling inline without a modal.
+ *
+ * Prefill on edit:
+ *   Waits for both the jobs list (from useCompanyJobs) and the skills list to load
+ *   before populating the form. If a skill from the saved job no longer exists in
+ *   the active skills list, a fallback pseudo-skill object is created from the
+ *   job response data so the name still displays.
+ *
+ * Deadline:
+ *   The date input stores "YYYY-MM-DD". toISOLocal() appends "T23:59:00" before
+ *   sending to the backend so the deadline expires at end-of-day, not midnight.
+ *   toDateOnly() strips the time component for display in the date input.
+ *
+ * Sidebar sticky positioning:
+ *   The skills panel uses position:sticky offset by the navbar height constant.
+ *   On screens narrower than 900px it becomes static and stacks below the main form.
+ */
+
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import CompanyPageLayout from "../../components/company/companyPageLayout";
@@ -6,9 +34,9 @@ import { useCompanyJobs } from "../../hooks/company/useCompany";
 import type { CreateJobPayload, JobSkillRequest, ImportanceLevel } from "../../hooks/company/useCompany";
 import { get } from "../../api/axios";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+
+
+
 
 interface SkillOption {
   id: number;
@@ -17,8 +45,8 @@ interface SkillOption {
   isActive: boolean;
 }
 
-// Job type from JobType.java — FULL_TIME, PART_TIME, CONTRACT, REMOTE
-// (Not INTERNSHIP or FREELANCE — those don't exist in the backend enum)
+
+
 const JOB_TYPE_OPTIONS = [
   { value: "FULL_TIME", label: "Full-Time", icon: "job-type-full-time" as IconName },
   { value: "PART_TIME", label: "Part-Time", icon: "job-type-part-time" as IconName },
@@ -26,12 +54,12 @@ const JOB_TYPE_OPTIONS = [
   { value: "REMOTE", label: "Remote", icon: "job-type-remote" as IconName },
 ] as const;
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+
+
+
 
 const toISOLocal = (d: string): string => {
-  // Convert date-only "YYYY-MM-DD" to "YYYY-MM-DDTHH:mm:ss"
+
   if (!d) return "";
   if (d.includes("T")) return d;
   return `${d}T23:59:00`;
@@ -42,9 +70,9 @@ const toDateOnly = (d: string | null): string => {
   return d.split("T")[0];
 };
 
-// ---------------------------------------------------------------------------
-// Skill selector row
-// ---------------------------------------------------------------------------
+
+
+
 
 const SkillRow: React.FC<{
   skill: SkillOption;
@@ -86,9 +114,9 @@ const SkillRow: React.FC<{
   </div>
 );
 
-// ---------------------------------------------------------------------------
-// CreateEditJobPage
-// ---------------------------------------------------------------------------
+
+
+
 
 const CreateEditJobPage: React.FC = () => {
   const navigate = useNavigate();
@@ -98,7 +126,7 @@ const CreateEditJobPage: React.FC = () => {
 
   const { jobs, createJob, updateJob } = useCompanyJobs();
 
-  // ── Form state ──────────────────────────────────────────────────────────
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
@@ -106,20 +134,20 @@ const CreateEditJobPage: React.FC = () => {
   const [salaryRange, setSalaryRange] = useState("");
   const [deadline, setDeadline] = useState("");
 
-  // Skills: map from skillId → { importance }
+
   const [selectedSkills, setSelectedSkills] = useState<Map<number, { skill: SkillOption; importance: ImportanceLevel }>>(new Map());
 
-  // ── Available skills ─────────────────────────────────────────────────────
+
   const [allSkills, setAllSkills] = useState<SkillOption[]>([]);
   const [skillSearch, setSkillSearch] = useState("");
   const [skillsLoading, setSkillsLoading] = useState(true);
 
-  // ── Submission ────────────────────────────────────────────────────────────
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
-  // ── Fetch available skills ────────────────────────────────────────────────
+
   useEffect(() => {
     get<SkillOption[]>("/skills")
       .then((data) => setAllSkills(data.filter((s) => s.isActive)))
@@ -127,7 +155,7 @@ const CreateEditJobPage: React.FC = () => {
       .finally(() => setSkillsLoading(false));
   }, []);
 
-  // ── Prefill form when editing ─────────────────────────────────────────────
+
   useEffect(() => {
     if (!isEdit || !jobIdNum) return;
     const job = jobs.find((j) => j.id === jobIdNum);
@@ -140,7 +168,7 @@ const CreateEditJobPage: React.FC = () => {
     setSalaryRange(job.salaryRange ?? "");
     setDeadline(toDateOnly(job.deadline));
 
-    // Pre-populate selected skills
+
     if (allSkills.length > 0) {
       const map = new Map<number, { skill: SkillOption; importance: ImportanceLevel }>();
       for (const s of job.requiredSkills) {
@@ -148,7 +176,7 @@ const CreateEditJobPage: React.FC = () => {
         if (found) {
           map.set(s.skillId, { skill: found, importance: s.importance });
         } else {
-          // fallback: create a pseudo-skill obj from the response
+
           map.set(s.skillId, {
             skill: { id: s.skillId, name: s.skillName, isActive: true },
             importance: s.importance,
@@ -159,7 +187,7 @@ const CreateEditJobPage: React.FC = () => {
     }
   }, [isEdit, jobIdNum, jobs, allSkills]);
 
-  // ── Skill actions ─────────────────────────────────────────────────────────
+
   const addOrUpdateSkill = useCallback((skill: SkillOption, importance: ImportanceLevel) => {
     setSelectedSkills((prev) => {
       const next = new Map(prev);
@@ -176,7 +204,7 @@ const CreateEditJobPage: React.FC = () => {
     });
   }, []);
 
-  // ── Validation ────────────────────────────────────────────────────────────
+
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
     if (!title.trim()) errs.title = "Job title is required.";
@@ -190,7 +218,7 @@ const CreateEditJobPage: React.FC = () => {
     return Object.keys(errs).length === 0;
   };
 
-  // ── Submit ────────────────────────────────────────────────────────────────
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
@@ -228,7 +256,7 @@ const CreateEditJobPage: React.FC = () => {
     }
   };
 
-  // ── Filter skills for the search ──────────────────────────────────────────
+
   const filteredSkills = allSkills.filter((s) =>
     s.name.toLowerCase().includes(skillSearch.toLowerCase()) ||
     (s.category ?? "").toLowerCase().includes(skillSearch.toLowerCase())
@@ -238,7 +266,7 @@ const CreateEditJobPage: React.FC = () => {
   const majorCount = selectedList.filter((s) => s.importance === "MAJOR").length;
   const minorCount = selectedList.filter((s) => s.importance === "MINOR").length;
 
-  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
     <CompanyPageLayout pageTitle={isEdit ? "Edit Job" : "Post New Job"}>
 
@@ -501,9 +529,9 @@ const CreateEditJobPage: React.FC = () => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
+
+
+
 
 const styles = `
   .cj-header { margin-bottom: var(--space-6); }

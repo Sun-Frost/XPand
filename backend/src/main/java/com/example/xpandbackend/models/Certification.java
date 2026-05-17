@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDate;
 
+/** A professional certification on a user's profile. {@code expirationDate} may be null for lifetime certs. */
 @Entity
 @Table(name = "certification")
 @Data
@@ -16,13 +17,12 @@ public class Certification {
     @Column(name = "certification_id")
     private Integer id;
 
-    // UserSkillVerification.java, Application.java, UserPurchase.java,
-// Education.java, WorkExperience.java, Certification.java, Project.java
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private User user;
+
     @Column(nullable = false)
     private String name;
 

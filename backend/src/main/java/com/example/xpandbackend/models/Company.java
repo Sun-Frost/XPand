@@ -4,6 +4,14 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
 
+/**
+ * Represents a hiring company on the XPand platform.
+ * <p>
+ * Companies must be email-verified and admin-approved before they can post jobs
+ * or view applicant CVs. Only LOCAL (email/password) registration is supported
+ * for companies — there is no OAuth flow for company accounts.
+ * </p>
+ */
 @Entity
 @Table(name = "company")
 @Data
@@ -32,22 +40,27 @@ public class Company {
     private String industry;
     private String location;
 
+    /** Set to {@code true} by an admin after reviewing the company registration. */
     @Column(nullable = false)
     private Boolean isApproved = false;
 
     // ── Email verification ────────────────────────────────────────────────────
+
     /** True once the company submits the correct 6-digit verification code. */
     @Column(nullable = false)
     private boolean emailVerified = false;
 
     /**
-     * 6-digit numeric code (stored as String to preserve leading zeros) sent to
-     * the company's email at registration and on resend.  Cleared after verification.
+     * 6-digit numeric code (stored as String to preserve leading zeros).
+     * Sent at registration and on resend. Cleared after successful verification
+     * and reused as a password-reset code when the forgot-password flow is triggered.
      */
     @Column
     private String verificationCode;
 
-    // ── Auth provider (LOCAL only for companies; no OAuth flow for companies) ─
+    // ── Auth provider ─────────────────────────────────────────────────────────
+
+    /** Always {@code "LOCAL"} for companies. Stored as a string for future extensibility. */
     @Column(nullable = false)
     private String provider = "LOCAL";
 

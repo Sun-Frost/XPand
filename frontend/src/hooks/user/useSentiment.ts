@@ -31,12 +31,26 @@ export interface UseSentimentReturn {
 // ---------------------------------------------------------------------------
 
 function expressionsToSentiment(expressions: Record<string, number>): SentimentResult {
-  const { happy = 0 } = expressions;
+  const { happy = 0, neutral = 0, fearful = 0, sad = 0 } = expressions;
 
-  // Nervous is the default state. Only a clearly visible smile (happy > 0.4)
-  // flips to confident. Everything else — resting face, tense, blank — is nervous.
-  const label: SentimentLabel = happy > 0.4 ? "confident" : "nervous";
-  const confidence = label === "confident" ? happy : 1 - happy;
+  // Thresholds:
+  //   confident  → clearly smiling        (happy > 0.40)
+  //   neutral    → relaxed / resting face (neutral > 0.50, or happy 0.15–0.40)
+  //   nervous    → everything else        (fearful, sad, tense, blank)
+  let label: SentimentLabel;
+  let confidence: number;
+
+  if (happy > 0.40) {
+    label = "confident";
+    confidence = happy;
+  } else if (neutral > 0.50 || (happy >= 0.15 && happy <= 0.40)) {
+    label = "neutral";
+    confidence = neutral > 0.50 ? neutral : happy + neutral;
+  } else {
+    label = "nervous";
+    // nervousness signal: high fearful/sad or low happy+neutral
+    confidence = Math.max(fearful, sad, 1 - happy - neutral);
+  }
 
   return { label, confidence: Math.min(Math.max(confidence, 0.5), 1), rawExpressions: expressions };
 }

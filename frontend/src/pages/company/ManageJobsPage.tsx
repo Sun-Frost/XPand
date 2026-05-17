@@ -1,14 +1,44 @@
 import React, { useState, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+/**
+ * ManageJobsPage — /company/jobs
+ *
+ * Full job management interface with card and compact table view modes.
+ *
+ * View modes:
+ *   Card view shows description excerpt, skill pills, and full action buttons.
+ *   Compact view is a table row with fewer columns, suited for scanning many jobs.
+ *   Toggle is in the PageHeader right slot via the mj-view-btn controls.
+ *
+ * Archive state:
+ *   Client-side only (not persisted to backend). Archived jobs are hidden from the
+ *   default view and accessible via the "Archived" filter tab. Restoring moves them
+ *   back to the main list.
+ *
+ * Bulk actions:
+ *   Select mode lets the user pick multiple jobs to archive or close in one action.
+ *   Bulk close iterates and calls closeJob() for each selected active job sequentially
+ *   (not in parallel) to avoid rate-limit issues.
+ *
+ * Search highlight:
+ *   The highlight() helper splits matched text and wraps matching segments in <mark>
+ *   for yellow highlight styling. Applied to title, location, and skill name display.
+ *
+ * Expired detection:
+ *   isExpired() compares job.deadline against Date.now() client-side. The backend
+ *   may also mark jobs EXPIRED server-side; the client shows "EXPIRED" if either
+ *   condition is true (status === "EXPIRED" OR deadline has passed).
+ */
+
 import CompanyPageLayout from "../../components/company/companyPageLayout";
 import { Icon } from "../../components/ui/Icon";
 import PageHeader, { PAGE_CONFIGS } from "../../components/ui/PageHeader";
 import { useCompanyJobs } from "../../hooks/company/useCompany";
 import type { JobPostingResponse, JobStatus, JobType } from "../../hooks/company/useCompany";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+
+
+
 
 const fmtDate = (d: string | null): string => {
   if (!d) return "—";
@@ -47,7 +77,7 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "title_za",     label: "Title Z–A"       },
 ];
 
-// Local archive state (stored in-memory; swap for localStorage or backend as needed)
+
 const useArchiveState = () => {
   const [archived, setArchived] = useState<Set<number>>(new Set());
   const archive   = useCallback((id: number) => setArchived((s) => new Set([...s, id])), []);
@@ -65,9 +95,9 @@ const highlight = (text: string, query: string): React.ReactNode => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// Stats bar
-// ---------------------------------------------------------------------------
+
+
+
 const StatsBar: React.FC<{ jobs: JobPostingResponse[]; archived: Set<number> }> = ({ jobs, archived }) => {
   const active   = jobs.filter((j) => j.status === "ACTIVE" && !isExpired(j.deadline) && !archived.has(j.id)).length;
   const expired  = jobs.filter((j) => (j.status === "EXPIRED" || (j.status === "ACTIVE" && isExpired(j.deadline))) && !archived.has(j.id)).length;
@@ -105,9 +135,9 @@ const StatsBar: React.FC<{ jobs: JobPostingResponse[]; archived: Set<number> }> 
   );
 };
 
-// ---------------------------------------------------------------------------
-// Job card (full)
-// ---------------------------------------------------------------------------
+
+
+
 const JobCard: React.FC<{
   job: JobPostingResponse;
   isArchived: boolean;
@@ -206,9 +236,9 @@ const JobCard: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Compact row
-// ---------------------------------------------------------------------------
+
+
+
 const CompactRow: React.FC<{
   job: JobPostingResponse;
   isArchived: boolean;
@@ -254,9 +284,9 @@ const CompactRow: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Bulk actions bar
-// ---------------------------------------------------------------------------
+
+
+
 const BulkBar: React.FC<{
   count: number;
   onClearSelection: () => void;
@@ -282,9 +312,9 @@ const BulkBar: React.FC<{
   </div>
 );
 
-// ---------------------------------------------------------------------------
-// ManageJobsPage
-// ---------------------------------------------------------------------------
+
+
+
 
 const ManageJobsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -301,7 +331,7 @@ const ManageJobsPage: React.FC = () => {
   const [selected, setSelected]     = useState<Set<number>>(new Set());
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Collect distinct job types from loaded jobs
+
   const availableTypes = useMemo(() => {
     const types = new Set(jobs.map((j) => j.jobType).filter(Boolean) as string[]);
     return Array.from(types);
@@ -324,19 +354,19 @@ const ManageJobsPage: React.FC = () => {
   const filtered = useMemo(() => {
     let list = jobs;
 
-    // Status/archive filter
+
     if (filter === "ARCHIVED") {
       list = list.filter((j) => archived.has(j.id));
     } else if (filter !== "ALL") {
       list = list.filter((j) => !archived.has(j.id) && getDisplayStatus(j) === filter);
     }
 
-    // Job type filter
+
     if (jobTypeFilter !== "ALL") {
       list = list.filter((j) => j.jobType === jobTypeFilter);
     }
 
-    // Search
+
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter((j) =>
@@ -347,7 +377,7 @@ const ManageJobsPage: React.FC = () => {
       );
     }
 
-    // Sort
+
     const sortFn: (a: JobPostingResponse, b: JobPostingResponse) => number = {
       newest:       (a: { id: number; }, b: { id: number; }) => b.id - a.id,
       oldest:       (a: { id: number; }, b: { id: number; }) => a.id - b.id,
@@ -357,7 +387,7 @@ const ManageJobsPage: React.FC = () => {
       title_za:     (a: { title: any; }, b: { title: string; }) => b.title.localeCompare(a.title),
     }[sort];
     return [...list].sort(sortFn);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [jobs, filter, jobTypeFilter, search, sort, archived]);
 
   const handleClose = async (jobId: number) => {
@@ -605,9 +635,9 @@ const ManageJobsPage: React.FC = () => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
+
+
+
 
 const styles = `
   /* View toggle (lives in PageHeader right slot) */

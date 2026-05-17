@@ -1,35 +1,31 @@
+/**
+ * ForgotPasswordPage — /forgot-password
+ *
+ * Four-step inline password reset flow (no page navigation between steps).
+ *
+ * Step 1 — Email: POST /auth/forgot-password
+ *   Backend validates the email belongs to a registered, verified, LOCAL (non-OAuth)
+ *   account before sending a code. Errors are surfaced directly from the backend message.
+ *
+ * Step 2 — Code: POST /auth/verify-reset-code
+ *   Six-digit OTP entry with auto-submit on last digit and paste support.
+ *   Resend re-calls Step 1's endpoint.
+ *
+ * Step 3 — New Password: POST /auth/reset-password
+ *   Client-side policy check (8 chars, upper, lower, digit, special) runs before the
+ *   request. The strength bar and requirement checklist update on every keystroke.
+ *
+ * Step 4 — Success: static confirmation, navigates to /login.
+ *
+ * State is held in the root ForgotPasswordPage orchestrator and passed down
+ * so the email and code survive across step transitions.
+ */
+
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { post } from "../api/axios";
 import { Icon } from "../components/ui/Icon";
 
-// ---------------------------------------------------------------------------
-// ForgotPasswordPage
-//
-// Route: /forgot-password
-//
-// Four inline steps — no page navigation between them:
-//
-//   Step 1 — Email entry
-//     POST /api/auth/forgot-password  { email }
-//     Backend now validates the email: it must belong to a registered,
-//     verified, LOCAL (non-OAuth) account. If the email is not found,
-//     unverified, or belongs to an OAuth account, the backend returns a
-//     400 with a clear message that we surface to the user.
-//     Only on success (200) do we advance to Step 2.
-//
-//   Step 2 — 6-digit code entry
-//     POST /api/auth/verify-reset-code  { email, code }
-//     Code validated before advancing to password step.
-//
-//   Step 3 — New password entry
-//     POST /api/auth/reset-password  { email, code, newPassword }
-//     Password must meet policy: ≥8 chars, uppercase, lowercase, digit, special.
-//
-//   Step 4 — Success confirmation
-// ---------------------------------------------------------------------------
-
-// ── Password strength ────────────────────────────────────────────────────────
 
 type StrengthLevel = 0 | 1 | 2 | 3;
 
@@ -82,7 +78,7 @@ const PasswordRequirements: React.FC<{ password: string }> = ({ password }) => {
   );
 };
 
-// ── Shared layout ─────────────────────────────────────────────────────────────
+
 
 const Orbs: React.FC = () => (
   <div className="fp-bg" aria-hidden="true">
@@ -110,9 +106,9 @@ const Card: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   </div>
 );
 
-// ---------------------------------------------------------------------------
-// Step 1 — Email input
-// ---------------------------------------------------------------------------
+
+
+
 
 const StepEmail: React.FC<{
   onSent: (email: string) => void;
@@ -136,11 +132,11 @@ const StepEmail: React.FC<{
     setLoading(true);
     try {
       await post("/auth/forgot-password", { email: trimmed });
-      // Backend returned 200 — email is registered, verified, and LOCAL.
-      // Advance to the code-entry step.
+
+
       onSent(trimmed);
     } catch (err: any) {
-      // Backend returned a 4xx with a specific message — show it.
+
       const msg =
         err?.response?.data?.message ??
         "Something went wrong. Please try again.";
@@ -196,9 +192,9 @@ const StepEmail: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Step 2 — 6-digit code entry
-// ---------------------------------------------------------------------------
+
+
+
 
 const StepCode: React.FC<{
   email: string;
@@ -354,9 +350,9 @@ const StepCode: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Step 3 — New password
-// ---------------------------------------------------------------------------
+
+
+
 
 const StepNewPassword: React.FC<{
   email: string;
@@ -507,9 +503,9 @@ const StepNewPassword: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Step 4 — Success
-// ---------------------------------------------------------------------------
+
+
+
 
 const StepSuccess: React.FC<{ onGoToLogin: () => void }> = ({ onGoToLogin }) => (
   <Card>
@@ -531,9 +527,9 @@ const StepSuccess: React.FC<{ onGoToLogin: () => void }> = ({ onGoToLogin }) => 
   </Card>
 );
 
-// ---------------------------------------------------------------------------
-// Main orchestrator
-// ---------------------------------------------------------------------------
+
+
+
 
 type Step = "email" | "code" | "password" | "success";
 
@@ -577,9 +573,9 @@ const ForgotPasswordPage: React.FC = () => {
   }
 };
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
+
+
+
 
 const pageStyles = `
   .fp-page {

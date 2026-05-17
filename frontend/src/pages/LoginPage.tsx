@@ -1,3 +1,27 @@
+/**
+ * LoginPage — /login
+ *
+ * Standard email/password login plus Google OAuth entry point.
+ *
+ * Unverified-account flow:
+ *   When the backend returns a "verify your email" error the banner exposes two
+ *   actions: "Enter verification code →" (opens InlineVerifyPanel in place of the
+ *   form) and "Resend verification email" (fires a resend then also opens the panel).
+ *   The panel is a six-digit OTP box identical to RegisterPage's SixDigitVerify.
+ *
+ * Role-based redirect on success:
+ *   The useLogin hook callback receives the role string and navigates to
+ *   /admin/overview, /company/dashboard, or /dashboard accordingly.
+ *
+ * Query-param notices:
+ *   ?notice=company_pending — shown after company registration approval is pending.
+ *   ?error=oauth_failed     — shown after a failed Google OAuth redirect.
+ *
+ * Token guard:
+ *   On mount, if a valid token already exists in localStorage the page immediately
+ *   redirects to the appropriate dashboard to avoid double-login.
+ */
+
 import xpandLogo from "../assets/xpand.svg";
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -5,17 +29,12 @@ import { useLogin } from "../hooks/useLogin";
 import { post } from "../api/axios";
 import { Icon } from "../components/ui/Icon";
 
-// The OAuth button must point directly to the backend, not the Vite dev server.
+
 const BACKEND_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace("/api", "")
   : "http://localhost:8080";
 
 const GOOGLE_OAUTH_URL = `${BACKEND_URL}/oauth2/authorization/google`;
-
-// ---------------------------------------------------------------------------
-// Inline 6-digit verify panel — shown on LoginPage when the user needs to
-// enter their code (either after being blocked, or after hitting "Resend").
-// ---------------------------------------------------------------------------
 
 const InlineVerifyPanel: React.FC<{
   email: string;
@@ -40,15 +59,15 @@ const InlineVerifyPanel: React.FC<{
     try {
       await post<{ message: string }>("/auth/verify", { email, code });
       setStatus("success");
-      // Brief pause so the user sees the success state, then call back
+
       setTimeout(onVerified, 800);
     } catch (err: any) {
       const msg = err?.response?.data?.message ?? "Incorrect code. Please try again.";
       setVerifyError(msg);
-      // Reset to "idle" (not "error") so the next full code auto-submits cleanly.
-      // This matches the working SixDigitVerify pattern in RegisterPage.
+
+
       setStatus("idle");
-      // Clear digits so they can type fresh — don't leave partial bad input
+
       setDigits(["", "", "", "", "", ""]);
       setTimeout(() => inputRefs.current[0]?.focus(), 50);
     }
@@ -59,12 +78,12 @@ const InlineVerifyPanel: React.FC<{
     const next = [...digits];
     next[index] = digit;
     setDigits(next);
-    // Clear any displayed error as soon as the user starts retyping
+
     setVerifyError("");
     if (digit && index < 5) inputRefs.current[index + 1]?.focus();
     if (digit && index === 5) {
       const full = next.join("");
-      // Only auto-submit when idle — never while loading or after success
+
       if (full.length === 6 && status !== "loading" && status !== "success") submitCode(full);
     }
   };
@@ -181,9 +200,9 @@ const InlineVerifyPanel: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// LoginPage
-// ---------------------------------------------------------------------------
+
+
+
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -205,10 +224,10 @@ const LoginPage: React.FC = () => {
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [didAttempt, setDidAttempt] = useState(false);
 
-  // Resend / verify panel state
+
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSent, setResendSent] = useState(false);
-  // When true, hide the normal form and show the inline 6-digit panel
+
   const [showVerifyPanel, setShowVerifyPanel] = useState(false);
 
   const emailRef = useRef<HTMLInputElement>(null);
@@ -231,28 +250,28 @@ const LoginPage: React.FC = () => {
 
   useEffect(() => {
     if (error) clearError();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [email, password]);
 
-  // Reset resend/panel state when email changes
+
   useEffect(() => {
     setResendSent(false);
     setShowVerifyPanel(false);
   }, [email]);
 
-  // ── Detect "email not verified" error ─────────────────────────────────────
+
   const isEmailUnverifiedError =
     error?.toLowerCase().includes("verify your email") ||
     error?.toLowerCase().includes("verification");
 
-  // ── Resend from the error banner (before panel is shown) ──────────────────
+
   const handleResendVerification = async () => {
     if (!email.trim()) return;
     setResendLoading(true);
     try {
       await post("/auth/resend-verification", { email: email.trim() });
       setResendSent(true);
-      // Now open the verify panel so the user has somewhere to type the code
+
       setShowVerifyPanel(true);
     } catch {
       /* backend always returns 200 */
@@ -261,12 +280,12 @@ const LoginPage: React.FC = () => {
     }
   };
 
-  // ── Open verify panel from the "enter code" button ────────────────────────
+
   const handleOpenVerifyPanel = () => {
     setShowVerifyPanel(true);
   };
 
-  // ── Validation ────────────────────────────────────────────────────────────
+
 
   const validate = (): boolean => {
     const errors: { email?: string; password?: string } = {};
@@ -291,7 +310,7 @@ const LoginPage: React.FC = () => {
     await login({ email: email.trim(), password });
   };
 
-  // ── If verify panel is open, render it instead of the full form ───────────
+
   if (showVerifyPanel) {
     return (
       <div className="login-page">
@@ -311,7 +330,7 @@ const LoginPage: React.FC = () => {
             <InlineVerifyPanel
               email={email.trim()}
               onVerified={() => {
-                // Verification succeeded — close panel and let them log in normally
+
                 setShowVerifyPanel(false);
                 clearError();
               }}
@@ -327,7 +346,7 @@ const LoginPage: React.FC = () => {
     );
   }
 
-  // ── Normal login form ─────────────────────────────────────────────────────
+
 
   return (
     <div className="login-page">
@@ -525,10 +544,6 @@ const LoginPage: React.FC = () => {
     </div>
   );
 };
-
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
 
 const pageStyles = `
   .login-page {

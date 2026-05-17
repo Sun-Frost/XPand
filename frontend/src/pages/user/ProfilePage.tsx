@@ -1,3 +1,36 @@
+/**
+ * ProfilePage — /profile
+ *
+ * Full user profile view and editor. Data comes from useProfile() (profile fields,
+ * education, work experience, certifications, projects) and useSkills() (badge info).
+ *
+ * Badge display:
+ *   Pulls verified skills from useSkills(), sorts Gold first then Silver then Bronze,
+ *   and renders BadgePip components. The XpDisplay shows xpBalance read-only.
+ *
+ * Next Goal panel:
+ *   Evaluates four milestones in order (first badge, 5 badges, first Silver, first
+ *   Gold) and surfaces the first incomplete one as the active goal with a progress bar.
+ *
+ * Modal system:
+ *   All CRUD modals (edit profile, add/edit/delete for each section) are controlled
+ *   by a single ModalState discriminated union. Only one modal is open at a time.
+ *   Modals use the shared Modal portal component so they layer above the bottom nav.
+ *
+ * Avatar picker:
+ *   Opens as a separate AvatarPicker modal layered on top of the EditProfileModal.
+ *   Avatar keys (e.g. "avatars/females/f1.png") are stored as strings; avatarSrc()
+ *   resolves them to renderable URLs.
+ *
+ * Error display in modals:
+ *   parseSaveError() translates raw Postgres constraint messages into user-readable
+ *   text (null column, unique violation, foreign key) before showing them.
+ *
+ * CollapsibleSection:
+ *   Each experience type (Work, Education, Certifications, Projects) is wrapped in a
+ *   collapsible that defaults open when the section has at least one entry.
+ */
+
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageLayout from "../../components/user/PageLayout";
@@ -15,9 +48,9 @@ import { useSkills, type BadgeLevel } from "../../hooks/user/useSkills";
 import { CITIES } from "../../constants/cities";
 import Modal from "../../components/ui/Modal";
 import AvatarPicker, { avatarSrc } from "../../components/ui/AvatarPicker";
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+
+
+
 
 const parseSaveError = (err: string | null): string | null => {
   if (!err) return null;
@@ -41,24 +74,24 @@ const fmtDate = (d?: string | null): string => {
 const getInitials = (first: string, last: string) =>
   `${first.charAt(0)}${last.charAt(0)}`.toUpperCase();
 
-// Badge tier data
+
 const BADGE_META: Record<BadgeLevel, { label: string; color: string; glow: string; icon: string | React.ReactNode }> = {
   BRONZE: { label: "Bronze", color: "#cd7f32", glow: "rgba(205,127,50,0.4)", icon: <Icon name="medal" /> },
   SILVER: { label: "Silver", color: "#c0c0c0", glow: "rgba(192,192,192,0.4)", icon: <Icon name="medal" /> },
   GOLD:   { label: "Gold",   color: "#ffd700", glow: "rgba(255,215,0,0.5)",   icon: <Icon name="medal" /> },
 };
 
-// ---------------------------------------------------------------------------
-// Skeleton
-// ---------------------------------------------------------------------------
+
+
+
 
 const Skeleton: React.FC<{ h?: number; w?: string; radius?: string }> = ({ h = 20, w = "100%", radius = "var(--radius-md)" }) => (
   <div className="skeleton" style={{ height: h, width: w, borderRadius: radius }} />
 );
 
-// ---------------------------------------------------------------------------
-// Modal shell — uses Portal so navbar/dock never overlap
-// ---------------------------------------------------------------------------
+
+
+
 
 const ModalShell: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
   <Modal onClose={onClose}>
@@ -79,9 +112,9 @@ const MField: React.FC<{ label: string; children: React.ReactNode }> = ({ label,
   </div>
 );
 
-// ---------------------------------------------------------------------------
-// Edit Profile Modal
-// ---------------------------------------------------------------------------
+
+
+
 
 const EditProfileModal: React.FC<{
   initial: UpdateProfilePayload;
@@ -190,9 +223,9 @@ const EditProfileModal: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Education Modal
-// ---------------------------------------------------------------------------
+
+
+
 
 const EMPTY_EDU: EducationPayload = { institutionName: "", degree: "", fieldOfStudy: "", startDate: "", endDate: null, description: null };
 
@@ -259,9 +292,9 @@ const EducationModal: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Work Experience Modal
-// ---------------------------------------------------------------------------
+
+
+
 
 const EMPTY_WORK: WorkExperiencePayload = { jobTitle: "", companyName: "", location: null, startDate: "", endDate: null, description: null };
 
@@ -323,9 +356,9 @@ const WorkModal: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Certification Modal
-// ---------------------------------------------------------------------------
+
+
+
 
 const EMPTY_CERT: CertificationPayload = { name: "", issuingOrganization: "", issueDate: "", expirationDate: null };
 
@@ -377,9 +410,9 @@ const CertModal: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Project Modal
-// ---------------------------------------------------------------------------
+
+
+
 
 const EMPTY_PROJ: ProjectPayload = { title: "", description: null, technologiesUsed: null, projectUrl: null, githubUrl: null, startDate: null, endDate: null };
 
@@ -439,9 +472,9 @@ const ProjectModal: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Delete confirmation
-// ---------------------------------------------------------------------------
+
+
+
 
 const ConfirmDelete: React.FC<{ label: string; onConfirm: () => void; onCancel: () => void }> = ({ label, onConfirm, onCancel }) => (
   <ModalShell title="Confirm Delete" onClose={onCancel}>
@@ -457,9 +490,9 @@ const ConfirmDelete: React.FC<{ label: string; onConfirm: () => void; onCancel: 
   </ModalShell>
 );
 
-// ---------------------------------------------------------------------------
-// Badge component
-// ---------------------------------------------------------------------------
+
+
+
 
 const BadgePip: React.FC<{ level: BadgeLevel; skillName: string; category: string }> = ({ level, skillName, category }) => {
   const meta = BADGE_META[level];
@@ -474,9 +507,9 @@ const BadgePip: React.FC<{ level: BadgeLevel; skillName: string; category: strin
   );
 };
 
-// ---------------------------------------------------------------------------
-// XP Display (read-only balance — no level/progress concepts)
-// ---------------------------------------------------------------------------
+
+
+
 
 const XpDisplay: React.FC<{ xp: number }> = ({ xp }) => (
   <div className="xp-display">
@@ -486,9 +519,9 @@ const XpDisplay: React.FC<{ xp: number }> = ({ xp }) => (
   </div>
 );
 
-// ---------------------------------------------------------------------------
-// Next Goal panel
-// ---------------------------------------------------------------------------
+
+
+
 
 const NextGoalPanel: React.FC<{
   skills: ReturnType<typeof useSkills>["data"];
@@ -536,9 +569,9 @@ const NextGoalPanel: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Stats strip
-// ---------------------------------------------------------------------------
+
+
+
 
 const StatStrip: React.FC<{ badges: number; certs: number; projects: number; work: number }> = ({ badges, certs, projects, work }) => (
   <div className="stat-strip">
@@ -556,9 +589,9 @@ const StatStrip: React.FC<{ badges: number; certs: number; projects: number; wor
   </div>
 );
 
-// ---------------------------------------------------------------------------
-// Collapsible section for secondary info
-// ---------------------------------------------------------------------------
+
+
+
 
 const CollapsibleSection: React.FC<{
   title: string;
@@ -590,9 +623,9 @@ const CollapsibleSection: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Timeline item
-// ---------------------------------------------------------------------------
+
+
+
 
 const TimelineItem: React.FC<{
   title: string;
@@ -629,9 +662,9 @@ const TimelineItem: React.FC<{
   </div>
 );
 
-// ---------------------------------------------------------------------------
-// Modal state type
-// ---------------------------------------------------------------------------
+
+
+
 
 type ModalState =
   | { type: "edit-profile" }
@@ -649,9 +682,9 @@ type ModalState =
   | { type: "del-proj"; item: Project }
   | null;
 
-// ---------------------------------------------------------------------------
-// Profile Page
-// ---------------------------------------------------------------------------
+
+
+
 
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
@@ -670,7 +703,7 @@ const ProfilePage: React.FC = () => {
   const [modal, setModal] = useState<ModalState>(null);
   const closeModal = () => { setModal(null); clearSaveStatus(); };
 
-  // ── Error ──────────────────────────────────────────────
+
   if (error) {
     return (
       <PageLayout pageTitle="Profile">
@@ -685,7 +718,7 @@ const ProfilePage: React.FC = () => {
     );
   }
 
-  // ── Loading ────────────────────────────────────────────
+
   if (isLoading || !profile) {
     return (
       <PageLayout pageTitle="Profile">
@@ -700,12 +733,12 @@ const ProfilePage: React.FC = () => {
     );
   }
 
-  // Derived data
+
   const verifiedSkills = skillsData?.skills.filter(s => s.verification?.currentBadge) ?? [];
   const goldBadges   = verifiedSkills.filter(s => s.verification?.currentBadge === "GOLD");
   const silverBadges = verifiedSkills.filter(s => s.verification?.currentBadge === "SILVER");
   const bronzeBadges = verifiedSkills.filter(s => s.verification?.currentBadge === "BRONZE");
-  // Show Gold first, then Silver, then Bronze
+
   const badgesSorted = [...goldBadges, ...silverBadges, ...bronzeBadges];
 
   const hasLinks = profile.linkedinUrl || profile.githubUrl || profile.portfolioUrl;
@@ -1024,9 +1057,9 @@ const ProfilePage: React.FC = () => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
+
+
+
 
 const pageStyles = `
   /* Loading skeleton */

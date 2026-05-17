@@ -1,23 +1,24 @@
-// SkillsLibraryPage.tsx — XPand  (Full Redesign)
-// ─────────────────────────────────────────────────────────────────────────────
-// DESIGN PRINCIPLES:
-//   · ONE accent color for the page: primary violet (--color-primary-400).
-//     Tier differentiation via intensity/opacity, not hue changes.
-//   · Badge colors (gold/silver/bronze) are the ONLY multi-color
-//     elements — they earn it because they signal earned achievement.
-//   · Demand score drives a single emerald progress bar, not 4 colors.
-//   · Tier labels use text weight + opacity hierarchy, not color overload.
-//   · Layout mirrors JobsPage: sticky spotlight left, ranked list right.
-//
-// ONBOARDING NUDGE LOGIC:
-//   · Onboarding skill IDs come from the backend (GET /user/skills/onboarding)
-//     via useSkills, merged with any localStorage fallback.
-//   · Popup shows on every fresh login session whenever there are still unverified
-//     onboarding skills. "Remind me later" hides it for the rest of that login
-//     session only — no persistent trigger button is shown afterward.
-//   · Dismissal is keyed to the current access token so a new login always
-//     re-shows the popup (assuming skills are still pending).
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * SkillsLibraryPage — /skills
+ *
+ * Full skill library with demand ranking, badge status, and test entry points.
+ *
+ * Demand score and tier assignment:
+ *   Computed client-side by sorting skills descending and mapping rank position to
+ *   a 0–100 score ((remaining / total) * 100). Tiers (Hot / High / Growing /
+ *   Specialized) are threshold-based on that score. No backend demand data is used.
+ *
+ * Onboarding nudge popup:
+ *   Shown once per login session when the user has unverified onboarding skills
+ *   (IDs stored in localStorage under ONBOARDING_SKILLS_KEY, merged with
+ *   useSkills().data.onboardingSkillIds from the backend).
+ *   Dismissal is written to sessionStorage keyed to the last 16 chars of the JWT,
+ *   so a new login always re-shows the popup if skills are still pending.
+ *
+ * Gold Achievements panel:
+ *   Separate from the ranked list — gold-verified skills are removed from the main
+ *   ranking (no point showing a test CTA for them) and displayed in a dedicated panel.
+ */
 
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
@@ -27,9 +28,9 @@ import { useSkills } from "../../hooks/user/useSkills";
 import type { SkillWithVerification, BadgeLevel } from "../../hooks/user/useSkills";
 import PageHeader, { PAGE_CONFIGS } from "../../components/ui/PageHeader";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Design tokens — unified primary violet accent, tier differentiation via opacity only
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const ACCENT = {
   color:  "var(--color-primary-400)",
@@ -38,9 +39,9 @@ const ACCENT = {
   bg:     "var(--color-primary-glow)",
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tier config — same logic, restrained visual identity
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 type DemandTier = "hot" | "high" | "growing" | "specialized";
 
@@ -50,7 +51,7 @@ interface TierConfig {
   icon: IconName;
   tagline: string;
   scoreMin: number;
-  // Visual intensity — drives opacity/weight, NOT hue
+
   intensity: number; // 1.0 → 0.4
 }
 
@@ -61,9 +62,9 @@ const TIERS: TierConfig[] = [
   { id: "specialized", label: "Specialized", icon: "filter-specialized"  as IconName, tagline: "Niche but valuable in specific roles",               scoreMin: 0,  intensity: 0.38 },
 ];
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Badge config — these DO keep their earned colors
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const BADGE_CFG: Record<BadgeLevel, {
   label: string; icon: IconName; color: string; bg: string; border: string;
@@ -78,9 +79,9 @@ const CATEGORY_ICONS: Record<string, IconName> = {
   Cloud: "cat-cloud", Mobile: "cat-mobile",
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Enriched skill — unchanged logic
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 interface EnrichedSkill {
   raw: SkillWithVerification;
@@ -121,9 +122,9 @@ function enrichSkills(skills: SkillWithVerification[]): EnrichedSkill[] {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// OnboardingNudgePopup — shown when the user has unverified onboarding skills
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 interface OnboardingNudgePopupProps {
   skills: EnrichedSkill[];
@@ -237,9 +238,9 @@ const OnboardingNudgePopup: React.FC<OnboardingNudgePopupProps> = ({ skills, onV
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CoverageBar — replaces InsightsBar, cleaner and monochrome
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const CoverageBar: React.FC<{
   total: number; verified: number; gold: number; silver: number; bronze: number; topTier: number;
@@ -288,9 +289,9 @@ const CoverageBar: React.FC<{
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SkillSpotlight — left sticky panel
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const SkillSpotlight: React.FC<{
   skill: EnrichedSkill;
@@ -395,9 +396,9 @@ const SkillSpotlight: React.FC<{
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SkillRow — ranked list entry
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const SkillRow: React.FC<{
   skill: EnrichedSkill;
@@ -487,9 +488,9 @@ const SkillRow: React.FC<{
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Recommended strip
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const RecommendedStrip: React.FC<{
   items: EnrichedSkill[];
@@ -526,9 +527,9 @@ const RecommendedStrip: React.FC<{
   </div>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Skeletons
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const SkeletonSpotlight: React.FC = () => (
   <div className="sspt sspt--skeleton">
@@ -554,9 +555,9 @@ const SkeletonRow: React.FC<{ i: number }> = ({ i }) => (
   </div>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GoldAchievementsPanel — showcase of mastered (Gold) skills
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const GoldAchievementsPanel: React.FC<{ skills: EnrichedSkill[] }> = ({ skills }) => {
   if (skills.length === 0) return null;
@@ -596,9 +597,9 @@ const GoldAchievementsPanel: React.FC<{ skills: EnrichedSkill[] }> = ({ skills }
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Page
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const SkillsLibraryPage: React.FC = () => {
   const navigate = useNavigate();
@@ -608,28 +609,28 @@ const SkillsLibraryPage: React.FC = () => {
   const [activeFilter,   setActiveFilter]   = useState<"all" | "verified" | "unverified">("all");
   const [spotlightSkill, setSpotlightSkill] = useState<EnrichedSkill | null>(null);
 
-  // ── Onboarding nudge popup ─────────────────────────────────────────────────
-  // showNudge=true  → modal open
-  // showNudge=false → dismissed for this login session
-  //
-  // Dismissal is stored in sessionStorage keyed to the current access token.
-  // This means:
-  //   · "Remind me later" hides the popup AND the trigger button for the rest
-  //     of this login session.
-  //   · On every NEW login (new token) the popup reappears if skills are pending.
-  //   · Navigating away and back within the same session keeps it hidden.
+
+
+
+
+
+
+
+
+
+
   const [showNudge, setShowNudge] = useState<boolean>(false);
 
-  // Derive the dismissal key from the login token so it resets on each login.
+
   const getNudgeDismissedKey = useCallback((): string => {
     const token = localStorage.getItem("access_token") ?? "anon";
-    // Use a short hash of the token — just enough to distinguish login sessions.
+
     const shortKey = token.slice(-16);
     return `onboarding_nudge_dismissed_${shortKey}`;
   }, []);
 
-  // Once skills data arrives, decide whether to show the nudge.
-  // Runs whenever data loads (and on refetch).
+
+
   useEffect(() => {
     if (!data || isLoading) return;
     const hasPending = data.onboardingSkillIds.size > 0 &&
@@ -641,36 +642,36 @@ const SkillsLibraryPage: React.FC = () => {
       setShowNudge(false);
       return;
     }
-    // Only show if not already dismissed this login session.
+
     const dismissedKey = getNudgeDismissedKey();
     const alreadyDismissed = sessionStorage.getItem(dismissedKey) === "1";
     if (!alreadyDismissed) setShowNudge(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [data, isLoading]);
 
   const dismissNudge = useCallback(() => {
-    // Hide the popup for the rest of this login session.
-    // No trigger button is shown — on next login, the popup reappears
-    // automatically if there are still unverified onboarding skills.
+
+
+
     const dismissedKey = getNudgeDismissedKey();
     sessionStorage.setItem(dismissedKey, "1");
     setShowNudge(false);
   }, [getNudgeDismissedKey]);
 
-  // ── Derived data ───────────────────────────────────────────────────────────
+
 
   const enriched = useMemo<EnrichedSkill[]>(() => {
     if (!data?.skills.length) return [];
     return enrichSkills(data.skills);
   }, [data]);
 
-  // Onboarding skills cross-referenced against the enriched list
+
   const onboardingSkills = useMemo<EnrichedSkill[]>(() => {
     if (!data?.onboardingSkillIds.size) return [];
     return enriched.filter((s) => data.onboardingSkillIds.has(s.raw.id));
   }, [enriched, data]);
 
-  // If all onboarding skills are now verified, auto-dismiss and clean up localStorage
+
   useEffect(() => {
     if (onboardingSkills.length === 0) return;
     const allVerified = onboardingSkills.every((s) => s.badge !== null || s.raw.isGoldVerified);
@@ -734,7 +735,7 @@ const SkillsLibraryPage: React.FC = () => {
     });
   };
 
-  // Navigate to test from the nudge popup
+
   const handleNudgeVerify = (skill: EnrichedSkill) => {
     setShowNudge(false);
     goToTest(skill);
@@ -897,9 +898,9 @@ const SkillsLibraryPage: React.FC = () => {
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const styles = `
 

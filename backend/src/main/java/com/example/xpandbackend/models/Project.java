@@ -6,6 +6,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Set;
 
+/**
+ * A portfolio project on a user's profile.
+ * Each project can be tagged with one or more {@link Skill}s via {@link ProjectSkill}.
+ */
 @Entity
 @Table(name = "project")
 @Data
@@ -18,14 +22,11 @@ public class Project {
     @Column(name = "project_id")
     private Integer id;
 
-    // UserSkillVerification.java, Application.java, UserPurchase.java,
-// Education.java, WorkExperience.java, Certification.java, Project.java
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private User user;
-
 
     @Column(nullable = false)
     private String title;

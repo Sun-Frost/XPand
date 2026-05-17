@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDate;
 
+/** A work experience entry on a user's profile. A null {@code endDate} means "present". */
 @Entity
 @Table(name = "work_experience")
 @Data
@@ -16,14 +17,11 @@ public class WorkExperience {
     @Column(name = "work_id")
     private Integer id;
 
-    // UserSkillVerification.java, Application.java, UserPurchase.java,
-// Education.java, WorkExperience.java, Certification.java, Project.java
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private User user;
-
 
     @Column(nullable = false)
     private String jobTitle;

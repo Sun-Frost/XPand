@@ -14,6 +14,20 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Manages job postings, applications, and saved jobs.
+ *
+ * <h3>Applying to a job</h3>
+ * A user may only apply if they hold a verified badge for every MAJOR skill
+ * required by the job. An optional {@code priorityPurchaseId} redeems a
+ * previously purchased {@code PRIORITY_SLOT} voucher to rank the application
+ * at position 1, 2, or 3 in the company's applicant list.
+ *
+ * <h3>Deadline gate</h3>
+ * Companies may not change an application's status until the job deadline has
+ * passed. This ensures all applications are collected before decisions are made.
+ * Similarly, applicant CVs are locked behind the deadline in {@code CompanyService}.
+ */
 @Service
 @RequiredArgsConstructor
 public class JobService {
@@ -27,18 +41,18 @@ public class JobService {
     private final UserSkillVerificationRepository verificationRepository;
     private final UserPurchaseRepository userPurchaseRepository;
     private final ChallengeEvaluationService challengeEvaluationService;
-
     private final SavedJobRepository savedJobRepository;
-    // -------- Job Postings --------
 
+    // ── Saved jobs ────────────────────────────────────────────────────────────
+
+    /** Returns whether the given job is saved by the user. */
     public Map<String, Boolean> isJobSaved(Integer userId, Integer jobId) {
-        boolean saved = savedJobRepository.existsByUserIdAndJobId(userId, jobId);
-        return Map.of("saved", saved);
+        return Map.of("saved", savedJobRepository.existsByUserIdAndJobId(userId, jobId));
     }
 
+    /** Saves a job for the user. Idempotent — silently ignores duplicate saves. */
     @Transactional
     public void saveJob(Integer userId, Integer jobId) {
-        // Idempotent — silently ignore duplicate saves
         if (savedJobRepository.existsByUserIdAndJobId(userId, jobId)) return;
 
         User user = userRepository.findById(userId)
@@ -51,12 +65,16 @@ public class JobService {
         savedJobRepository.save(savedJob);
     }
 
+    /** Removes a saved job. Silently succeeds if the job was not saved. */
     @Transactional
     public void unsaveJob(Integer userId, Integer jobId) {
         savedJobRepository.findByUserIdAndJobId(userId, jobId)
                 .ifPresent(savedJobRepository::delete);
     }
 
+    // ── Job postings ──────────────────────────────────────────────────────────
+
+    /** Returns all active jobs whose deadline is in the future. */
     public List<JobPostingResponse> getActiveJobs() {
         return jobPostingRepository.findActiveJobs(LocalDateTime.now()).stream()
                 .map(this::mapToJobResponse).collect(Collectors.toList());
@@ -66,6 +84,7 @@ public class JobService {
         return mapToJobResponse(findJob(jobId));
     }
 
+    /** Returns the number of non-withdrawn priority-slot applications for a job. */
     public long getActivePrioritySlotCount(Integer jobId) {
         return applicationRepository.countActivePrioritySlots(jobId);
     }
@@ -75,6 +94,10 @@ public class JobService {
                 .map(this::mapToJobResponse).collect(Collectors.toList());
     }
 
+    /**
+     * Creates a new job posting. Requires at least one MAJOR skill and a deadline.
+     * The company must be admin-approved.
+     */
     @Transactional
     public JobPostingResponse createJob(Integer companyId, CreateJobRequest request) {
         Company company = companyRepository.findById(companyId)
@@ -95,6 +118,10 @@ public class JobService {
         return mapToJobResponse(job);
     }
 
+    /**
+     * Updates an existing job posting. Expired jobs cannot be edited.
+     * Skill requirements are replaced entirely on each update.
+     */
     @Transactional
     public JobPostingResponse updateJob(Integer companyId, Integer jobId, CreateJobRequest request) {
         JobPosting job = findJob(jobId);
@@ -108,6 +135,7 @@ public class JobService {
         return mapToJobResponse(job);
     }
 
+    /** Soft-deletes a job by setting its status to CLOSED. */
     @Transactional
     public void deleteJob(Integer companyId, Integer jobId) {
         JobPosting job = findJob(jobId);
@@ -116,8 +144,18 @@ public class JobService {
         jobPostingRepository.save(job);
     }
 
-    // -------- Applications --------
+    // ── Applications ──────────────────────────────────────────────────────────
 
+    /**
+     * Submits a job application. Validates that:
+     * <ul>
+     *   <li>The job is ACTIVE and the deadline has not passed.</li>
+     *   <li>The user has not already applied.</li>
+     *   <li>The user holds a verified badge for every MAJOR required skill.</li>
+     * </ul>
+     * If {@code priorityPurchaseId} is provided, the corresponding purchase is
+     * validated and marked as used, and the application is ranked at the slot's position.
+     */
     @Transactional
     public ApplicationResponse applyToJob(Integer userId, ApplyJobRequest request) {
         JobPosting job = findJob(request.getJobId());
@@ -131,7 +169,6 @@ public class JobService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found."));
 
-        // Check that user has badges for all MAJOR skills
         List<JobSkillRequirement> majorSkills = jobSkillRequirementRepository
                 .findByJobPostingIdAndImportance(request.getJobId(), ImportanceLevel.MAJOR);
 
@@ -152,7 +189,6 @@ public class JobService {
         application.setJob(job);
         application.setStatus(ApplicationStatus.PENDING);
 
-        // Handle priority slot
         if (request.getPriorityPurchaseId() != null) {
             UserPurchase purchase = userPurchaseRepository.findById(request.getPriorityPurchaseId())
                     .orElseThrow(() -> new ResourceNotFoundException("Purchase not found."));
@@ -161,15 +197,13 @@ public class JobService {
             if (!purchase.getItem().getItemType().equals(ItemType.PRIORITY_SLOT)) {
                 throw new BadRequestException("Invalid purchase type for priority slot.");
             }
-            // Only enforce job match if the voucher was pre-associated with a specific job.
-            // Vouchers purchased without a job (the normal flow) can be used on any job.
+            // Vouchers purchased without a job can be used on any job.
+            // Vouchers pre-associated with a specific job are restricted to that job.
             if (purchase.getAssociatedJob() != null
                     && !purchase.getAssociatedJob().getId().equals(request.getJobId())) {
                 throw new BadRequestException("Priority slot is for a different job.");
             }
 
-            // Resolve the integer rank from the purchase's SlotRank enum.
-            // FIRST=1 (top, 150 XP), SECOND=2 (mid, 120 XP), THIRD=3 (base, 100 XP).
             SlotRank slotRank = purchase.getSlotRank();
             if (slotRank == null) throw new BadRequestException("Purchase has no slot rank.");
             int rank = switch (slotRank) {
@@ -178,11 +212,9 @@ public class JobService {
                 case THIRD  -> 3;
             };
 
-            // Check that this specific rank slot is not already taken for this job.
-            boolean rankTaken = applicationRepository
-                    .existsByJobIdAndPrioritySlotRank(request.getJobId(), rank);
-            if (rankTaken) throw new BadRequestException(
-                    "Priority slot rank " + rank + " is already taken for this job.");
+            if (applicationRepository.existsByJobIdAndPrioritySlotRank(request.getJobId(), rank)) {
+                throw new BadRequestException("Priority slot rank " + rank + " is already taken for this job.");
+            }
 
             application.setPrioritySlotRank(rank);
             purchase.setIsUsed(true);
@@ -191,15 +223,18 @@ public class JobService {
 
         applicationRepository.save(application);
 
-        // ── Evaluate job application challenges ──────────────────────────────
         int totalApplications = applicationRepository.countByUserId(userId);
         boolean hasGoldBadge = verificationRepository.findVerifiedByUserId(userId).stream()
                 .anyMatch(v -> v.getCurrentBadge() == BadgeLevel.GOLD);
-        challengeEvaluationService.evaluateJobApplication(userId, totalApplications, hasGoldBadge);  // APPLY_JOB + APPLY_WITH_GOLD
+        challengeEvaluationService.evaluateJobApplication(userId, totalApplications, hasGoldBadge);
 
         return mapToApplicationResponse(application);
     }
 
+    /**
+     * Withdraws an application. Only allowed before the job deadline.
+     * Once withdrawn, the application cannot be re-submitted.
+     */
     @Transactional
     public void withdrawApplication(Integer userId, Integer applicationId) {
         Application application = applicationRepository.findById(applicationId)
@@ -218,6 +253,10 @@ public class JobService {
                 .map(this::mapToApplicationResponse).collect(Collectors.toList());
     }
 
+    /**
+     * Returns applications for a job, ordered by priority slot rank then apply date.
+     * Only the owning company can call this.
+     */
     public List<ApplicationResponse> getJobApplications(Integer companyId, Integer jobId) {
         JobPosting job = findJob(jobId);
         assertCompanyOwns(job, companyId);
@@ -225,13 +264,17 @@ public class JobService {
                 .map(this::mapToApplicationResponse).collect(Collectors.toList());
     }
 
+    /**
+     * Updates an application's status. Blocked until the job deadline has passed.
+     * Triggers {@code GET_ACCEPTED} challenge evaluation when status is SHORTLISTED.
+     */
     @Transactional
-    public ApplicationResponse updateApplicationStatus(Integer companyId, Integer applicationId, ApplicationStatus status) {
+    public ApplicationResponse updateApplicationStatus(Integer companyId, Integer applicationId,
+                                                       ApplicationStatus status) {
         Application application = applicationRepository.findById(applicationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Application not found."));
         assertCompanyOwns(application.getJob(), companyId);
 
-        // 🔒 DEADLINE GATE — decisions are locked until the job deadline has passed.
         if (application.getJob().getDeadline() != null
                 && application.getJob().getDeadline().isAfter(LocalDateTime.now())) {
             throw new ForbiddenException("Decisions locked until deadline.");
@@ -240,14 +283,14 @@ public class JobService {
         application.setStatus(status);
         applicationRepository.save(application);
 
-        // ── Evaluate GET_ACCEPTED challenge on ACCEPTED status ───────────────
-        // Fixed: was firing on SHORTLISTED — GET_ACCEPTED maps to ACCEPTED
         if (status == ApplicationStatus.SHORTLISTED) {
             challengeEvaluationService.evaluateAcceptance(application.getUser().getId());
         }
 
         return mapToApplicationResponse(application);
     }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
 
     private void setJobFields(JobPosting job, CreateJobRequest r) {
         job.setTitle(r.getTitle());
@@ -265,8 +308,7 @@ public class JobService {
             Skill skill = skillRepository.findById(s.getSkillId())
                     .orElseThrow(() -> new ResourceNotFoundException("Skill not found: " + s.getSkillId()));
             if (!skill.getIsActive()) throw new BadRequestException("Skill is inactive: " + skill.getName());
-            JobSkillRequirement req = new JobSkillRequirement(job, skill, s.getImportance());
-            jobSkillRequirementRepository.save(req);
+            jobSkillRequirementRepository.save(new JobSkillRequirement(job, skill, s.getImportance()));
         }
     }
 

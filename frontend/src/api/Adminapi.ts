@@ -1,38 +1,39 @@
-/* ============================================================
-   adminApi.ts
-   All admin API calls — wraps the shared axios instance.
-   Maps 1-to-1 with AdminController.java endpoints.
-   ============================================================ */
+/**
+ * adminApi.ts
+ *
+ * All admin API calls — wraps the shared axios instance.
+ * Maps 1-to-1 with AdminController.java endpoints.
+ */
 
 import { get, post, put, patch, del } from "./axios";
 
-// ── Types ──────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────
 
 export interface UserProfileResponse {
-  id:               number;
-  email:            string;
-  firstName:        string;
-  lastName:         string;
-  phoneNumber?:     string;
-  country?:         string;
-  city?:            string;
+  id:                 number;
+  email:              string;
+  firstName:          string;
+  lastName:           string;
+  phoneNumber?:       string;
+  country?:           string;
+  city?:              string;
   professionalTitle?: string;
-  aboutMe?:         string;
-  xpBalance?:       number;
-  isSuspended?:     boolean;
-  createdAt:        string;
+  aboutMe?:           string;
+  xpBalance?:         number;
+  isSuspended?:       boolean;
+  createdAt:          string;
 }
 
 export interface CompanyProfileResponse {
-  id:          number;
-  email:       string;
-  companyName: string;
+  id:           number;
+  email:        string;
+  companyName:  string;
   description?: string;
   websiteUrl?:  string;
   industry?:    string;
   location?:    string;
-  isApproved:  boolean;
-  createdAt:   string;
+  isApproved:   boolean;
+  createdAt:    string;
 }
 
 export interface SkillResponse {
@@ -42,7 +43,7 @@ export interface SkillResponse {
   isActive: boolean;
 }
 
-// ChallengeType enum values — must match backend exactly
+/** Must match ChallengeType.java exactly. */
 export type ChallengeType =
   | "COMPLETE_PROFILE"
   | "ADD_PROJECT"
@@ -66,13 +67,13 @@ export interface ChallengeResponse {
   id:             number;
   title:          string;
   description:    string;
-  type:           ChallengeType;   // was challengeType: string
-  conditionValue: number;          // was targetValue
+  type:           ChallengeType;
+  conditionValue: number;
   xpReward:       number;
-  isActive:       boolean;         // new field
+  isActive:       boolean;
   isRepeatable:   boolean;
-  startDate?:     string;          // new field
-  endDate?:       string;          // new field
+  startDate?:     string;
+  endDate?:       string;
 }
 
 export interface StoreItemResponse {
@@ -83,7 +84,7 @@ export interface StoreItemResponse {
   itemType:    string;
 }
 
-// ── Create / Update Payloads ──────────────────────────────────
+// ── Request payloads ──────────────────────────────────────────
 
 export interface CreateSkillPayload {
   name:     string;
@@ -93,13 +94,13 @@ export interface CreateSkillPayload {
 export interface CreateChallengePayload {
   title:          string;
   description:    string;
-  type:           ChallengeType;   // was challengeType: string
-  conditionValue: number;          // was targetValue
+  type:           ChallengeType;
+  conditionValue: number;
   xpReward:       number;
-  isActive:       boolean;         // new field
+  isActive:       boolean;
   isRepeatable:   boolean;
-  startDate?:     string;          // new field (ISO string)
-  endDate?:       string;          // new field (ISO string)
+  startDate?:     string;
+  endDate?:       string;
 }
 
 export interface CreateStoreItemPayload {
@@ -110,49 +111,49 @@ export interface CreateStoreItemPayload {
 }
 
 export interface CreateQuestionPayload {
-  skillId:        number;
+  skillId:         number;
   difficultyLevel: string;
-  questionText:   string;
-  optionA:        string;
-  optionB:        string;
-  optionC:        string;
-  optionD:        string;
-  correctAnswer:  string;
-  points:         number;
+  questionText:    string;
+  optionA:         string;
+  optionB:         string;
+  optionC:         string;
+  optionD:         string;
+  correctAnswer:   string;
+  points:          number;
 }
 
-// ── Admin API ─────────────────────────────────────────────────
+// ── API functions ─────────────────────────────────────────────
 
 // Users
-export const adminGetAllUsers        = ()                             => get<UserProfileResponse[]>("/admin/users");
-export const adminSuspendUser        = (userId: number)               => patch<string>(`/admin/users/${userId}/suspend`);
-export const adminDeleteUser         = (userId: number)               => del<void>(`/admin/users/${userId}`);
+export const adminGetAllUsers         = ()                                      => get<UserProfileResponse[]>("/admin/users");
+export const adminSuspendUser         = (userId: number)                        => patch<string>(`/admin/users/${userId}/suspend`);
+export const adminDeleteUser          = (userId: number)                        => del<void>(`/admin/users/${userId}`);
 
-// Companies  (no delete — suspend only)
-export const adminGetAllCompanies    = ()                             => get<CompanyProfileResponse[]>("/admin/companies");
-export const adminGetPendingCompanies= ()                             => get<CompanyProfileResponse[]>("/admin/companies/pending");
-export const adminApproveCompany     = (id: number)                   => patch<CompanyProfileResponse>(`/admin/companies/${id}/approve`);
-export const adminSuspendCompany     = (id: number)                   => patch<string>(`/admin/companies/${id}/suspend`);
+// Companies
+export const adminGetAllCompanies     = ()                                      => get<CompanyProfileResponse[]>("/admin/companies");
+export const adminGetPendingCompanies = ()                                      => get<CompanyProfileResponse[]>("/admin/companies/pending");
+export const adminApproveCompany      = (id: number)                            => patch<CompanyProfileResponse>(`/admin/companies/${id}/approve`);
+export const adminSuspendCompany      = (id: number)                            => patch<string>(`/admin/companies/${id}/suspend`);
 
 // Skills
-export const adminGetAllSkills       = ()                             => get<SkillResponse[]>("/admin/skills");
-export const adminCreateSkill        = (p: CreateSkillPayload)        => post<SkillResponse>("/admin/skills", p);
-export const adminUpdateSkill        = (id: number, p: CreateSkillPayload) => put<SkillResponse>(`/admin/skills/${id}`, p);
-export const adminDeactivateSkill    = (id: number)                   => patch<string>(`/admin/skills/${id}/deactivate`);
-export const adminActivateSkill      = (id: number)                   => patch<string>(`/admin/skills/${id}/activate`);
+export const adminGetAllSkills        = ()                                      => get<SkillResponse[]>("/admin/skills");
+export const adminCreateSkill         = (p: CreateSkillPayload)                 => post<SkillResponse>("/admin/skills", p);
+export const adminUpdateSkill         = (id: number, p: CreateSkillPayload)     => put<SkillResponse>(`/admin/skills/${id}`, p);
+export const adminDeactivateSkill     = (id: number)                            => patch<string>(`/admin/skills/${id}/deactivate`);
+export const adminActivateSkill       = (id: number)                            => patch<string>(`/admin/skills/${id}/activate`);
 
 // Questions
-export const adminCreateQuestion     = (p: CreateQuestionPayload)     => post<string>("/admin/questions", p);
-export const adminDeleteQuestion     = (questionId: number)           => del<void>(`/admin/questions/${questionId}`);
+export const adminCreateQuestion      = (p: CreateQuestionPayload)              => post<string>("/admin/questions", p);
+export const adminDeleteQuestion      = (questionId: number)                    => del<void>(`/admin/questions/${questionId}`);
 
 // Challenges
-export const adminGetAllChallenges   = ()                             => get<ChallengeResponse[]>("/admin/challenges");
-export const adminCreateChallenge    = (p: CreateChallengePayload)    => post<ChallengeResponse>("/admin/challenges", p);
-export const adminUpdateChallenge    = (id: number, p: CreateChallengePayload) => put<ChallengeResponse>(`/admin/challenges/${id}`, p);
-export const adminDeleteChallenge    = (id: number)                   => del<void>(`/admin/challenges/${id}`);
+export const adminGetAllChallenges    = ()                                      => get<ChallengeResponse[]>("/admin/challenges");
+export const adminCreateChallenge     = (p: CreateChallengePayload)             => post<ChallengeResponse>("/admin/challenges", p);
+export const adminUpdateChallenge     = (id: number, p: CreateChallengePayload) => put<ChallengeResponse>(`/admin/challenges/${id}`, p);
+export const adminDeleteChallenge     = (id: number)                            => del<void>(`/admin/challenges/${id}`);
 
 // Store Items
-export const adminGetAllStoreItems   = ()                             => get<StoreItemResponse[]>("/admin/store-items");
-export const adminCreateStoreItem    = (p: CreateStoreItemPayload)    => post<StoreItemResponse>("/admin/store-items", p);
-export const adminUpdateStoreItem    = (id: number, p: CreateStoreItemPayload) => put<StoreItemResponse>(`/admin/store-items/${id}`, p);
-export const adminDeleteStoreItem    = (id: number)                   => del<void>(`/admin/store-items/${id}`);
+export const adminGetAllStoreItems    = ()                                      => get<StoreItemResponse[]>("/admin/store-items");
+export const adminCreateStoreItem     = (p: CreateStoreItemPayload)             => post<StoreItemResponse>("/admin/store-items", p);
+export const adminUpdateStoreItem     = (id: number, p: CreateStoreItemPayload) => put<StoreItemResponse>(`/admin/store-items/${id}`, p);
+export const adminDeleteStoreItem     = (id: number)                            => del<void>(`/admin/store-items/${id}`);

@@ -4,6 +4,14 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
 
+/**
+ * Represents a job seeker on the XPand platform.
+ * <p>
+ * Users can register via email/password (LOCAL) or Google OAuth (GOOGLE).
+ * OAuth users will have a null {@code passwordHash} and a populated {@code providerId}.
+ * Email verification is required for LOCAL users before they can log in.
+ * </p>
+ */
 @Entity
 @Table(name = "users")
 @Data
@@ -19,7 +27,7 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
-    // Nullable: Google-OAuth users have no password
+    /** Null for Google OAuth users who have never set a password. */
     @Column(name = "password_hash")
     private String passwordHash;
 
@@ -40,7 +48,8 @@ public class User {
     @Column(nullable = false)
     private Integer xpBalance = 0;
 
-    // ── Login tracking for challenge evaluation ───────────────────────────────
+    // ── Login streak tracking (used by challenge evaluation) ──────────────────
+
     @Column
     private LocalDateTime lastLoginDate;
 
@@ -51,26 +60,30 @@ public class User {
     private Integer loginsThisWeek = 0;
 
     // ── Email verification ────────────────────────────────────────────────────
+
     /** True once the user submits the correct 6-digit verification code. */
     @Column(nullable = false)
     private boolean emailVerified = false;
 
     /**
-     * 6-digit numeric code (stored as String to preserve leading zeros) sent to
-     * the user's email at registration and on resend.  Cleared after verification.
+     * 6-digit numeric code (stored as String to preserve leading zeros).
+     * Sent at registration and on resend. Cleared after successful verification
+     * and reused as a password-reset code when the forgot-password flow is triggered.
      */
     @Column
     private String verificationCode;
 
     // ── OAuth ─────────────────────────────────────────────────────────────────
+
     /**
-     * Authentication provider.  LOCAL = email/password.  GOOGLE = OAuth.
-     * Stored as a string so new providers can be added without a DB migration.
+     * Authentication provider: {@code "LOCAL"} for email/password,
+     * {@code "GOOGLE"} for OAuth. Stored as a string so new providers
+     * can be added without a DB migration.
      */
     @Column(nullable = false)
     private String provider = "LOCAL";
 
-    /** Google's unique user id (sub claim) — null for LOCAL users. */
+    /** Google's unique user identifier (the {@code sub} claim). Null for LOCAL users. */
     @Column
     private String providerId;
 

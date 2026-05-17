@@ -24,7 +24,6 @@ export interface UserSkillVerification {
   verifiedDate: string | null;
   lastAttemptDate: string | null;
 }
-
 export interface SkillWithVerification extends SkillItem {
   verification?: UserSkillVerification;
   /** True if the user has used all 3 monthly attempts */

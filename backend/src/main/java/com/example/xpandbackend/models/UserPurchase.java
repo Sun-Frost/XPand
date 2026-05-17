@@ -5,6 +5,22 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
 
+/**
+ * Records an XP store purchase made by a user.
+ * <p>
+ * Three item types are supported:
+ * <ul>
+ *   <li>{@code MOCK_INTERVIEW} – must be linked to a specific job at purchase time;
+ *       consumed when the interview is submitted.</li>
+ *   <li>{@code READINESS_REPORT} – consumed when the report is generated.</li>
+ *   <li>{@code PRIORITY_SLOT} – purchased as a voucher (no job needed at purchase time)
+ *       and redeemed during job application. {@code slotRank} indicates which position
+ *       (FIRST / SECOND / THIRD) the voucher is for.</li>
+ * </ul>
+ * {@code isUsed} is set to {@code true} the moment the purchase is consumed so it
+ * cannot be redeemed a second time.
+ * </p>
+ */
 @Entity
 @Table(name = "user_purchase")
 @Data
@@ -17,8 +33,6 @@ public class UserPurchase {
     @Column(name = "purchase_id")
     private Integer id;
 
-    // UserSkillVerification.java, Application.java, UserPurchase.java,
-// Education.java, WorkExperience.java, Certification.java, Project.java
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     @ToString.Exclude
@@ -29,12 +43,15 @@ public class UserPurchase {
     @JoinColumn(name = "item_id", nullable = false)
     private StoreItem item;
 
+    /** Required for MOCK_INTERVIEW purchases; null for all other types. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "associated_job_id")
     private JobPosting associatedJob;
 
-    // Populated only for PRIORITY_SLOT purchases; null for all other item types.
-    // Stored as a string so DB values are human-readable (FIRST / SECOND / THIRD).
+    /**
+     * Priority slot rank (FIRST / SECOND / THIRD). Only populated for
+     * {@code PRIORITY_SLOT} purchases; null for all other item types.
+     */
     @Enumerated(EnumType.STRING)
     @Column(name = "slot_rank")
     private SlotRank slotRank;

@@ -5,6 +5,14 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
 
+/**
+ * Records a user's application to a specific job posting.
+ * <p>
+ * An application may optionally hold a {@code prioritySlotRank} (1–3) when the
+ * user redeemed a {@link UserPurchase} of type {@code PRIORITY_SLOT} at apply time.
+ * Priority-ranked applications are surfaced first in the company's applicant list.
+ * </p>
+ */
 @Entity
 @Table(name = "application")
 @Data
@@ -17,8 +25,6 @@ public class Application {
     @Column(name = "application_id")
     private Integer id;
 
-    // UserSkillVerification.java, Application.java, UserPurchase.java,
-// Education.java, WorkExperience.java, Certification.java, Project.java
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     @ToString.Exclude
@@ -29,6 +35,10 @@ public class Application {
     @JoinColumn(name = "job_id", nullable = false)
     private JobPosting job;
 
+    /**
+     * Rank of the priority slot used (1 = highest, 3 = lowest).
+     * Null when the user applied without a priority slot voucher.
+     */
     private Integer prioritySlotRank;
 
     @Enumerated(EnumType.STRING)

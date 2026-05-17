@@ -1,3 +1,30 @@
+/**
+ * ApplicationsPage — /applications
+ *
+ * Lists all of the current user's job applications with status tracking.
+ *
+ * StatusTimeline:
+ *   Three-step visual progress indicator (Submitted → Under Review → Decision).
+ *   Steps style themselves based on application status: done (green check),
+ *   active (cyan pulse), special (purple ◈ for shortlisted), failed (red for rejected).
+ *   The connecting line between steps fills green once the left step is done.
+ *
+ * Priority badge:
+ *   If the application used a priority slot, a gold banner shows the slot rank
+ *   (Priority Queue — Position #N) above the timeline.
+ *
+ * Sort order:
+ *   SHORTLISTED → PENDING → REJECTED → WITHDRAWN. Active applications surface first.
+ *
+ * Withdraw confirmation:
+ *   Two-step inline confirm (avoids accidental withdrawal). Only available for
+ *   PENDING applications — already-decided applications cannot be withdrawn.
+ *
+ * Tab counts:
+ *   Derived from the full applications array on each render, so they stay in sync
+ *   with the active filter without a separate state variable.
+ */
+
 import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import PageLayout from "../../components/user/PageLayout";
@@ -5,9 +32,6 @@ import { Icon } from "../../components/ui/Icon";
 import { useApplications } from "../../hooks/user/useApplications";
 import type { ApplicationResponse, ApplicationStatus } from "../../hooks/user/useApplications";
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
 
 const STATUS_CONFIG: Record<
   ApplicationStatus,
@@ -90,9 +114,9 @@ function timeAgo(iso: string): string {
   return `${months}mo ago`;
 }
 
-// ---------------------------------------------------------------------------
-// Timeline
-// ---------------------------------------------------------------------------
+
+
+
 
 const StatusTimeline: React.FC<{ status: ApplicationStatus; prioritySlotRank?: number | null }> = ({
   status,
@@ -146,9 +170,9 @@ const StatusTimeline: React.FC<{ status: ApplicationStatus; prioritySlotRank?: n
   );
 };
 
-// ---------------------------------------------------------------------------
-// ApplicationCard
-// ---------------------------------------------------------------------------
+
+
+
 
 const ApplicationCard: React.FC<{
   app: ApplicationResponse;
@@ -266,9 +290,9 @@ const ApplicationCard: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Skeleton
-// ---------------------------------------------------------------------------
+
+
+
 
 const SkeletonCard: React.FC = () => (
   <div className="ap-card ap-skeleton-card animate-fade-in">
@@ -291,9 +315,9 @@ const SkeletonCard: React.FC = () => (
   </div>
 );
 
-// ---------------------------------------------------------------------------
-// Stats Bar
-// ---------------------------------------------------------------------------
+
+
+
 
 const StatsBar: React.FC<{
   total: number;
@@ -326,9 +350,9 @@ const StatsBar: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// ApplicationsPage
-// ---------------------------------------------------------------------------
+
+
+
 
 const ApplicationsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -464,9 +488,9 @@ const ApplicationsPage: React.FC = () => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
+
+
+
 
 const styles = `
   /* ── Header ──────────────────────────────────────────── */

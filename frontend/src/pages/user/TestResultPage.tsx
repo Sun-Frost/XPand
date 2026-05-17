@@ -1,12 +1,38 @@
+/**
+ * TestResultPage — /skills/result
+ *
+ * Displays the outcome of a completed skill test. Receives TestResultData via
+ * React Router location.state (set by SkillTestPage after a successful submit).
+ * If state is missing (e.g. direct navigation), shows an empty state.
+ *
+ * ScoreDial:
+ *   SVG arc ring animating from 0 to the score percentage. Three small dots mark
+ *   the Bronze/Silver/Gold thresholds on the ring circumference. Stroke color
+ *   matches the earned badge tier.
+ *
+ * Score thresholds (raw points, not percentage):
+ *   Bronze ≥ 18 pts, Silver ≥ 24 pts, Gold ≥ 28 pts.
+ *   The backend returns both scorePercent (0–100 normalised) and score (raw points).
+ *   The threshold display uses raw points; the dial uses scorePercent.
+ *
+ * Answer review:
+ *   Toggled by the "Review Answers" button. Renders all questions with the user's
+ *   answer highlighted. correctAnswer is only present in the response when the
+ *   backend includes questionResults — if absent, the review shows which option
+ *   was selected without revealing correct/incorrect.
+ *
+ * AnimatedNumber:
+ *   Counts up to a target value using requestAnimationFrame with an ease-out curve.
+ *   Used for the XP earned display.
+ */
+
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Icon, type IconName } from "../../components/ui/Icon";
 import type { TestResultData, QuestionDTO } from "../../hooks/user/useSkillTest";
 import type { BadgeLevel } from "../../hooks/user/useSkills";
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
+
 
 const BADGE_CONFIG: Record<BadgeLevel, {
   label: string; icon: IconName; cls: string;
@@ -56,9 +82,9 @@ const THRESHOLDS = [
   { pct: 90, label: "Gold", cls: "gold" },
 ];
 
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
+
+
+
 
 const AnimatedNumber: React.FC<{ target: number; duration?: number; suffix?: string }> = ({
   target, duration = 1400, suffix = "",
@@ -127,16 +153,16 @@ const XpFloater: React.FC<{ xp: number }> = ({ xp }) => {
   return <div className="xp-gain result-xp-float" style={{ position: "relative" }}><Icon name="xp" size={14} label="" /> +{xp.toLocaleString()} XP</div>;
 };
 
-// ---------------------------------------------------------------------------
-// Answer review helper — works with or without correctAnswer
-// ---------------------------------------------------------------------------
+
+
+
 
 const QuestionReview: React.FC<{
   q: QuestionDTO;
   index: number;
   userAnswer: string | undefined;
 }> = ({ q, index, userAnswer }) => {
-  // correctAnswer is only available if backend returned questionResults
+
   const correctAnswer = q.correctAnswer;
   const isCorrect = correctAnswer ? userAnswer === correctAnswer : undefined;
   const diffConfig = DIFFICULTY_LABELS[q.difficultyLevel] ?? { label: q.difficultyLevel, cls: "" };
@@ -177,7 +203,7 @@ const QuestionReview: React.FC<{
             else if (isUser && !isCorrect) cls += " review-opt--wrong";
             else cls += " review-opt--neutral";
           } else {
-            // No correct answer from backend — just highlight user's choice
+
             cls += isUser ? " review-opt--selected" : " review-opt--neutral";
           }
 
@@ -204,9 +230,9 @@ const QuestionReview: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// TestResultPage
-// ---------------------------------------------------------------------------
+
+
+
 
 const TestResultPage: React.FC = () => {
   const navigate = useNavigate();
@@ -379,9 +405,9 @@ const TestResultPage: React.FC = () => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
+
+
+
 
 const styles = `
   .result-page { max-width: 1100px; width:100%; margin-left:auto; margin-right:auto; }

@@ -1,11 +1,27 @@
-// JobsPage.tsx — XPand  (Full Redesign)
-// ─────────────────────────────────────────────────────────────────────────────
-// LAYOUT: Split view — sticky left panel shows the focused job in full detail.
-//         Right panel is a ranked, filterable list of all jobs.
-//         Match score drives everything: colour, rank position, CTA urgency.
-//
-// LOGIC / HOOKS: 100% identical to original. Zero behaviour changed.
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * JobsPage — /jobs
+ *
+ * Split-view job browser: sticky spotlight panel on the left shows the focused job,
+ * ranked scrollable list on the right.
+ *
+ * Match score drives everything — sort order, color coding, CTA urgency.
+ * The list defaults to best-match-first; a toggle switches to lowest-first.
+ *
+ * useSavedJobs:
+ *   Fetches saved state for all visible job IDs in one parallel Promise.all.
+ *   Uses raw fetch() with credentials — note this bypasses the project's axios
+ *   interceptor. If the auth header format ever changes, this hook needs updating
+ *   to use the axios helpers instead. Toggle is optimistic with a revert on failure.
+ *
+ * Spotlight focus:
+ *   Defaults to the top-ranked job. Hovering a row updates the spotlight instantly
+ *   (no debounce) so the panel always reflects the last hovered item.
+ *
+ * Saved-only filter:
+ *   The useSavedJobs hook fetches saved status for the current visible job IDs.
+ *   Filtering to "Saved" then hides all jobs not in savedIds — if the IDs list
+ *   changes (e.g. after a refetch), the saved states are re-fetched.
+ */
 
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -13,18 +29,18 @@ import PageLayout from "../../components/user/PageLayout";
 import { Icon, type IconName } from "../../components/ui/Icon";
 import { useJobs } from "../../hooks/user/useJobs";
 import type { JobWithMeta, JobType } from "../../hooks/user/useJobs";
-import { BadgeLevel } from "../../types";
+import type { BadgeLevel } from "../../hooks/user/useSkills";
 import PageHeader, { PAGE_CONFIGS } from "../../components/ui/PageHeader";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// useSavedJobs — fetches saved state and provides toggle helpers
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 function useSavedJobs(jobIds: number[]) {
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [pending,  setPending]  = useState<Set<number>>(new Set());
 
-  // Fetch saved status for all visible jobs
+
   useEffect(() => {
     if (jobIds.length === 0) return;
     Promise.all(
@@ -37,7 +53,7 @@ function useSavedJobs(jobIds: number[]) {
     ).then((results) => {
       setSavedIds(new Set(results.filter((r) => r.saved).map((r) => r.id)));
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [jobIds.join(",")]);
 
   const toggleSave = useCallback(async (jobId: number, e?: React.MouseEvent) => {
@@ -45,7 +61,7 @@ function useSavedJobs(jobIds: number[]) {
     if (pending.has(jobId)) return;
     const isSaved = savedIds.has(jobId);
     setPending((p) => new Set(p).add(jobId));
-    // Optimistic update
+
     setSavedIds((prev) => {
       const next = new Set(prev);
       isSaved ? next.delete(jobId) : next.add(jobId);
@@ -57,7 +73,7 @@ function useSavedJobs(jobIds: number[]) {
         credentials: "include",
       });
     } catch {
-      // Revert on error
+
       setSavedIds((prev) => {
         const next = new Set(prev);
         isSaved ? next.add(jobId) : next.delete(jobId);
@@ -71,9 +87,9 @@ function useSavedJobs(jobIds: number[]) {
   return { savedIds, toggleSave };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Constants (unchanged)
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const JOB_TYPE_LABELS: Record<string, string> = {
   ALL:       "All",
@@ -91,16 +107,16 @@ const JOB_TYPE_ICONS: Record<string, IconName> = {
 };
 
 const BADGE_CONFIG = {
-  [BadgeLevel.BRONZE]: { icon: "badge-bronze" as IconName, cls: "bronze", label: "Bronze", color: "var(--color-bronze-light)", bg: "var(--color-bronze-bg)", border: "var(--color-bronze-border)" },
-  [BadgeLevel.SILVER]: { icon: "badge-silver" as IconName, cls: "silver", label: "Silver", color: "var(--color-silver-light)", bg: "var(--color-silver-bg)", border: "var(--color-silver-border)" },
-  [BadgeLevel.GOLD]:   { icon: "badge-gold"   as IconName, cls: "gold",   label: "Gold",   color: "var(--color-gold-light)",   bg: "var(--color-gold-bg)",   border: "var(--color-gold-border)"   },
+  ["BRONZE"]: { icon: "badge-bronze" as IconName, cls: "bronze", label: "Bronze", color: "var(--color-bronze-light)", bg: "var(--color-bronze-bg)", border: "var(--color-bronze-border)" },
+  ["SILVER"]: { icon: "badge-silver" as IconName, cls: "silver", label: "Silver", color: "var(--color-silver-light)", bg: "var(--color-silver-bg)", border: "var(--color-silver-border)" },
+  ["GOLD"]:   { icon: "badge-gold"   as IconName, cls: "gold",   label: "Gold",   color: "var(--color-gold-light)",   bg: "var(--color-gold-bg)",   border: "var(--color-gold-border)"   },
 };
 
 type SortDir = "asc" | "desc";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers (unchanged logic)
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 function getDeadlineBadge(deadline: string): { label: string; urgent: boolean } {
   const daysLeft = Math.ceil((new Date(deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
@@ -125,9 +141,9 @@ function getStatusConfig(status: string | undefined): { label: string; color: st
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// JobSpotlight — left sticky panel showing the focused job
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const JobSpotlight: React.FC<{
   job: JobWithMeta;
@@ -234,7 +250,7 @@ const JobSpotlight: React.FC<{
           <div className="jspot__skills-heading">Required Skills</div>
           <div className="jspot__skills-list">
             {major.map((s) => {
-              const bc = s.userBadge ? BADGE_CONFIG[s.userBadge] : null;
+              const bc = s.userBadge ? BADGE_CONFIG[s.userBadge as BadgeLevel] : null;
               return (
                 <div key={s.skillId} className="jspot__skill-row">
                   <span className={`jspot__skill-chip ${bc ? "jspot__skill-chip--" + bc.cls : "jspot__skill-chip--missing"}`}>
@@ -251,7 +267,7 @@ const JobSpotlight: React.FC<{
               <div className="jspot__skills-heading" style={{ marginTop: 10 }}>Nice to Have</div>
               <div className="jspot__skills-list">
                 {minor.slice(0, 4).map((s) => {
-                  const bc = s.userBadge ? BADGE_CONFIG[s.userBadge] : null;
+                  const bc = s.userBadge ? BADGE_CONFIG[s.userBadge as BadgeLevel] : null;
                   return (
                     <span key={s.skillId} className={`jspot__skill-chip jspot__skill-chip--minor ${bc ? "jspot__skill-chip--" + bc.cls : ""}`}>
                       {bc ? <Icon name={bc.icon} size={11} label="" /> : "○"}
@@ -287,9 +303,9 @@ const JobSpotlight: React.FC<{
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// JobRow — compact row in the ranked list
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const JobRow: React.FC<{
   job: JobWithMeta;
@@ -338,7 +354,7 @@ const JobRow: React.FC<{
         {/* Skill pills — only show on active or desktop */}
         <div className="jrow__skills">
           {topSkills.map((s) => {
-            const bc = s.userBadge ? BADGE_CONFIG[s.userBadge] : null;
+            const bc = s.userBadge ? BADGE_CONFIG[s.userBadge as BadgeLevel] : null;
             return (
               <span
                 key={s.skillId}
@@ -381,9 +397,9 @@ const JobRow: React.FC<{
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Stats bar — sits between header and filters
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const StatsBar: React.FC<{
   total: number; highMatch: number; applied: number; saved: number;
@@ -417,9 +433,9 @@ const StatsBar: React.FC<{
   </div>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Skeleton
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const SkeletonSpotlight: React.FC = () => (
   <div className="jspot jspot--skeleton">
@@ -450,9 +466,9 @@ const SkeletonRow: React.FC<{ i: number }> = ({ i }) => (
   </div>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// JobsPage
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const JobsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -481,7 +497,7 @@ const JobsPage: React.FC = () => {
   const highMatchCount = jobs.filter((j) => j.matchScore >= 80).length;
   const savedCount     = savedIds.size;
 
-  // Spotlight defaults to top-ranked job
+
   const activeJob = focusedJob ?? visibleJobs[0] ?? null;
 
   if (error) {
@@ -691,9 +707,9 @@ const JobsPage: React.FC = () => {
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const styles = `
 

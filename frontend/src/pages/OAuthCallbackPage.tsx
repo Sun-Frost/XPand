@@ -1,19 +1,17 @@
+/**
+ * OAuthCallbackPage — /oauth-callback
+ *
+ * Landing page after a successful Google OAuth2 redirect from the Spring backend.
+ * The backend's OAuth2LoginSuccessHandler appends ?token=&role=&id= to this URL.
+ *
+ * Reads those params, normalises the role to lowercase (backend sends uppercase),
+ * writes the same localStorage keys as the normal login flow (access_token, role,
+ * user), then navigates to the correct dashboard.
+ */
+
 import React, { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Icon } from "../components/ui/Icon";
-
-// ---------------------------------------------------------------------------
-// OAuthCallbackPage
-//
-// Route: /oauth-callback
-//
-// After the user authenticates with Google, the backend's OAuth2LoginSuccessHandler
-// redirects here with:
-//   /oauth-callback?token=<jwt>&role=<user|company|admin>&id=<int>
-//
-// This page reads those params, persists them to localStorage (same shape
-// as the normal login flow), and navigates to the appropriate dashboard.
-// ---------------------------------------------------------------------------
 
 const OAuthCallbackPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -25,21 +23,21 @@ const OAuthCallbackPage: React.FC = () => {
     const role  = searchParams.get("role");
     const id    = searchParams.get("id");
 
-    // Required debug log — helps diagnose OAuth callback issues
+
     console.log("[OAuthCallback] Received params:", { token: token ? "present" : "missing", role, id });
 
-    // If backend reported an OAuth failure it redirects to /login?error=oauth_failed
-    // (handled by LoginPage). But guard here too.
+
+
     if (!token || !role) {
       console.error("[OAuthCallback] Missing token or role — OAuth flow failed.");
       setError("OAuth login failed. Please try again.");
       return;
     }
 
-    // Normalise role to lowercase — backend sends "USER" but we store "user"
+
     const normalisedRole = role.toLowerCase();
 
-    // Persist to localStorage — same keys as the normal login hook
+
     localStorage.setItem("access_token", token);
     localStorage.setItem("role", normalisedRole);
     localStorage.setItem(
@@ -49,7 +47,7 @@ const OAuthCallbackPage: React.FC = () => {
 
     console.log("[OAuthCallback] Stored token. Navigating for role:", normalisedRole);
 
-    // Navigate to the correct dashboard based on role
+
     if (normalisedRole === "admin") {
       navigate("/admin/overview", { replace: true });
     } else if (normalisedRole === "company") {

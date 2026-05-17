@@ -1,10 +1,33 @@
-import xpandLogo from "../assets/xpand.svg";
-// RegisterPage.tsx  — UPDATED
-// Changes vs original:
-//  • Step 2 "Profile Picture URL" field replaced with AvatarPicker modal trigger
-//  • Profile picture is now stored as the avatar key string (e.g. "avatars/females/f1.png")
-//  • All other logic is identical to the original
+/**
+ * RegisterPage — /register
+ *
+ * Multi-step registration for both job seekers (USER) and companies (COMPANY).
+ * The role picker is the entry point; selection forks into two completely separate flows.
+ *
+ * USER flow (3 steps):
+ *   Step 1 — Account: email + password. On success, saves registeredEmail and shows
+ *             UserVerifyPending (six-digit OTP). After verification the user can
+ *             optionally continue to Steps 2 and 3 within the same session by
+ *             logging them in silently with the credentials they just entered.
+ *   Step 2 — Profile: optional fields (avatar, location, links, bio). Calls PUT
+ *             /user/profile. Skippable.
+ *   Step 3 — Skills: select known skills from the full library. Selected IDs are
+ *             stored in localStorage under ONBOARDING_SKILLS_KEY and reconciled
+ *             against the backend on the Skills page after first login.
+ *             If the user is still in the post-verify continuation session,
+ *             POST /user/skills/onboarding is called immediately instead.
+ *
+ * COMPANY flow (single form):
+ *   Submits all company fields at once, then shows CompanyVerifyPending.
+ *   Company accounts require admin approval after email verification, so
+ *   success redirects to /login?notice=company_pending.
+ *
+ * AvatarPicker:
+ *   Avatar keys are relative paths (e.g. "avatars/females/f1.png") stored as strings,
+ *   not URLs. The avatarSrc() helper from AvatarPicker resolves them to full paths.
+ */
 
+import xpandLogo from "../assets/xpand.svg";
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRegister } from "../hooks/useRegister";
@@ -13,9 +36,9 @@ import { CITIES } from "../constants/cities";
 import AvatarPicker, { avatarSrc } from "../components/ui/AvatarPicker";
 import { Icon } from "../components/ui/Icon";
 
-// ---------------------------------------------------------------------------
-// Types (unchanged)
-// ---------------------------------------------------------------------------
+
+
+
 
 type Role = "user" | "company";
 
@@ -28,7 +51,7 @@ interface AccountFields {
 }
 
 interface ProfileFields {
-  profilePicture: string;   // now stores avatar key, e.g. "avatars/females/f1.png"
+  profilePicture: string;  
   phoneNumber: string;
   country: string;
   city: string;
@@ -67,9 +90,9 @@ const INITIAL_COMPANY: CompanyFields = {
   description: "", industry: "", location: "", websiteUrl: "",
 };
 
-// ---------------------------------------------------------------------------
-// Password strength (unchanged)
-// ---------------------------------------------------------------------------
+
+
+
 
 type StrengthLevel = 0 | 1 | 2 | 3;
 
@@ -112,9 +135,9 @@ const PasswordRequirements: React.FC<{ password: string }> = ({ password }) => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// Validation (unchanged)
-// ---------------------------------------------------------------------------
+
+
+
 
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
@@ -160,9 +183,9 @@ const validateCompany = (f: CompanyFields): CompanyErrors => {
   return e;
 };
 
-// ---------------------------------------------------------------------------
-// Shared form components (unchanged)
-// ---------------------------------------------------------------------------
+
+
+
 
 interface FieldProps {
   id: string; label: string; type?: string; placeholder?: string;
@@ -211,9 +234,9 @@ const TextAreaField: React.FC<{
   </div>
 );
 
-// ---------------------------------------------------------------------------
-// Step indicator (unchanged)
-// ---------------------------------------------------------------------------
+
+
+
 
 const STEPS = ["Account", "Profile", "Skills"];
 
@@ -238,9 +261,9 @@ const StepIndicator: React.FC<{ current: number }> = ({ current }) => (
   </div>
 );
 
-// ---------------------------------------------------------------------------
-// Orbs background (unchanged)
-// ---------------------------------------------------------------------------
+
+
+
 
 const Orbs: React.FC = () => (
   <div className="register-bg" aria-hidden="true">
@@ -250,9 +273,9 @@ const Orbs: React.FC = () => (
   </div>
 );
 
-// ---------------------------------------------------------------------------
-// Role Picker (unchanged)
-// ---------------------------------------------------------------------------
+
+
+
 
 const RolePicker: React.FC<{ onSelect: (r: Role) => void; onSignIn: () => void }> = ({ onSelect, onSignIn }) => (
   <div className="register-page">
@@ -302,9 +325,9 @@ const RolePicker: React.FC<{ onSelect: (r: Role) => void; onSignIn: () => void }
   </div>
 );
 
-// ---------------------------------------------------------------------------
-// Company form (unchanged)
-// ---------------------------------------------------------------------------
+
+
+
 
 const BACKEND_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace("/api", "")
@@ -434,9 +457,9 @@ const CompanyRegisterForm: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// SixDigitVerify (unchanged)
-// ---------------------------------------------------------------------------
+
+
+
 
 const SixDigitVerify: React.FC<{
   email: string;
@@ -582,9 +605,9 @@ const SixDigitVerify: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// UserVerifyPending / CompanyVerifyPending (unchanged)
-// ---------------------------------------------------------------------------
+
+
+
 
 const UserVerifyPending: React.FC<{
   email: string;
@@ -670,9 +693,9 @@ const CompanyVerifyPending: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Main RegisterPage
-// ---------------------------------------------------------------------------
+
+
+
 
 export const ONBOARDING_SKILLS_KEY = "onboarding_skill_ids";
 
@@ -685,7 +708,7 @@ const RegisterPage: React.FC = () => {
   const [registeredEmail, setRegisteredEmail] = useState("");
   const [postVerify, setPostVerify] = useState(false);
 
-  // User flow state
+
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [account, setAccount] = useState<AccountFields>(INITIAL_ACCOUNT);
   const [accountErrors, setAccountErrors] = useState<AccountErrors>({});
@@ -700,7 +723,7 @@ const RegisterPage: React.FC = () => {
   const [selectedSkillIds, setSelectedSkillIds] = useState<Set<number>>(new Set());
   const [skillSearch, setSkillSearch] = useState("");
 
-  // ── NEW: avatar picker state ──────────────────────────────────────────────
+
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
 
   const firstNameRef = useRef<HTMLInputElement>(null);
@@ -811,7 +834,7 @@ const RegisterPage: React.FC = () => {
     return acc;
   }, {});
 
-  // ── Verification screens ────────────────────────────────────────────────
+
   if (done === "user-verify") return (
     <UserVerifyPending
       email={registeredEmail}
@@ -851,7 +874,7 @@ const RegisterPage: React.FC = () => {
     />
   );
 
-  // ── User flow ─────────────────────────────────────────────────────────
+
   const selectedAvatarSrc = avatarSrc(profile.profilePicture);
 
   return (
@@ -1141,9 +1164,9 @@ const RegisterPage: React.FC = () => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// Styles (original + new avatar trigger styles)
-// ---------------------------------------------------------------------------
+
+
+
 
 const pageStyles = `
   .register-page {

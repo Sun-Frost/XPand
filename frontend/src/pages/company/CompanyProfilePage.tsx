@@ -1,3 +1,27 @@
+/**
+ * CompanyProfilePage — /company/profile
+ *
+ * View and edit the company's public profile.
+ *
+ * Approval status:
+ *   Displayed prominently in both the hero section and the PageHeader right slot.
+ *   The approval notice at the bottom explains the implications of pending status.
+ *
+ * EditModal:
+ *   City selection uses the shared CITIES constant (dropdown) while country is a
+ *   free-text field. Website URL is also free-text with no client-side validation —
+ *   the backend validates the format.
+ *
+ * saveSuccess toast:
+ *   Shown briefly after a successful profile update. Cleared by clearSaveStatus()
+ *   when the edit modal is closed, so it doesn't persist across multiple modal opens.
+ *
+ * InfoRow:
+ *   Renders nothing (returns null) when value is empty/null, so the details card
+ *   only shows populated fields. An empty-state CTA replaces the list when no
+ *   optional fields are filled.
+ */
+
 import React, { useState } from "react";
 import CompanyPageLayout from "../../components/company/companyPageLayout";
 import { Icon } from "../../components/ui/Icon";
@@ -7,16 +31,9 @@ import type { UpdateCompanyProfilePayload } from "../../hooks/company/useCompany
 import { CITIES } from "../../constants/cities";
 import Modal from "../../components/ui/Modal";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 const fmtDateTime = (d: string): string =>
   new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
-
-// ---------------------------------------------------------------------------
-// Edit modal
-// ---------------------------------------------------------------------------
 
 const EditModal: React.FC<{
   initial: UpdateCompanyProfilePayload;
@@ -80,9 +97,9 @@ const EditModal: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Info row
-// ---------------------------------------------------------------------------
+
+
+
 
 const InfoRow: React.FC<{ label: string; value?: string | null }> = ({ label, value }) => {
   if (!value) return null;
@@ -94,9 +111,9 @@ const InfoRow: React.FC<{ label: string; value?: string | null }> = ({ label, va
   );
 };
 
-// ---------------------------------------------------------------------------
-// CompanyProfilePage
-// ---------------------------------------------------------------------------
+
+
+
 
 const CompanyProfilePage: React.FC = () => {
   const { profile, isLoading, isSaving, error, saveError, saveSuccess, updateProfile, clearSaveStatus } = useCompanyProfile();
@@ -260,9 +277,9 @@ const CompanyProfilePage: React.FC = () => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
+
+
+
 
 const styles = `
   /* Hero */

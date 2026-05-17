@@ -4,12 +4,19 @@ import { Icon } from "../ui/Icon";
 import { NavbarPageTitle } from "../ui/PageHeader";
 import xpandLogo from "../../assets/xpand.svg";
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 interface CompanyNavbarProps {
-  companyName: string | null;
-  isApproved:  boolean;
+  companyName:   string | null;
   onToggleTheme: () => void;
   isDarkMode:    boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 const CompanyNavbar: React.FC<CompanyNavbarProps> = ({
   companyName,
@@ -20,6 +27,7 @@ const CompanyNavbar: React.FC<CompanyNavbarProps> = ({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // Close dropdown when clicking outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node))
@@ -41,7 +49,7 @@ const CompanyNavbar: React.FC<CompanyNavbarProps> = ({
     navigate("/login", { replace: true });
   };
 
-  // Real initials from company name — "…" while loading (null)
+  // Build initials from company name — "…" while the profile is loading
   const initials = companyName
     ? companyName
         .trim()
@@ -57,7 +65,11 @@ const CompanyNavbar: React.FC<CompanyNavbarProps> = ({
 
         {/* Left — brand */}
         <div className="navbar__left">
-          <button className="navbar-brand" onClick={() => go("/company/dashboard")} aria-label="XPand home">
+          <button
+            className="navbar-brand"
+            onClick={() => go("/company/dashboard")}
+            aria-label="XPand home"
+          >
             <div className="navbar-brand-mark">
               <img src={xpandLogo} alt="XPand" className="navbar__logo-svg" />
             </div>
@@ -65,24 +77,23 @@ const CompanyNavbar: React.FC<CompanyNavbarProps> = ({
           </button>
         </div>
 
-        {/* Centre */}
+        {/* Centre — sticky page title (populated by PageHeader via data attributes) */}
         <div className="navbar__centre">
           <NavbarPageTitle />
         </div>
 
-        {/* Right — theme + menu */}
+        {/* Right — theme toggle + company menu */}
         <div className="navbar__right">
-
-          {/* Theme toggle */}
           <button
             className="btn btn-ghost btn-icon navbar__icon-btn"
             onClick={onToggleTheme}
             aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
           >
-            {isDarkMode ? <Icon name="sun" size={14} label="" /> : <Icon name="moon" size={14} label="" />}
+            {isDarkMode
+              ? <Icon name="sun"  size={14} label="" />
+              : <Icon name="moon" size={14} label="" />}
           </button>
 
-          {/* Company menu */}
           <div className="navbar__dropdown-anchor" ref={menuRef}>
             <button
               className="navbar__avatar-btn"
@@ -100,14 +111,16 @@ const CompanyNavbar: React.FC<CompanyNavbarProps> = ({
                   <p className="navbar__user-name">{companyName ?? "Company"}</p>
                   <p className="navbar__user-email">Company Account</p>
                 </div>
+
                 <div className="divider" style={{ margin: 0 }} />
+
                 <ul className="navbar__menu-list">
                   {[
-                    { label: "Dashboard",       path: "/company/dashboard", icon: <Icon name="market-intel"    size={14} label="" /> },
-                    { label: "Manage Jobs",      path: "/company/jobs",      icon: <Icon name="briefcase"       size={14} label="" /> },
-                    { label: "Post New Job",     path: "/company/jobs/new",  icon: <Icon name="add-job"         size={14} label="" /> },
-                    { label: "Market Insights",  path: "/company/insights",  icon: <Icon name="filter-growing"  size={14} label="" /> },
-                    { label: "Company Profile",  path: "/company/profile",   icon: <Icon name="profile"         size={14} label="" /> },
+                    { label: "Dashboard",      path: "/company/dashboard", icon: <Icon name="market-intel"   size={14} label="" /> },
+                    { label: "Manage Jobs",    path: "/company/jobs",      icon: <Icon name="briefcase"      size={14} label="" /> },
+                    { label: "Post New Job",   path: "/company/jobs/new",  icon: <Icon name="add-job"        size={14} label="" /> },
+                    { label: "Market Insights",path: "/company/insights",  icon: <Icon name="filter-growing" size={14} label="" /> },
+                    { label: "Company Profile",path: "/company/profile",   icon: <Icon name="profile"        size={14} label="" /> },
                   ].map((item) => (
                     <li key={item.path} role="menuitem">
                       <button className="navbar__menu-item" onClick={() => go(item.path)}>
@@ -117,10 +130,17 @@ const CompanyNavbar: React.FC<CompanyNavbarProps> = ({
                     </li>
                   ))}
                 </ul>
+
                 <div className="divider" style={{ margin: 0 }} />
+
                 <div className="navbar__menu-footer">
-                  <button className="navbar__menu-item navbar__menu-item--danger" onClick={handleSignOut}>
-                    <span className="navbar__menu-icon"><Icon name="logout" size={14} label="" /></span>
+                  <button
+                    className="navbar__menu-item navbar__menu-item--danger"
+                    onClick={handleSignOut}
+                  >
+                    <span className="navbar__menu-icon">
+                      <Icon name="logout" size={14} label="" />
+                    </span>
                     Sign Out
                   </button>
                 </div>
@@ -135,35 +155,40 @@ const CompanyNavbar: React.FC<CompanyNavbarProps> = ({
   );
 };
 
+// ---------------------------------------------------------------------------
+// Local icons
+// ---------------------------------------------------------------------------
+
 const ChevronIcon: React.FC<{ open: boolean }> = ({ open }) => (
-  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"
-    style={{ transform: open ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}>
+  <svg
+    width="12" height="12" viewBox="0 0 12 12" fill="none"
+    style={{ transform: open ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}
+  >
     <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5"
       strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
+
 const styles = `
   .cn-avatar {
-    width: 28px;
-    height: 28px;
+    width: 28px; height: 28px;
     border-radius: var(--radius-md);
     background: linear-gradient(135deg, var(--color-premium, #8B5CF6), var(--color-verified, #34D399));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--font-display);
-    font-size: 10px;
-    font-weight: var(--weight-bold);
-    color: #fff;
-    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-size: 10px;
+    font-weight: var(--weight-bold); color: #fff; flex-shrink: 0;
   }
   .navbar-brand-mark {
     width: 32px; height: 32px; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
   }
   .navbar__logo-svg {
-    width: 32px; height: 32px; object-fit: contain; border-radius: var(--radius-md); display: block;
+    width: 32px; height: 32px; object-fit: contain;
+    border-radius: var(--radius-md); display: block;
   }
   .navbar__centre { flex:1;display:flex;justify-content:center;padding:0 var(--space-6);max-width:520px;margin:0 auto; }
   .navbar-brand { display:flex;align-items:center;gap:var(--space-3);background:none;border:none;cursor:pointer;text-decoration:none;font-family:var(--font-display);font-size:var(--text-xl);font-weight:var(--weight-bold);letter-spacing:var(--tracking-wide);color:var(--color-text-primary); }

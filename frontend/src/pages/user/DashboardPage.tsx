@@ -1,18 +1,35 @@
-/* ============================================================
-   DashboardPage.tsx  — XPand  v7.0
-   "Arena Header + 3D Card Deck"
-
-   LAYOUT:
-   1. ArenaHeader   — Identity Core (from v6, unchanged)
-   2. CardDeck      — Horizontal scroll, 3D flip cards:
-        · Mission          (priority next action)
-        · Market Presence  (visibility score + readiness)
-        · Stats            (5 key metrics)
-        · Market Intel     (skills market bars)
-        · My Skills        (badges)
-        · Quick Actions    (next moves)
-        · Activity         (log)
-   ============================================================ */
+/**
+ * DashboardPage — /dashboard
+ *
+ * The main user home screen. Composed of two major sections:
+ *
+ * ArenaHeader:
+ *   Identity strip with the user's avatar, prestige tier, and XP progress ring.
+ *   Prestige tiers (Prospect → Contender → Proven → Elite → Titan → Legend) are
+ *   computed client-side from xpBalance using fixed XP thresholds. The SVG ring
+ *   animates from 0 to the real fill percentage after mount.
+ *   The status message is context-sensitive: warns about missing skills, Gold badge
+ *   gaps, low visibility score, or upcoming tier milestones.
+ *
+ * CardDeck (horizontal scroll strip of 3D flip cards):
+ *   Each card has a compact front face and an expanded detail back revealed on hover.
+ *   Cards: Mission (priority next action), Market Presence (visibility score),
+ *   Stats (5 key metrics), Market Intel (skill demand bars), My Skills (badge list),
+ *   Quick Actions (smart next-move buttons), Activity (XP transaction log).
+ *
+ * Visibility score (0–100):
+ *   Computed entirely client-side from verifiedSkills, totalBadges, goldBadges,
+ *   completedChallenges, and totalApplications. NOT fetched from the backend.
+ *   Used only for display; does not affect job matching.
+ *
+ * Mission engine:
+ *   Scores several candidate "missions" by urgency (first verified skill > gold badge
+ *   > first application > active challenge > XP spend) and surfaces the top one.
+ *
+ * XP burst effect:
+ *   Triggered when the user clicks a mission CTA. Uses a React portal to render
+ *   a floating "+N XP" label above the button position, then removes it after 1.5s.
+ */
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";

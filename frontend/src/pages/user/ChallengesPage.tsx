@@ -1,20 +1,24 @@
 /**
- * ChallengesPage.tsx — XPand
+ * ChallengesPage — /challenges
  *
- * Full reconstruction. Section-box layout:
- *  1. Streak Header        — flame icon, days, rank, XP bar, XP this week
- *  2. Ending Soon          — time-boxed challenges with countdown
- *  3. Repeatable           — loop challenges, cycle badge
- *  4. Active Challenges    — in-progress + not started
- *  5. Suggested For You    — highest-XP un-started challenges
- *  6. History              — completed log, collapsible
+ * Displays XP-earning challenges organised into contextual sections.
  *
- * Rules:
- *  - No emojis — Icon component only
- *  - No strikethrough on completed items
- *  - No stat pills (DONE / ACTIVE counts) in header
- *  - Repeatable badge on all repeatable items
- *  - Completed = green tint + check icon, never dimmed/crossed
+ * Data sources:
+ *   useChallenges() returns two arrays: active/in-progress challenges and completed
+ *   ones. The page derives sections from these rather than receiving pre-grouped data.
+ *
+ * Section derivation logic:
+ *   Ending Soon  — active challenges with endDate within the current session, sorted
+ *                  by closest deadline. Uses formatCountdown() for the time display.
+ *   Repeatable   — deduped across both arrays (completed repeatables are included
+ *                  because they can be done again). Uses a Set to prevent duplicates.
+ *   Suggested    — top 3 unstarted challenges by XP reward, excluding items already
+ *                  in Ending Soon or Repeatable sections.
+ *   History      — completed challenges, collapsible, shows total XP earned.
+ *
+ * StreakHeader:
+ *   XP progress bar fills from xpForCurrentLevel to xpToNextLevel. The rank label
+ *   and color come from RANK_CONFIG keyed on the backend-provided rank enum string.
  */
 
 import React, { useState } from "react";
@@ -24,9 +28,9 @@ import { useChallenges } from "../../hooks/user/useChallenges";
 import type { ChallengeWithProgress, PlayerStats } from "../../hooks/user/useChallenges";
 import PageHeader, { PAGE_CONFIGS } from "../../components/ui/PageHeader";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const RANK_CONFIG: Record<
   PlayerStats["rank"],
@@ -55,9 +59,9 @@ const CATEGORY_ICON: Record<string, IconName> = {
   MILESTONE: "challenge-milestone", SKILL: "challenge-skill", SOCIAL: "challenge-social",
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 function formatCountdown(iso: string): string {
   const diff = new Date(iso).getTime() - Date.now();
@@ -82,9 +86,9 @@ function completedToday(completedAt: string | null | undefined): boolean {
     d.getDate() === n.getDate();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Section wrapper
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const Section: React.FC<{
   title: string;
@@ -127,9 +131,9 @@ const Section: React.FC<{
   </div>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Mini progress bar
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const MiniBar: React.FC<{ pct: number; color?: string }> = ({ pct, color = "var(--color-primary-400)" }) => (
   <div style={{
@@ -144,9 +148,9 @@ const MiniBar: React.FC<{ pct: number; color?: string }> = ({ pct, color = "var(
   </div>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Challenge row
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const ChallengeRow: React.FC<{
   c: ChallengeWithProgress;
@@ -260,9 +264,9 @@ const ChallengeRow: React.FC<{
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 1. Streak Header
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const StreakHeader: React.FC<{ stats: PlayerStats }> = ({ stats }) => {
   const rank = RANK_CONFIG[stats.rank];
@@ -382,9 +386,9 @@ const StreakHeader: React.FC<{ stats: PlayerStats }> = ({ stats }) => {
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 2. Ending Soon
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const EndingSoonSection: React.FC<{ challenges: ChallengeWithProgress[] }> = ({ challenges }) => {
   if (challenges.length === 0) return null;
@@ -404,9 +408,9 @@ const EndingSoonSection: React.FC<{ challenges: ChallengeWithProgress[] }> = ({ 
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. Repeatable
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const RepeatableSection: React.FC<{ challenges: ChallengeWithProgress[] }> = ({ challenges }) => {
   if (challenges.length === 0) return null;
@@ -430,9 +434,9 @@ const RepeatableSection: React.FC<{ challenges: ChallengeWithProgress[] }> = ({ 
 };
 
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 5. Suggested For You
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const SuggestedSection: React.FC<{ challenges: ChallengeWithProgress[] }> = ({ challenges }) => {
   const suggestions = [...challenges]
@@ -461,9 +465,9 @@ const SuggestedSection: React.FC<{ challenges: ChallengeWithProgress[] }> = ({ c
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. History
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const HistorySection: React.FC<{ completed: ChallengeWithProgress[] }> = ({ completed }) => {
   const [expanded, setExpanded] = useState(false);
@@ -502,9 +506,9 @@ const HistorySection: React.FC<{ completed: ChallengeWithProgress[] }> = ({ comp
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Skeleton
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const Skeleton: React.FC = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
@@ -515,9 +519,9 @@ const Skeleton: React.FC = () => (
   </div>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Page
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const ChallengesPage: React.FC = () => {
   const { challenges, completedChallenges, playerStats, isLoading, error, refetch } = useChallenges();
@@ -535,12 +539,12 @@ const ChallengesPage: React.FC = () => {
     );
   }
 
-  // Derive sections from flat challenge lists
+
   const endingSoon = challenges
     .filter(c => c.endDate && new Date(c.endDate).getTime() > Date.now() && c.status !== "COMPLETED")
     .sort((a, b) => new Date(a.endDate!).getTime() - new Date(b.endDate!).getTime());
 
-  // Repeatable: include completed ones too (they can loop)
+
   const allChallenges = [...challenges, ...completedChallenges];
   const seen = new Set<number>();
   const repeatable = allChallenges.filter(c => {
@@ -549,7 +553,7 @@ const ChallengesPage: React.FC = () => {
     return true;
   });
 
-  // Active: exclude those already in Ending Soon and Repeatable
+
   const endingSoonIds = new Set(endingSoon.map(c => c.challengeId));
   const repeatableIds = new Set(repeatable.map(c => c.challengeId));
   const active = challenges.filter(

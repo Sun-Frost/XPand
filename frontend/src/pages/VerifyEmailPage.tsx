@@ -1,18 +1,24 @@
+/**
+ * VerifyEmailPage — /verify
+ *
+ * Standalone email verification page (distinct from the inline panels in LoginPage
+ * and RegisterPage). Used when the user navigates directly to /verify, e.g. from
+ * an email link.
+ *
+ * Pre-fills the email field from ?email= query param if provided.
+ * Submits POST /auth/verify { email, code } on auto-submit (last digit filled or paste).
+ * Resend calls POST /auth/resend-verification.
+ *
+ * On success, shows a confirmation state and a "Sign In" button — does not
+ * auto-navigate or store a token, because verification alone does not issue a session.
+ */
+
 import xpandLogo from "../assets/xpand.svg";
 import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { post } from "../api/axios";
 import { Icon } from "../components/ui/Icon";
 
-// ---------------------------------------------------------------------------
-// VerifyEmailPage
-//
-// Route: /verify
-// Also reachable via /verify?email=user@example.com (pre-fills the email field)
-//
-// The user receives a 6-digit code in their email and types it here.
-// Calls POST /api/auth/verify  { email, code }
-// ---------------------------------------------------------------------------
 
 type Status = "idle" | "loading" | "success" | "error";
 
@@ -20,41 +26,41 @@ const VerifyEmailPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  // Pre-fill email if passed as a query param (from registration flow)
+
   const [email, setEmail] = useState(searchParams.get("email") ?? "");
-  // Six individual digit slots
+
   const [digits, setDigits] = useState<string[]>(["", "", "", "", "", ""]);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Resend state
+
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSent, setResendSent] = useState(false);
   const [resendError, setResendError] = useState("");
 
-  // Focus first digit box on mount
+
   useEffect(() => {
     inputRefs.current[0]?.focus();
   }, []);
 
-  // ── Digit input handling ──────────────────────────────────────────────────
+
 
   const handleDigitChange = (index: number, value: string) => {
-    // Only accept a single digit
+
     const digit = value.replace(/\D/g, "").slice(-1);
     const next = [...digits];
     next[index] = digit;
     setDigits(next);
     setErrorMsg("");
 
-    // Auto-advance to next box
+
     if (digit && index < 5) {
       inputRefs.current[index + 1]?.focus();
     }
 
-    // Auto-submit when all 6 are filled
+
     if (digit && index === 5) {
       const fullCode = [...next].join("");
       if (fullCode.length === 6) submitCode(email.trim(), fullCode);
@@ -63,12 +69,12 @@ const VerifyEmailPage: React.FC = () => {
 
   const handleDigitKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Backspace" && !digits[index] && index > 0) {
-      // Jump back on backspace when current box is empty
+
       inputRefs.current[index - 1]?.focus();
     }
   };
 
-  // Allow paste of a 6-digit code into any slot
+
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
     const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
@@ -77,14 +83,14 @@ const VerifyEmailPage: React.FC = () => {
     for (let i = 0; i < pasted.length; i++) next[i] = pasted[i];
     setDigits(next);
     setErrorMsg("");
-    // Focus the slot after the last pasted digit, or the last slot
+
     const focusIdx = Math.min(pasted.length, 5);
     inputRefs.current[focusIdx]?.focus();
-    // Auto-submit if all 6 filled
+
     if (pasted.length === 6) submitCode(email.trim(), pasted);
   };
 
-  // ── Submit ────────────────────────────────────────────────────────────────
+
 
   const submitCode = async (emailVal: string, code: string) => {
     if (!emailVal) {
@@ -102,7 +108,7 @@ const VerifyEmailPage: React.FC = () => {
         "Incorrect code or expired. Please try again or request a new code.";
       setErrorMsg(msg);
       setStatus("error");
-      // Clear digits so user can re-enter cleanly
+
       setDigits(["", "", "", "", "", ""]);
       setTimeout(() => inputRefs.current[0]?.focus(), 50);
     }
@@ -118,7 +124,7 @@ const VerifyEmailPage: React.FC = () => {
     submitCode(email.trim(), code);
   };
 
-  // ── Resend ────────────────────────────────────────────────────────────────
+
 
   const handleResend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,7 +138,7 @@ const VerifyEmailPage: React.FC = () => {
     try {
       await post("/auth/resend-verification", { email: email.trim() });
       setResendSent(true);
-      // Reset digits and refocus
+
       setDigits(["", "", "", "", "", ""]);
       setErrorMsg("");
       setStatus("idle");
@@ -144,7 +150,7 @@ const VerifyEmailPage: React.FC = () => {
     }
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
+
 
   return (
     <div className="verify-page">
@@ -274,9 +280,9 @@ const VerifyEmailPage: React.FC = () => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// Scoped styles
-// ---------------------------------------------------------------------------
+
+
+
 
 const pageStyles = `
   .verify-page {

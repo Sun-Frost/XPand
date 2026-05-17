@@ -1,3 +1,27 @@
+/**
+ * CompanyDashboardPage — /company/dashboard
+ *
+ * Landing page for company accounts after login.
+ *
+ * Stats derived from jobs list (no separate stats endpoint):
+ *   active, closed, total job count and unique skill count are computed in a
+ *   useMemo over the jobs array from useCompanyJobs().
+ *
+ * Pending approval banner:
+ *   If the company account hasn't been approved by an admin, a warning banner is
+ *   shown via the PageHeader right slot. Jobs can be created in this state but are
+ *   not visible to candidates until approval.
+ *
+ * Recent Jobs sort:
+ *   Active jobs float to the top; within active jobs the sort order is the backend's
+ *   default (typically creation order). Only the first 5 jobs are shown — the full
+ *   list is on ManageJobsPage.
+ *
+ * Quick action cards:
+ *   Navigate to /company/jobs, /company/insights, and /company/profile.
+ *   They are purely navigational with no data fetching.
+ */
+
 import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import CompanyPageLayout from "../../components/company/companyPageLayout";
@@ -6,9 +30,9 @@ import PageHeader, { PAGE_CONFIGS } from "../../components/ui/PageHeader";
 import { useCompanyProfile, useCompanyJobs } from "../../hooks/company/useCompany";
 import type { JobPostingResponse, ApplicationStatus } from "../../hooks/company/useCompany";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+
+
+
 
 const fmtDate = (d: string | null): string => {
   if (!d) return "—";
@@ -26,9 +50,9 @@ const JOB_TYPE_LABEL: Record<string, string> = {
   CONTRACT: "Contract", INTERNSHIP: "Internship", FREELANCE: "Freelance",
 };
 
-// ---------------------------------------------------------------------------
-// Stat card
-// ---------------------------------------------------------------------------
+
+
+
 
 const Stat: React.FC<{ icon: IconName; value: string | number; label: string; sub?: string; color?: string }> = ({
   icon, value, label, sub, color = "var(--color-verified)"
@@ -43,9 +67,9 @@ const Stat: React.FC<{ icon: IconName; value: string | number; label: string; su
   </div>
 );
 
-// ---------------------------------------------------------------------------
-// CompanyDashboardPage
-// ---------------------------------------------------------------------------
+
+
+
 
 const CompanyDashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -61,7 +85,7 @@ const CompanyDashboardPage: React.FC = () => {
 
   const recentJobs = useMemo(() =>
     [...jobs].sort((a, b) => {
-      // Sort active first, then by deadline proximity
+
       if (a.status === "ACTIVE" && b.status !== "ACTIVE") return -1;
       if (b.status === "ACTIVE" && a.status !== "ACTIVE") return 1;
       return 0;
@@ -192,9 +216,9 @@ const CompanyDashboardPage: React.FC = () => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
+
+
+
 
 const styles = `
   /* Pending banner */

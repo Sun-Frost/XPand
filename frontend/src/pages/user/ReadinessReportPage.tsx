@@ -1,21 +1,36 @@
+/**
+ * ReadinessReportPage — /store/readiness-report/:purchaseId
+ *
+ * Full-page viewer for an AI-generated career readiness report.
+ * Navigated to from CollectionPage or StorePage after purchasing a READINESS_REPORT item.
+ *
+ * If the report hasn't been generated yet (report === null after loading), shows a
+ * generate screen with a feature list. Clicking generate fires the backend which
+ * calls Gemini AI — this typically takes 10–20 seconds.
+ *
+ * parseProseToBlocks():
+ *   Converts Gemini's raw markdown-ish text into typed block objects
+ *   (heading, bullet, numbered, score, paragraph, spacer). The score block type
+ *   is detected by regex matching "N/100" or "Score: N" patterns.
+ *
+ * ScoreDial:
+ *   SVG arc showing the readiness score on a 75% arc (not a full circle).
+ *   The score color shifts from red (< 40) through amber to green (≥ 80).
+ *   extractScore() pulls the first numeric score found in the report prose.
+ *
+ * Sidebar:
+ *   Sticky quick-action buttons (Verify Skills, Earn XP, Browse Jobs, Back to Store)
+ *   and a large score display card. Becomes static on mobile.
+ */
 import React, { useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import PageLayout from "../../components/user/PageLayout";
 import { Icon } from "../../components/ui/Icon";
 import { useReadinessReport } from "../../hooks/user/useStore";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
-/**
- * Renders raw Gemini prose. Detects common patterns:
- *   - Lines starting with "1." "2." etc → numbered list items
- *   - Lines starting with "- " or "• " → bullet list items
- *   - Lines starting with "#" → section headings
- *   - Lines starting with "**text**" → bold headings
- *   - Blank lines → paragraph breaks
- */
+
+
 function parseProseToBlocks(text: string): Array<{ type: string; content: string; level?: number }> {
   const lines = text.split("\n");
   const blocks: Array<{ type: string; content: string; level?: number }> = [];
@@ -27,49 +42,49 @@ function parseProseToBlocks(text: string): Array<{ type: string; content: string
       continue;
     }
 
-    // Markdown headings ## ###
+
     const headingMatch = line.match(/^(#{1,4})\s+(.+)$/);
     if (headingMatch) {
       blocks.push({ type: "heading", content: headingMatch[2].replace(/\*\*/g, ""), level: headingMatch[1].length });
       continue;
     }
 
-    // Bold-only line (acts as heading): **Something**
+
     const boldOnlyMatch = line.match(/^\*\*([^*]+)\*\*:?\s*$/);
     if (boldOnlyMatch) {
       blocks.push({ type: "heading", content: boldOnlyMatch[1], level: 3 });
       continue;
     }
 
-    // Numbered list: "1. " "2. " etc
+
     const numberedMatch = line.match(/^(\d+)\.\s+(.+)$/);
     if (numberedMatch) {
       blocks.push({ type: "numbered", content: numberedMatch[2].replace(/\*\*/g, ""), level: Number(numberedMatch[1]) });
       continue;
     }
 
-    // Bullet list: "- " or "• " or "* "
+
     const bulletMatch = line.match(/^[-•*]\s+(.+)$/);
     if (bulletMatch) {
       blocks.push({ type: "bullet", content: bulletMatch[1].replace(/\*\*/g, "") });
       continue;
     }
 
-    // Score line: "Score: 72/100" or "Readiness Score: 72"
+
     const scoreMatch = line.match(/score[:\s]+(\d+)\s*(?:\/\s*100)?/i);
     if (scoreMatch) {
       blocks.push({ type: "score", content: line.replace(/\*\*/g, ""), level: Number(scoreMatch[1]) });
       continue;
     }
 
-    // Plain paragraph — strip inline ** bold
+
     blocks.push({ type: "paragraph", content: line.replace(/\*\*([^*]+)\*\*/g, "$1") });
   }
 
   return blocks;
 }
 
-// Extract a numeric score from the prose (first occurrence of N/100 or "Score: N")
+
 function extractScore(text: string): number | null {
   const m = text.match(/(\d{1,3})\s*\/\s*100/) ?? text.match(/score[:\s]+(\d{1,3})/i);
   if (m) {
@@ -93,9 +108,9 @@ function scoreLabel(n: number): string {
   return "Early Stage";
 }
 
-// ---------------------------------------------------------------------------
-// Score Dial
-// ---------------------------------------------------------------------------
+
+
+
 
 const ScoreDial: React.FC<{ score: number }> = ({ score }) => {
   const color = scoreColor(score);
@@ -128,9 +143,9 @@ const ScoreDial: React.FC<{ score: number }> = ({ score }) => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// Prose renderer
-// ---------------------------------------------------------------------------
+
+
+
 
 const ProseBlock: React.FC<{ block: ReturnType<typeof parseProseToBlocks>[number] }> = ({ block }) => {
   switch (block.type) {
@@ -173,9 +188,9 @@ const ProseBlock: React.FC<{ block: ReturnType<typeof parseProseToBlocks>[number
   }
 };
 
-// ---------------------------------------------------------------------------
-// ReadinessReportPage
-// ---------------------------------------------------------------------------
+
+
+
 
 const ReadinessReportPage: React.FC = () => {
   const { purchaseId } = useParams<{ purchaseId: string }>();
@@ -194,7 +209,7 @@ const ReadinessReportPage: React.FC = () => {
     [report?.reportContent]
   );
 
-  // ── Loading ──────────────────────────────────────────────────────────────
+
 
   if (isLoading) {
     return (
@@ -208,7 +223,7 @@ const ReadinessReportPage: React.FC = () => {
     );
   }
 
-  // ── Not yet generated ────────────────────────────────────────────────────
+
 
   if (!report) {
     return (
@@ -264,7 +279,7 @@ const ReadinessReportPage: React.FC = () => {
     );
   }
 
-  // ── Report ready ─────────────────────────────────────────────────────────
+
 
   return (
     <PageLayout pageTitle="Readiness Report">
@@ -347,9 +362,9 @@ const ReadinessReportPage: React.FC = () => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
+
+
+
 
 const styles = `
   /* ── Loading ─────────────────────────────────────── */

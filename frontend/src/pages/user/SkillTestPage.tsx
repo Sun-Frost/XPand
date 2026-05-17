@@ -1,3 +1,32 @@
+/**
+ * SkillTestPage — /skills/test/:skillId
+ *
+ * Timed 15-question multiple-choice skill verification test.
+ *
+ * Attempt warning gate:
+ *   An AttemptWarning modal is shown before the test starts. The user must
+ *   explicitly confirm — this is the moment the attempt is consumed on the backend.
+ *   Cancelling navigates back to /skills.
+ *
+ * Timer:
+ *   Counts down from 15:00. Auto-submits when it reaches zero via a ref flag
+ *   (hasAutoSubmitted) to prevent double-submission if the interval fires slightly
+ *   late. The interval is cleared on manual submit or component unmount.
+ *
+ * Question navigation:
+ *   The sidebar grid lets the user jump to any question. Flag state is local only —
+ *   flags are not sent to the backend, they're just a visual reminder to review.
+ *
+ * Code detection in question text:
+ *   Heuristically detects code snippets (semicolons, arrow functions, brackets) and
+ *   renders them in a <pre><code> block separate from the prose prefix when a
+ *   split point (? or :) is found in the question text.
+ *
+ * Result navigation:
+ *   On submit success, navigates to /skills/result with the result object in
+ *   route state. The result page reads it from location.state.
+ */
+
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Icon, type IconName } from "../../components/ui/Icon";
@@ -5,9 +34,7 @@ import { useSkillTest } from "../../hooks/user/useSkillTest";
 import type { AnswerMap, QuestionDTO } from "../../hooks/user/useSkillTest";
 import Modal from "../../components/ui/Modal";
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
+
 
 const TOTAL_SECONDS = 15 * 60; // 15 minutes for 15 questions
 
@@ -25,7 +52,7 @@ function formatTime(seconds: number): string {
 }
 
 function formatCodeLines(code: string): string {
-  // Split on semicolons, keeping the semicolon at end of each line
+
   return code
     .split(";")
     .map((s) => s.trim())
@@ -41,9 +68,9 @@ function getCategoryIcon(category: string): IconName {
   return icons[category] ?? "cat-default";
 }
 
-// ---------------------------------------------------------------------------
-// Attempt warning modal — shown before starting
-// ---------------------------------------------------------------------------
+
+
+
 
 const AttemptWarning: React.FC<{
   skillName: string;
@@ -75,23 +102,23 @@ const AttemptWarning: React.FC<{
   </Modal>
 );
 
-// ---------------------------------------------------------------------------
-// SkillTestPage
-// ---------------------------------------------------------------------------
+
+
+
 
 const SkillTestPage: React.FC = () => {
   const { skillId } = useParams<{ skillId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Skill metadata passed from SkillsLibraryPage via route state
+
   const routeState = location.state as { skillName?: string; skillCategory?: string } | null;
   const skillName = routeState?.skillName ?? "Skill Test";
   const skillCategory = routeState?.skillCategory ?? "";
 
   const { testData, isLoading, isSubmitting, error, result, startTest, submitTest } = useSkillTest();
 
-  // ── Local state ────────────────────────────────────────────
+
   const [showAttemptWarning, setShowAttemptWarning] = useState(true); // show before starting
   const [testStarted, setTestStarted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -102,14 +129,14 @@ const SkillTestPage: React.FC = () => {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasAutoSubmitted = useRef(false);
 
-  // ── Navigate to result when ready ─────────────────────────
+
   useEffect(() => {
     if (result) {
       navigate("/skills/result", { state: { result }, replace: true });
     }
   }, [result, navigate]);
 
-  // ── Timer (only runs after test started) ──────────────────
+
   useEffect(() => {
     if (!testData || isSubmitting || !testStarted) return;
 
@@ -128,9 +155,9 @@ const SkillTestPage: React.FC = () => {
     }, 1000);
 
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [testData, isSubmitting, testStarted]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [testData, isSubmitting, testStarted]);
 
-  // ── Handlers ───────────────────────────────────────────────
+
 
   const handleConfirmStart = async () => {
     setShowAttemptWarning(false);
@@ -165,14 +192,14 @@ const SkillTestPage: React.FC = () => {
     console.log("Questions:", questions.map(q => ({ id: q.id, text: q.questionText.slice(0, 20) })));
     await submitTest(answers);
   }, [answers, submitTest]);
-  // ── Derived ────────────────────────────────────────────────
+
   const questions: QuestionDTO[] = testData?.questions ?? [];
   const current = questions[currentIndex];
   const answeredCount = Object.keys(answers).length;
   const progress = questions.length > 0 ? (answeredCount / questions.length) * 100 : 0;
   const isUrgent = secondsLeft <= 120;
 
-  // ── Pre-start warning ──────────────────────────────────────
+
   if (showAttemptWarning) {
     return (
       <>
@@ -189,7 +216,7 @@ const SkillTestPage: React.FC = () => {
     );
   }
 
-  // ── Loading ────────────────────────────────────────────────
+
   if (isLoading) {
     return (
       <div className="page-content test-page test-loading">
@@ -203,7 +230,7 @@ const SkillTestPage: React.FC = () => {
     );
   }
 
-  // ── Error ──────────────────────────────────────────────────
+
   if (error || (!isLoading && testStarted && !testData)) {
     return (
       <div className="page-content">
@@ -226,7 +253,7 @@ const SkillTestPage: React.FC = () => {
   const isCurrentFlagged = flagged.has(current.id);
   const pointsDisplay = POINTS_BY_DIFFICULTY[current.difficultyLevel] ?? current.points;
 
-  // ── Main render ────────────────────────────────────────────
+
   return (
     <div className="test-page animate-fade-in">
 
@@ -284,12 +311,12 @@ const SkillTestPage: React.FC = () => {
             <div className="test-question-card__body">
               {(() => {
                 const text = current.questionText;
-                // Detect if there's any code in the question
+
                 const hasCode = text.includes(";") || text.includes("=>") || text.includes("->") || /\w+\s*\(/.test(text) || /\w+\[/.test(text);
                 if (!hasCode) return <p className="test-question-text">{text}</p>;
 
-                // Try to split on a sentence-ending question mark or colon that separates prose from code
-                // e.g. "What is the output? x = [1,2,3];" or "What does this print: print(x)"
+
+
                 const splitMatch = text.match(/^([^?:]+[?:])\s*([\s\S]+)$/);
                 if (splitMatch) {
                   return (
@@ -300,7 +327,7 @@ const SkillTestPage: React.FC = () => {
                   );
                 }
 
-                // No prose prefix found — entire question is code
+
                 return (
                   <div className="test-question-content">
                     <pre className="test-question-code"><code>{formatCodeLines(text)}</code></pre>
@@ -444,9 +471,9 @@ const SkillTestPage: React.FC = () => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// Styles (identical to original, kept in full)
-// ---------------------------------------------------------------------------
+
+
+
 
 const styles = `
   /* ── Page shell ──────────────────────────────────────── */

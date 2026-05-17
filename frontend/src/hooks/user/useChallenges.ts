@@ -1,46 +1,54 @@
+/**
+ * useChallenges.ts
+ *
+ * Fetches all challenges and the user's progress in a single hook.
+ * Merges backend data into a UI-friendly ChallengeWithProgress[] and
+ * computes PlayerStats (XP level, rank, streak) from the same data.
+ */
+
 import { useState, useEffect } from "react";
 import { get } from "../../api/axios";
 import type { IconName } from "../../components/ui/Icon";
 
 // ---------------------------------------------------------------------------
-// Backend response types (matching Java DTOs)
+// Backend response types — match Java DTOs exactly
 // ---------------------------------------------------------------------------
 
 export interface ChallengeResponse {
-  id: number;
-  title: string;
-  description: string;
-  type: string;
+  id:             number;
+  title:          string;
+  description:    string;
+  type:           string;
   conditionValue: number;
-  xpReward: number;
-  isActive: boolean;
-  isRepeatable: boolean;
-  startDate: string | null;
-  endDate: string | null;
+  xpReward:       number;
+  isActive:       boolean;
+  isRepeatable:   boolean;
+  startDate:      string | null;
+  endDate:        string | null;
 }
 
 export interface UserChallengeResponse {
-  id: number;
-  challengeId: number;
+  id:             number;
+  challengeId:    number;
   challengeTitle: string;
-  type: string;
-  xpReward: number;
-  currentProgress: number;
+  type:           string;
+  xpReward:       number;
+  currentProgress:number;
   conditionValue: number;
-  startDate: string | null;
-  completedAt: string | null;
-  status: "IN_PROGRESS" | "COMPLETED";
+  startDate:      string | null;
+  completedAt:    string | null;
+  status:         "IN_PROGRESS" | "COMPLETED";
 }
 
 interface XPTransactionResponse {
-  id: number;
-  amount: number;
+  id:         number;
+  amount:     number;
   sourceType: string;
-  createdAt: string;
+  createdAt:  string;
 }
 
 // ---------------------------------------------------------------------------
-// Extended types used by the UI
+// UI-extended types
 // ---------------------------------------------------------------------------
 
 export type ChallengeCategory =
@@ -52,80 +60,80 @@ export type ChallengeCategory =
   | "SOCIAL";
 
 export interface ChallengeWithProgress {
-  challengeId: number;
+  challengeId:      number;
   userChallengeId?: number;
-  title: string;
-  description: string;
-  type: string;
-  conditionValue: number;
-  xpReward: number;
-  isRepeatable: boolean;
-  startDate: string | null;
-  endDate: string | null;
-  currentProgress: number;
-  completedAt: string | null;
-  status: "IN_PROGRESS" | "COMPLETED" | "NOT_STARTED";
-  category: ChallengeCategory;
-  icon: IconName;
-  difficulty: 1 | 2 | 3 | 4 | 5;
-  isNew: boolean;
+  title:            string;
+  description:      string;
+  type:             string;
+  conditionValue:   number;
+  xpReward:         number;
+  isRepeatable:     boolean;
+  startDate:        string | null;
+  endDate:          string | null;
+  currentProgress:  number;
+  completedAt:      string | null;
+  status:           "IN_PROGRESS" | "COMPLETED" | "NOT_STARTED";
+  category:         ChallengeCategory;
+  icon:             IconName;
+  difficulty:       1 | 2 | 3 | 4 | 5;
+  isNew:            boolean;
 }
 
 export interface PlayerStats {
-  totalXp: number;
-  xpThisWeek: number;
-  currentLevel: number;
-  xpToNextLevel: number;
-  xpForCurrentLevel: number;
-  currentStreak: number;
-  longestStreak: number;
+  totalXp:             number;
+  xpThisWeek:          number;
+  currentLevel:        number;
+  xpToNextLevel:       number;
+  xpForCurrentLevel:   number;
+  currentStreak:       number;
+  longestStreak:       number;
   completedChallenges: number;
-  activeChallenges: number;
+  activeChallenges:    number;
   rank: "RECRUIT" | "APPRENTICE" | "JOURNEYMAN" | "EXPERT" | "MASTER" | "LEGEND";
 }
 
 export interface UseChallengesReturn {
-  challenges: ChallengeWithProgress[];
+  challenges:          ChallengeWithProgress[];
   completedChallenges: ChallengeWithProgress[];
-  playerStats: PlayerStats | null;
-  isLoading: boolean;
-  error: string | null;
-  refetch: () => void;
+  playerStats:         PlayerStats | null;
+  isLoading:           boolean;
+  error:               string | null;
+  refetch:             () => void;
 }
 
 // ---------------------------------------------------------------------------
-// Helpers — derive UI metadata from ChallengeType
+// Helpers — derive UI metadata from ChallengeType string
 // ---------------------------------------------------------------------------
 
 function getCategory(type: string): ChallengeCategory {
   switch (type) {
-    case "DAILY_LOGIN":      return "DAILY";
-    case "WEEKLY_ACTIVITY":  return "WEEKLY";
-    case "STREAK_DAYS":      return "STREAK";
+    case "DAILY_LOGIN":          return "DAILY";
+    case "WEEKLY_ACTIVITY":      return "WEEKLY";
+    case "STREAK_DAYS":          return "STREAK";
     case "VERIFY_SKILL":
     case "EARN_BADGE":
     case "EARN_GOLD_BADGE":
     case "MULTI_SKILL_PROGRESS": return "SKILL";
-    default:                 return "MILESTONE";
+    default:                     return "MILESTONE";
   }
 }
 
 function getIcon(type: string): IconName {
   const icons: Record<string, IconName> = {
-    VERIFY_SKILL:         "cat-default",
-    EARN_BADGE:           "badge",
-    EARN_GOLD_BADGE:      "badge-gold",
-    MULTI_SKILL_PROGRESS: "cat-data",
-    DAILY_LOGIN:          "challenge-daily",
-    WEEKLY_ACTIVITY:      "challenge-weekly",
-    STREAK_DAYS:          "challenge-streak",
-    APPLY_JOB:            "work",
-    APPLY_WITH_GOLD:      "badge-gold",
-    GET_ACCEPTED:         "success",
-    USE_XP_STORE:         "store",
-    SPEND_XP:             "xp-spend",
-    REACH_XP:             "xp",
-    COMPLETE_CHALLENGE:   "trophy",
+    VERIFY_SKILL:          "cat-default",
+    EARN_BADGE:            "badge",
+    EARN_GOLD_BADGE:       "badge-gold",
+    MULTI_SKILL_PROGRESS:  "cat-data",
+    DAILY_LOGIN:           "challenge-daily",
+    WEEKLY_ACTIVITY:       "challenge-weekly",
+    STREAK_DAYS:           "challenge-streak",
+    APPLY_JOB:             "work",
+    APPLY_WITH_GOLD:       "badge-gold",
+    GET_ACCEPTED:          "success",
+    USE_XP_STORE:          "store",
+    SPEND_XP:              "xp-spend",
+    REACH_XP:              "xp",
+    COMPLETE_CHALLENGE:    "trophy",
   };
   return icons[type] ?? "quest";
 }
@@ -150,27 +158,29 @@ function getDifficulty(type: string, conditionValue: number): 1 | 2 | 3 | 4 | 5 
 }
 
 // ---------------------------------------------------------------------------
-// XP level thresholds
+// XP level thresholds — must match DashboardService.java exactly.
+// Index = level number; value = XP required to reach that level.
 // ---------------------------------------------------------------------------
 
-const LEVEL_THRESHOLDS = [
-  0, 500, 1200, 2200, 3500, 5000, 7000, 9500, 12500, 16000, 20000,
+const LEVEL_XP = [
+  0, 100, 250, 450, 700, 1000, 1400, 1900, 2500, 3200, 4000,
+  5000, 6200, 7600, 9200, 11000, 13000, 15500, 18500, 22000, 26000,
 ];
 
-function computeLevel(totalXp: number): {
+function computeLevel(xp: number): {
   level: number;
   xpForCurrentLevel: number;
   xpToNextLevel: number;
 } {
-  let level = 1;
-  for (let i = LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
-    if (totalXp >= LEVEL_THRESHOLDS[i]) {
-      level = i + 1;
-      break;
-    }
+  let level = 0;
+  for (let i = 1; i < LEVEL_XP.length; i++) {
+    if (xp >= LEVEL_XP[i]) level = i;
+    else break;
   }
-  const xpForCurrentLevel = LEVEL_THRESHOLDS[level - 1] ?? 0;
-  const xpToNextLevel = LEVEL_THRESHOLDS[level] ?? LEVEL_THRESHOLDS[LEVEL_THRESHOLDS.length - 1];
+  const xpForCurrentLevel = xp - LEVEL_XP[level];
+  const xpToNextLevel = level < LEVEL_XP.length - 1
+    ? LEVEL_XP[level + 1] - xp
+    : 0;
   return { level, xpForCurrentLevel, xpToNextLevel };
 }
 
@@ -184,7 +194,7 @@ function getRank(level: number): PlayerStats["rank"] {
 }
 
 // ---------------------------------------------------------------------------
-// Merge backend responses into ChallengeWithProgress[]
+// Data merging
 // ---------------------------------------------------------------------------
 
 function mergeData(
@@ -192,9 +202,7 @@ function mergeData(
   userChallenges: UserChallengeResponse[]
 ): ChallengeWithProgress[] {
   const progressMap = new Map<number, UserChallengeResponse>();
-  for (const uc of userChallenges) {
-    progressMap.set(uc.challengeId, uc);
-  }
+  for (const uc of userChallenges) progressMap.set(uc.challengeId, uc);
 
   return challenges
     .filter((c) => c.isActive)
@@ -235,14 +243,14 @@ function buildPlayerStats(
   return {
     totalXp,
     xpThisWeek,
-    currentLevel: level,
+    currentLevel:        level,
     xpToNextLevel,
     xpForCurrentLevel,
     currentStreak,
-    longestStreak:        0,
-    completedChallenges:  completedCount,
-    activeChallenges:     activeCount,
-    rank:                 getRank(level),
+    longestStreak:       0,
+    completedChallenges: completedCount,
+    activeChallenges:    activeCount,
+    rank:                getRank(level),
   };
 }
 
@@ -287,7 +295,7 @@ export const useChallenges = (): UseChallengesReturn => {
         if (!cancelled) {
           setError(
             (err as any)?.response?.data?.message ??
-            (err instanceof Error ? err.message : "Failed to load challenges")
+            (err instanceof Error ? err.message : "Failed to load challenges.")
           );
         }
       } finally {
@@ -298,12 +306,9 @@ export const useChallenges = (): UseChallengesReturn => {
     return () => { cancelled = true; };
   }, [tick]);
 
-  const completedChallenges = allMerged.filter((c) => c.status === "COMPLETED");
-  const activeChallenges    = allMerged.filter((c) => c.status !== "COMPLETED");
-
   return {
-    challenges: activeChallenges,
-    completedChallenges,
+    challenges:          allMerged.filter((c) => c.status !== "COMPLETED"),
+    completedChallenges: allMerged.filter((c) => c.status === "COMPLETED"),
     playerStats,
     isLoading,
     error,

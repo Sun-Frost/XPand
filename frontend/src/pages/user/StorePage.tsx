@@ -1,3 +1,32 @@
+/**
+ * StorePage — /store
+ *
+ * XP store where users spend earned XP on career tools.
+ * Items are fetched via useStore() which also provides the user's current xpBalance
+ * and their existing purchases.
+ *
+ * Item types and their post-purchase behavior:
+ *   READINESS_REPORT — navigates to /store/readiness-report/:purchaseId
+ *   MOCK_INTERVIEW   — navigates to /store/mock-interview/:purchaseId
+ *   PRIORITY_SLOT    — redeemed at application time; no separate page
+ *
+ * PurchaseModal:
+ *   For PRIORITY_SLOT items, the user selects a rank (1st/2nd/3rd) which affects
+ *   the XP cost and the slot's position in the company's applicant list.
+ *   For MOCK_INTERVIEW items, the user selects one of their active job applications
+ *   so the AI can tailor questions to that role.
+ *   The modal loads application data lazily (only when a MOCK_INTERVIEW item is opened).
+ *
+ * XpDrain animation:
+ *   A "+N XP" floating label animates upward from center screen after a successful
+ *   purchase, then fades out after 1.2s. Pure CSS animation, no state beyond a
+ *   boolean toggle.
+ *
+ * Collection banner:
+ *   Shown when the user has any purchases. Links to /store/purchases (CollectionPage).
+ *   The "unused & ready" count is derived from unusedPurchases from the hook.
+ */
+
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import PageLayout from "../../components/user/PageLayout";
@@ -9,9 +38,9 @@ import type { ApplicationResponse } from "../../hooks/user/useApplications";
 import PageHeader, { PAGE_CONFIGS } from "../../components/ui/PageHeader";
 import Modal from "../../components/ui/Modal";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const CATEGORY_FILTERS = [
   { id: "ALL",        label: "All Items"      },
@@ -91,9 +120,9 @@ const PRIORITY_SLOT_RANKS = [
   { rank: 1, label: "1st Priority", perk: "CV auto-opens when company views job",   xp: 150, color: "var(--color-gold-light)", medal: "badge-gold"   as IconName },
 ];
 
-// ─────────────────────────────────────────────────────────────────────────────
-// XP Drain animation
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const XpDrain: React.FC<{ amount: number; onDone: () => void }> = ({ amount, onDone }) => {
   React.useEffect(() => { const t = setTimeout(onDone, 1200); return () => clearTimeout(t); }, [onDone]);
@@ -104,9 +133,9 @@ const XpDrain: React.FC<{ amount: number; onDone: () => void }> = ({ amount, onD
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Purchase Modal  (logic unchanged)
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 interface PurchaseModalProps {
   item: StoreItemWithMeta;
@@ -319,9 +348,9 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Store Item Card  — redesigned
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const StoreCard: React.FC<{
   item: StoreItemWithMeta;
@@ -473,9 +502,9 @@ const StoreCard: React.FC<{
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Skeleton card
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const SkeletonCard: React.FC = () => (
   <div className="sc sc--skeleton">
@@ -498,9 +527,9 @@ const SkeletonCard: React.FC = () => (
   </div>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// StorePage
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const StorePage: React.FC = () => {
   const navigate = useNavigate();
@@ -668,9 +697,9 @@ const StorePage: React.FC = () => {
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 
 const styles = `
 

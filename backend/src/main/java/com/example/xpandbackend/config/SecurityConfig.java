@@ -11,8 +11,6 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -21,6 +19,26 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
+/**
+ * Spring Security configuration for the XPand backend.
+ *
+ * <h3>Authentication strategy</h3>
+ * All API endpoints are protected by stateless JWT authentication via {@link JwtFilter}.
+ * Sessions are created only for the OAuth2 redirect handshake (Spring Security needs a
+ * short-lived session to store the CSRF state parameter during the Google login flow).
+ * Once the OAuth callback completes a JWT is issued and the session is discarded.
+ *
+ * <h3>Authorization rules</h3>
+ * <ul>
+ *   <li>{@code /api/auth/**} — public (login, register, verify, reset password)</li>
+ *   <li>{@code /oauth2/**}, {@code /login/oauth2/**} — public (Google OAuth redirects)</li>
+ *   <li>{@code GET /api/skills/**}, {@code GET /api/jobs/**} — public read access</li>
+ *   <li>{@code /api/admin/**} — requires {@code ROLE_ADMIN}</li>
+ *   <li>{@code /api/company/**} — requires {@code ROLE_COMPANY}</li>
+ *   <li>{@code /api/user/**} — requires {@code ROLE_USER}</li>
+ *   <li>All other endpoints — require any authenticated principal</li>
+ * </ul>
+ */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -38,37 +56,32 @@ public class SecurityConfig {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
-                // OAuth2 needs a session briefly to store the state parameter;
-                // we keep JWT stateless for all API calls but allow sessions for the
-                // OAuth2 redirect handshake (IF_REQUIRED creates one only when needed).
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
-                        // Public auth endpoints (login, register, forgot-password, verify)
                         .requestMatchers("/api/auth/**").permitAll()
-                        // OAuth2 redirect endpoints handled by Spring Security
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
-                        // Public read-only endpoints
                         .requestMatchers(HttpMethod.GET, "/api/skills/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/jobs/**").permitAll()
-                        // Role-protected endpoints
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/company/**").hasRole("COMPANY")
                         .requestMatchers("/api/user/**").hasRole("USER")
                         .anyRequest().authenticated()
                 )
-                // JWT filter runs before the standard auth filter for API calls
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
-                // OAuth2 login configuration
                 .oauth2Login(oauth2 -> oauth2
                         .loginPage(frontendUrl.replaceAll("/+$", "") + "/login")
                         .successHandler(oAuth2LoginSuccessHandler)
-                        // Strip any trailing slash before appending the path
                         .failureUrl(frontendUrl.replaceAll("/+$", "") + "/login?error=oauth_failed")
                 );
 
         return http.build();
     }
 
+    /**
+     * Permits all origins, methods, and headers to support local development and
+     * cross-origin requests from the React frontend. Credentials (cookies) are allowed
+     * for the OAuth session cookie during the login redirect.
+     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();

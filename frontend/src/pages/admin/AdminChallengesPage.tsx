@@ -17,7 +17,7 @@ import {
   type ChallengeType,
 } from "../../api/Adminapi";
 
-// Must match the ChallengeType enum in the backend exactly
+
 const CHALLENGE_TYPES: { value: ChallengeType; label: string }[] = [
   { value: "COMPLETE_PROFILE",    label: "Complete Profile" },
   { value: "ADD_PROJECT",         label: "Add Project" },
@@ -41,8 +41,8 @@ const CHALLENGE_TYPES: { value: ChallengeType; label: string }[] = [
 const emptyForm = (): CreateChallengePayload => ({
   title:          "",
   description:    "",
-  type:           "VERIFY_SKILL",   // was challengeType
-  conditionValue: 1,                // was targetValue
+  type:           "VERIFY_SKILL",  
+  conditionValue: 1,              
   xpReward:       50,
   isActive:       true,
   isRepeatable:   false,

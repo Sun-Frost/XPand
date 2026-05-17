@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDate;
 
+/** An educational entry on a user's profile (degree, institution, dates). */
 @Entity
 @Table(name = "education")
 @Data
@@ -16,8 +17,6 @@ public class Education {
     @Column(name = "education_id")
     private Integer id;
 
-    // UserSkillVerification.java, Application.java, UserPurchase.java,
-// Education.java, WorkExperience.java, Certification.java, Project.java
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     @ToString.Exclude
@@ -37,7 +36,7 @@ public class Education {
     private LocalDate startDate;
 
     private LocalDate endDate;
-    
+
     @Column(columnDefinition = "TEXT")
     private String description;
 }

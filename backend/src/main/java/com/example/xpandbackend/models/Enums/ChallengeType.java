@@ -1,39 +1,60 @@
 package com.example.xpandbackend.models.Enums;
 
+/**
+ * Defines every challenge type supported by the gamification engine.
+ *
+ * <p>Each constant maps to one category of user behaviour. {@code conditionValue}
+ * on the {@link com.example.xpandbackend.models.Challenge} entity sets the threshold
+ * that must be reached for the challenge to complete.
+ *
+ * <p>{@link com.example.xpandbackend.service.ChallengeEvaluationService} evaluates
+ * challenges of the relevant type(s) after every qualifying event.
+ */
 public enum ChallengeType {
 
-    // ── PROFILE & ONBOARDING ──────────────────────────────────────────────────
-    // Triggered by: profile update / project / certification endpoints
-    COMPLETE_PROFILE,       // conditionValue = 1  → fill all profile fields
-    ADD_PROJECT,            // conditionValue = 1  → add first project
-    ADD_CERTIFICATION,      // conditionValue = 2  → add N certifications
+    // ── Profile & onboarding ─────────────────────────────────────────────────
+    /** Fill all required profile fields (conditionValue = 1). */
+    COMPLETE_PROFILE,
+    /** Add first portfolio project (conditionValue = 1). */
+    ADD_PROJECT,
+    /** Add N certifications (conditionValue = 2). */
+    ADD_CERTIFICATION,
 
-    // ── SKILL PROGRESSION ────────────────────────────────────────────────────
-    // Triggered by: test submission (SkillVerificationService.submitTest)
-    VERIFY_SKILL,           // conditionValue = 1  → pass any skill test
-    EARN_BADGE,             // conditionValue = 3  → earn N badges (any level)
-    EARN_GOLD_BADGE,        // conditionValue = 1  → earn at least 1 GOLD badge
-    MULTI_SKILL_PROGRESS,   // conditionValue = 3  → verified skills in N categories
+    // ── Skill progression ────────────────────────────────────────────────────
+    /** Pass any skill test (conditionValue = 1). */
+    VERIFY_SKILL,
+    /** Earn N badges of any level (conditionValue = 3). */
+    EARN_BADGE,
+    /** Earn at least one GOLD badge (conditionValue = 1). */
+    EARN_GOLD_BADGE,
+    /** Earn verified badges in N distinct skill categories (conditionValue = 3). */
+    MULTI_SKILL_PROGRESS,
 
-    // ── ACTIVITY / RETENTION ─────────────────────────────────────────────────
-    // Triggered by: login / auth success
-    DAILY_LOGIN,            // conditionValue = 1  → log in today
-    WEEKLY_ACTIVITY,        // conditionValue = 5  → log in N days in a week
-    STREAK_DAYS,            // conditionValue = 7  → consecutive daily logins
+    // ── Activity / retention ─────────────────────────────────────────────────
+    /** Log in today (conditionValue = 1). */
+    DAILY_LOGIN,
+    /** Log in on N distinct days in the current ISO week (conditionValue = 5). */
+    WEEKLY_ACTIVITY,
+    /** Maintain a consecutive daily login streak of N days (conditionValue = 7). */
+    STREAK_DAYS,
 
-    // ── JOB INTERACTION ──────────────────────────────────────────────────────
-    // Triggered by: application endpoint
-    APPLY_JOB,              // conditionValue = 1  → apply to any job
-    APPLY_WITH_GOLD,        // conditionValue = 1  → apply while holding a GOLD badge
-    GET_ACCEPTED,           // conditionValue = 1  → application status → ACCEPTED
+    // ── Job interaction ──────────────────────────────────────────────────────
+    /** Apply to any job (conditionValue = 1). */
+    APPLY_JOB,
+    /** Apply to a job while holding at least one GOLD badge (conditionValue = 1). */
+    APPLY_WITH_GOLD,
+    /** Have an application moved to SHORTLISTED (conditionValue = 1). */
+    GET_ACCEPTED,
 
-    // ── XP ECONOMY ───────────────────────────────────────────────────────────
-    // Triggered by: store purchase endpoint
-    USE_XP_STORE,           // conditionValue = 1  → make any store purchase
-    SPEND_XP,               // conditionValue = 200 → spend N XP total
+    // ── XP economy ───────────────────────────────────────────────────────────
+    /** Make any store purchase (conditionValue = 1). */
+    USE_XP_STORE,
+    /** Spend N XP total across all purchases (conditionValue = 200). */
+    SPEND_XP,
 
-    // ── META / ADVANCED ──────────────────────────────────────────────────────
-    // Triggered by: XP award / challenge completion hooks
-    REACH_XP,               // conditionValue = 500 → reach N total XP balance
-    COMPLETE_CHALLENGE      // conditionValue = 3  → complete N other challenges
+    // ── Meta / advanced ──────────────────────────────────────────────────────
+    /** Reach an XP balance of N (conditionValue = 500). */
+    REACH_XP,
+    /** Complete N other challenges (conditionValue = 3). */
+    COMPLETE_CHALLENGE
 }

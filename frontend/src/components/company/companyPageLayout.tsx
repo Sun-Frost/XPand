@@ -1,3 +1,11 @@
+/**
+ * CompanyPageLayout.tsx
+ *
+ * Authenticated shell for all company pages.
+ * Fetches the company profile via API (not localStorage) so the navbar
+ * always displays current data without requiring a page reload after edits.
+ */
+
 import { type ReactNode, useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import CompanyNavbar from "./companyNavBar";
@@ -5,6 +13,7 @@ import CompanyBottomDock from "./navigation/companyBottomDeck";
 import { useCompanyProfile } from "../../hooks/company/useCompany";
 
 // ── Theme helpers ─────────────────────────────────────────────
+
 const THEME_KEY = "xpand_theme";
 
 function getSavedTheme(): "dark" | "light" {
@@ -14,10 +23,11 @@ function getSavedTheme(): "dark" | "light" {
 
 function applyTheme(theme: "dark" | "light") {
   document.documentElement.setAttribute("data-theme", theme);
-  try { localStorage.setItem(THEME_KEY, theme); } catch { /* ignore */ }
+  try { localStorage.setItem(THEME_KEY, theme); } catch { /* storage unavailable */ }
 }
 
-// ── Page animation ────────────────────────────────────────────
+// ── Page enter animation ──────────────────────────────────────
+
 const pageVariants = {
   initial: { opacity: 0, y: 12 },
   enter:   { opacity: 1, y: 0  },
@@ -31,14 +41,19 @@ const pageTransition = {
 };
 
 // ── Props ─────────────────────────────────────────────────────
+
 interface CompanyPageLayoutProps {
   children:   ReactNode;
+  /** Sets the browser tab title to "<pageTitle> · XPand". */
   pageTitle?: string;
+  /** When true, hides the navbar and bottom dock (e.g. full-screen flows). */
   hideNav?:   boolean;
+  /** Overrides the default max-width of the content area. */
   maxWidth?:  string;
 }
 
 // ── Component ─────────────────────────────────────────────────
+
 export const CompanyPageLayout = ({
   children,
   pageTitle,
@@ -59,17 +74,15 @@ export const CompanyPageLayout = ({
     if (pageTitle) document.title = `${pageTitle} · XPand`;
   }, [pageTitle]);
 
-  // ── Company data — fetched from API via hook, no localStorage ─
+  // Fetch company profile from API — never read from localStorage
   const { profile } = useCompanyProfile();
   const companyName = profile?.companyName ?? null;
-  const isApproved  = profile?.isApproved  ?? false;
 
   return (
     <div className="pagelayout-root">
       {!hideNav && (
         <CompanyNavbar
           companyName={companyName}
-          isApproved={isApproved}
           onToggleTheme={handleToggleTheme}
           isDarkMode={isDarkMode}
         />

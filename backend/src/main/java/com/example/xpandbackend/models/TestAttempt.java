@@ -6,6 +6,13 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.Set;
 
+/**
+ * Records a single skill test attempt by a user.
+ * <p>
+ * The per-question breakdown is stored in {@link TestAttemptQuestion} rows.
+ * {@code badgeAwarded} will be null when the score did not reach the BRONZE threshold.
+ * </p>
+ */
 @Entity
 @Table(name = "test_attempt")
 @Data
@@ -18,11 +25,10 @@ public class TestAttempt {
     @Column(name = "attempt_id")
     private Integer id;
 
-    // TestAttempt.java
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
-    @ToString.Exclude   // ← add this
-    @EqualsAndHashCode.Exclude  // ← add this
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -34,6 +40,7 @@ public class TestAttempt {
     @Column(nullable = false)
     private Integer score;
 
+    /** Null when the score did not meet the BRONZE minimum (18 points). */
     @Enumerated(EnumType.STRING)
     private BadgeLevel badgeAwarded;
 
